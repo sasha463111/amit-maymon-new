@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
@@ -181,6 +182,7 @@ export async function createCase(input: CreateCaseInput) {
     } as never);
   }
 
+  revalidatePath('/cases');
   await writeAudit(supabase, 'CASE', caseId, 'CASE_CREATED', user.id, { case_key: caseKey });
   await writeAudit(supabase, 'WORKFLOW_STEP', runId, 'STEP_ACTIVATED', user.id, {
     step_key: 'FIXCAR_PHOTOS',
@@ -449,6 +451,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     step_key: stepKey,
   });
 
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath('/cases');
   return { ok: true, error: null };
 }
 

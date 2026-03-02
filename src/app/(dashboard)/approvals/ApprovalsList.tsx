@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { decideApproval } from '@/app/actions/approvals';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -40,12 +39,45 @@ async function decideApprovalPreview(approvalId: string, status: 'APPROVED' | 'R
     .eq('id', approvalId);
 }
 
+interface CaseDocument {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number | null;
+  mime_type: string | null;
+}
+
+function DocumentDownloadButton({ filePath, fileName }: { filePath: string; fileName: string }) {
+  async function handleDownload() {
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { data } = await supabase.storage.from('case-documents').createSignedUrl(filePath, 60);
+    if (data?.signedUrl) {
+      const a = document.createElement('a');
+      a.href = data.signedUrl;
+      a.download = fileName;
+      a.target = '_blank';
+      a.click();
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleDownload}
+      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex-shrink-0"
+    >
+      הורד
+    </button>
+  );
+}
+
 export function ApprovalsList({ approvals: initialApprovals }: { approvals: ApprovalRow[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localApprovals, setLocalApprovals] = useState<ApprovalRow[]>(initialApprovals);
+  const [documents, setDocuments] = useState<CaseDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
   // In PREVIEW: reload from localStorage on mount (server data is always stale)
   useEffect(() => {
@@ -78,6 +110,24 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
     })().catch(console.error);
   }, []);
 
+  // Load documents when selection changes
+  useEffect(() => {
+    if (!selectedId) { setDocuments([]); return; }
+    const approval = localApprovals.find((a) => a.id === selectedId);
+    if (!approval) return;
+    setDocsLoading(true);
+    (async () => {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data } = await supabase
+        .from('case_documents')
+        .select('id, file_name, file_path, file_size, mime_type')
+        .eq('case_id', approval.case_id)
+        .order('created_at', { ascending: false });
+      setDocuments((data ?? []) as CaseDocument[]);
+      setDocsLoading(false);
+    })().catch(() => setDocsLoading(false));
+  }, [selectedId, localApprovals]);
+
   const selected = localApprovals.find((a) => a.id === selectedId);
   const parts = selected?.parts_status ? PARTS_STATUS_LABELS[selected.parts_status] : null;
 
@@ -89,11 +139,12 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
       setLocalApprovals((prev) => prev.filter((a) => a.id !== approvalId));
       setSelectedId(null);
       setRejectNote('');
+      setDocuments([]);
     } else {
       const { decideApproval: action } = await import('@/app/actions/approvals');
       const res = await action({ approval_id: approvalId, status, rejection_note: status === 'REJECTED' ? rejectNote : undefined });
       if (res?.error) setError(res.error);
-      else { setLocalApprovals((prev) => prev.filter((a) => a.id !== approvalId)); setSelectedId(null); setRejectNote(''); }
+      else { setLocalApprovals((prev) => prev.filter((a) => a.id !== approvalId)); setSelectedId(null); setRejectNote(''); setDocuments([]); }
     }
     setLoading(false);
   }
@@ -189,6 +240,28 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                 <span>👁️</span>
                 <span>צפה בתיק המלא</span>
               </Link>
+            </div>
+
+            {/* Case Documents */}
+            <div className="border-t pt-4">
+              <p className="text-sm font-semibold text-gray-700 mb-3">📎 מסמכים שהועלו לתיק</p>
+              {docsLoading ? (
+                <p className="text-xs text-gray-400">טוען מסמכים...</p>
+              ) : documents.length === 0 ? (
+                <p className="text-xs text-gray-400">אין מסמכים מועלים לתיק זה</p>
+              ) : (
+                <ul className="space-y-2">
+                  {documents.map((doc) => (
+                    <li key={doc.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                      <span className="text-lg">
+                        {doc.mime_type?.startsWith('image/') ? '🖼️' : doc.mime_type === 'application/pdf' ? '📄' : '📎'}
+                      </span>
+                      <span className="flex-1 truncate text-gray-700 font-medium text-xs">{doc.file_name}</span>
+                      <DocumentDownloadButton filePath={doc.file_path} fileName={doc.file_name} />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Actions */}
