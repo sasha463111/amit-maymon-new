@@ -153,11 +153,6 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [localSteps, setLocalSteps] = useState<StepRow[]>(steps);
   const effectiveSteps = localSteps;
 
-  // Sync local steps when server sends updated steps (e.g. after router.refresh() post complete)
-  useEffect(() => {
-    setLocalSteps(steps);
-  }, [steps]);
-
   type ApprovalRow = { id: string; approval_type: string; status: string; rejection_note: string | null };
   const [localApprovals] = useState<ApprovalRow[]>(approvals);
   const effectiveApprovals = localApprovals;

@@ -367,32 +367,61 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     }
   }
 
-  if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
-    const { data: existingApprovals } = await supabase
-      .from('ceo_approvals')
-      .select('approval_type')
-      .eq('case_id', caseId);
-    const types = new Set((existingApprovals ?? []).map((a) => (a as { approval_type: string }).approval_type));
-    if (!types.has('ESTIMATE_AND_DETAILS')) {
-      await supabase.from('ceo_approvals').insert({
-        case_id: caseId,
-        approval_type: 'ESTIMATE_AND_DETAILS',
-        status: 'PENDING',
-      } as never);
-    }
-    const { data: wheelsStep } = await supabase
-      .from('case_workflow_steps')
-      .select('id')
-      .eq('run_id', run.id)
-      .eq('step_key', 'WHEELS_CHECK')
-      .eq('state', 'DONE')
+  // Dynamic requires_ceo_approval: check step template and create/block approval
+  {
+    const { data: templateData } = await supabase
+      .from('workflow_step_templates')
+      .select('requires_ceo_approval')
+      .eq('step_key', stepKey)
       .maybeSingle();
-    if (wheelsStep && !types.has('WHEELS_CHECK')) {
-      await supabase.from('ceo_approvals').insert({
-        case_id: caseId,
-        approval_type: 'WHEELS_CHECK',
-        status: 'PENDING',
-      } as never);
+    const requiresApproval = (templateData as { requires_ceo_approval: boolean } | null)?.requires_ceo_approval ?? false;
+
+    if (requiresApproval) {
+      // Determine approval type: ESTIMATE_AND_DETAILS for WAIT_APPRAISER_APPROVAL (backward compat), else use step_key
+      const approvalType = stepKey === 'WAIT_APPRAISER_APPROVAL' ? 'ESTIMATE_AND_DETAILS' : stepKey;
+
+      const { data: existingApprovals } = await supabase
+        .from('ceo_approvals')
+        .select('approval_type, status')
+        .eq('case_id', caseId);
+      const approvalsArr = (existingApprovals ?? []) as { approval_type: string; status: string }[];
+      const existing = approvalsArr.find((a) => a.approval_type === approvalType);
+
+      if (!existing) {
+        // Create PENDING approval so CEO sees it
+        await supabase.from('ceo_approvals').insert({
+          case_id: caseId,
+          approval_type: approvalType,
+          status: 'PENDING',
+        } as never);
+        // If WAIT_APPRAISER_APPROVAL, also check WHEELS_CHECK
+        if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
+          const types = new Set(approvalsArr.map((a) => a.approval_type));
+          const { data: wheelsStep } = await supabase
+            .from('case_workflow_steps')
+            .select('id')
+            .eq('run_id', run.id)
+            .eq('step_key', 'WHEELS_CHECK')
+            .eq('state', 'DONE')
+            .maybeSingle();
+          if (wheelsStep && !types.has('WHEELS_CHECK')) {
+            await supabase.from('ceo_approvals').insert({
+              case_id: caseId,
+              approval_type: 'WHEELS_CHECK',
+              status: 'PENDING',
+            } as never);
+          }
+        }
+        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
+          reason: 'ceo_approval_pending',
+        });
+        return { error: 'נשלחה בקשה לאישור עמית — ניתן להמשיך לאחר האישור' };
+      } else if (existing.status !== 'APPROVED') {
+        if (existing.status === 'REJECTED') {
+          return { error: 'הבקשה נדחתה על ידי עמית — פנה אליו לפרטים' };
+        }
+        return { error: 'ממתין לאישור עמית — לא ניתן להמשיך עדיין' };
+      }
     }
   }
 

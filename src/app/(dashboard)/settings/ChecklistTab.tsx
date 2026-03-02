@@ -89,6 +89,20 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
     }
   }
 
+  async function handleToggleRequiresCeoApproval(step: WorkflowStepTemplate) {
+    const newVal = !step.requires_ceo_approval;
+    setSaving(step.id);
+    setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_ceo_approval: newVal } : s)));
+    const res = await updateWorkflowStep(step.id, { requires_ceo_approval: newVal });
+    setSaving(null);
+    if (res.error) {
+      showMsg(res.error, false);
+      setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_ceo_approval: !newVal } : s)));
+    } else {
+      showMsg(newVal ? 'דורש אישור עמית — הופעל' : 'דורש אישור עמית — הושבת', true);
+    }
+  }
+
   async function handleRemove(step: WorkflowStepTemplate) {
     if (PROTECTED_KEYS.has(step.step_key)) return;
     if (!confirm(`האם אתה בטוח שברצונך להסיר את שלב "${step.step_label}"?`)) return;
@@ -281,6 +295,22 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
                     }`}
                   >
                     📎 קובץ/קישור
+                  </button>
+                )}
+
+                {!isEditing && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleToggleRequiresCeoApproval(step)}
+                    title="האם השלב דורש אישור עמית לפני שניתן להתקדם?"
+                    className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
+                      step.requires_ceo_approval
+                        ? 'bg-amber-100 text-amber-700 border-amber-300 font-semibold'
+                        : 'bg-white text-gray-400 border-gray-200 hover:border-amber-300 hover:text-amber-600'
+                    }`}
+                  >
+                    👑 אישור עמית
                   </button>
                 )}
 

@@ -24,6 +24,10 @@ const APPROVAL_TYPE_LABELS: Record<string, string> = {
   CASE_CLOSURE: 'אישור סגירת תיק',
 };
 
+function getApprovalLabel(type: string): string {
+  return APPROVAL_TYPE_LABELS[type] ?? `אישור שלב: ${type}`;
+}
+
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'זמינים ✅', color: 'text-green-600' },
   ORDERED: { label: 'הוזמנו ⏳', color: 'text-yellow-600' },
@@ -181,7 +185,7 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                 <div className="font-semibold text-gray-800 text-sm">{a.case_key ?? a.plate}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{a.plate} · {a.branch_name}</div>
                 <div className={`text-xs mt-1 font-medium ${selectedId === a.id ? 'text-indigo-600' : 'text-amber-600'}`}>
-                  ⏳ {APPROVAL_TYPE_LABELS[a.approval_type] ?? a.approval_type}
+                  ⏳ {getApprovalLabel(a.approval_type)}
                 </div>
               </button>
             </li>
@@ -208,7 +212,7 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
             <div className="bg-indigo-50 rounded-lg p-3">
               <p className="text-xs text-indigo-500 font-medium mb-1">סוג אישור</p>
               <p className="font-semibold text-indigo-800">
-                {APPROVAL_TYPE_LABELS[selected.approval_type] ?? selected.approval_type}
+                {getApprovalLabel(selected.approval_type)}
               </p>
             </div>
 

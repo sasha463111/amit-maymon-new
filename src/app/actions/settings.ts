@@ -71,7 +71,7 @@ export async function getWorkflowStepTemplates(): Promise<{ data: WorkflowStepTe
 
 export async function updateWorkflowStep(
   id: string,
-  updates: Partial<Pick<WorkflowStepTemplate, 'step_label' | 'order_index' | 'is_enabled' | 'requires_link' | 'requires_file_or_link'>>
+  updates: Partial<Pick<WorkflowStepTemplate, 'step_label' | 'order_index' | 'is_enabled' | 'requires_link' | 'requires_file_or_link' | 'requires_ceo_approval'>>
 ): Promise<{ ok?: boolean; error?: string }> {
   const { error: authError, supabase } = await requireCeo();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };

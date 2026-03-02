@@ -206,6 +206,7 @@ export interface WorkflowStepTemplate {
   is_enabled: boolean;
   requires_link: boolean;
   requires_file_or_link: boolean;
+  requires_ceo_approval: boolean;
   created_at: string;
 }
 
