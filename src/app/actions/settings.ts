@@ -47,7 +47,9 @@ export async function updateRolePermission(
 
   const { error } = await supabase
     .from('role_permissions')
-    .upsert({ role, action, enabled }, { onConflict: 'role,action' } as never);
+    .update({ enabled } as never)
+    .eq('role', role)
+    .eq('action', action);
 
   if (error) return { error: error.message };
   return { ok: true };
