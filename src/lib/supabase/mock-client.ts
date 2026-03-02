@@ -844,7 +844,7 @@ function buildChain(table: TableName) {
           // Update records matching the filter
           let updatedCount = 0;
           if (mutableStore[table] && Array.isArray(mutableStore[table])) {
-            (mutableStore[table] as Record<string, unknown>[]).forEach((record) => {
+            (mutableStore[table] as unknown as Record<string, unknown>[]).forEach((record) => {
               if (record[column] === value) {
                 const oldState = record.state;
                 Object.assign(record, payloadObj, { updated_at: updatedAt });
