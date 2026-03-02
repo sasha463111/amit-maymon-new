@@ -5,6 +5,7 @@ import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBadge } from '@/components/NotificationsBadge';
 import { SidebarNav } from '@/components/SidebarNav';
+import { Logo } from '@/components/Logo';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -93,10 +94,7 @@ export default async function DashboardLayout({
       {isPreview && <PreviewRoleSwitcher />}
       <header className="bg-brand-dark border-b-4 border-brand-red text-white px-6 py-3 shadow-lg">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <div className="bg-brand-red rounded px-2.5 py-1">
-            <span className="font-black text-xl text-white tracking-tight">תהילה</span>
-          </div>
+          <Logo variant="header" />
           {/* Right side: name + bell + logout */}
           <div className="flex items-center gap-3 text-sm">
             <div className="bg-white/10 px-3 py-1.5 rounded-full">

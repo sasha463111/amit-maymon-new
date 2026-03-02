@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction } from '@/app/actions/auth';
+import { Logo } from '@/components/Logo';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -64,11 +65,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 border border-gray-200">
         <div className="text-center mb-6">
-          {/* Logo */}
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="bg-brand-red rounded-xl px-5 py-2">
-              <span className="font-black text-3xl text-white tracking-tight">תהילה</span>
-            </div>
+            <Logo variant="login" />
           </div>
           <p className="text-sm text-gray-500">CRM — מערכת ניהול תיקים</p>
           {isPreview && (

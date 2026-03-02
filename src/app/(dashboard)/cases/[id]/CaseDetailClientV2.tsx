@@ -40,6 +40,7 @@ type StepTemplate = {
   step_label: string;
   requires_link: boolean;
   requires_file_or_link: boolean;
+  requires_ceo_approval?: boolean;
 };
 
 interface CaseDetailClientProps {

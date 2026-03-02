@@ -9,6 +9,7 @@ type StepTemplate = {
   step_label: string;
   requires_link: boolean;
   requires_file_or_link: boolean;
+  requires_ceo_approval?: boolean;
 };
 
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -290,10 +291,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Load workflow step templates
+  // Load workflow step templates (includes requires_ceo_approval for blocking "סמן בוצע")
   const { data: stepTemplatesData } = await supabase
     .from('workflow_step_templates')
-    .select('step_key, step_label, requires_link, requires_file_or_link')
+    .select('step_key, step_label, requires_link, requires_file_or_link, requires_ceo_approval')
     .eq('is_enabled', true)
     .order('order_index');
   const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];

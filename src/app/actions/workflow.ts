@@ -367,7 +367,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     }
   }
 
-  // Dynamic requires_ceo_approval: check step template and create/block approval
+  // For steps that require CEO approval: ensure approval row(s) exist (so case appears in approvals screen).
+  // We do NOT block completing the step — user can advance. Blocking is only at READY_FOR_OFFICE / CLOSE_CASE.
   {
     const { data: templateData } = await supabase
       .from('workflow_step_templates')
@@ -377,9 +378,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const requiresApproval = (templateData as { requires_ceo_approval: boolean } | null)?.requires_ceo_approval ?? false;
 
     if (requiresApproval) {
-      // Determine approval type: ESTIMATE_AND_DETAILS for WAIT_APPRAISER_APPROVAL (backward compat), else use step_key
       const approvalType = stepKey === 'WAIT_APPRAISER_APPROVAL' ? 'ESTIMATE_AND_DETAILS' : stepKey;
-
       const { data: existingApprovals } = await supabase
         .from('ceo_approvals')
         .select('approval_type, status')
@@ -388,13 +387,11 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       const existing = approvalsArr.find((a) => a.approval_type === approvalType);
 
       if (!existing) {
-        // Create PENDING approval so CEO sees it
         await supabase.from('ceo_approvals').insert({
           case_id: caseId,
           approval_type: approvalType,
           status: 'PENDING',
         } as never);
-        // If WAIT_APPRAISER_APPROVAL, also check WHEELS_CHECK
         if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
           const types = new Set(approvalsArr.map((a) => a.approval_type));
           const { data: wheelsStep } = await supabase
@@ -412,16 +409,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
             } as never);
           }
         }
-        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-          reason: 'ceo_approval_pending',
-        });
-        return { error: 'נשלחה בקשה לאישור עמית — ניתן להמשיך לאחר האישור' };
-      } else if (existing.status !== 'APPROVED') {
-        if (existing.status === 'REJECTED') {
-          return { error: 'הבקשה נדחתה על ידי עמית — פנה אליו לפרטים' };
-        }
-        return { error: 'ממתין לאישור עמית — לא ניתן להמשיך עדיין' };
       }
+      // Allow step to be marked DONE — closure is blocked at READY_FOR_OFFICE / CLOSE_CASE only.
     }
   }
 

@@ -38,8 +38,14 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
+  const pathname = request.nextUrl.pathname;
 
-  if (isAppPath(request.nextUrl.pathname) && !user) {
+  if (!isPreview && (pathname === '/' || pathname === '')) {
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (isAppPath(pathname) && !user) {
     const loginUrl = new URL('/login', request.url);
     return NextResponse.redirect(loginUrl);
   }
