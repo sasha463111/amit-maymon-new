@@ -29,3 +29,4 @@ Thumbs.db
 
 # TypeScript
 next-env.d.ts
+.vercel

@@ -246,6 +246,26 @@ CREATE POLICY cases_insert ON cases FOR INSERT TO authenticated
     OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'CEO')
   );
 
+-- case_workflow_runs: INSERT when case was created by current user (fixes create-case RLS error)
+DROP POLICY IF EXISTS case_workflow_runs_insert_creator ON case_workflow_runs;
+CREATE POLICY case_workflow_runs_insert_creator ON case_workflow_runs
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    case_id IN (SELECT id FROM cases WHERE created_by = auth.uid())
+  );
+
+-- case_workflow_runs: UPDATE for CEO
+DROP POLICY IF EXISTS case_workflow_runs_update_ceo ON case_workflow_runs;
+CREATE POLICY case_workflow_runs_update_ceo ON case_workflow_runs
+  FOR UPDATE TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'CEO'));
+
+-- case_workflow_steps: UPDATE for CEO (so CEO can complete steps)
+DROP POLICY IF EXISTS case_workflow_steps_update_ceo ON case_workflow_steps;
+CREATE POLICY case_workflow_steps_update_ceo ON case_workflow_steps
+  FOR UPDATE TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'CEO'));
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- CEO TEST USER

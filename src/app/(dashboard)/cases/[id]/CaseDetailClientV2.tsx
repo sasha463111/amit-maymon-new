@@ -153,6 +153,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [localSteps, setLocalSteps] = useState<StepRow[]>(steps);
   const effectiveSteps = localSteps;
 
+  // Sync local steps when server sends updated steps (e.g. after router.refresh() post complete)
+  useEffect(() => {
+    setLocalSteps(steps);
+  }, [steps]);
+
   type ApprovalRow = { id: string; approval_type: string; status: string; rejection_note: string | null };
   const [localApprovals] = useState<ApprovalRow[]>(approvals);
   const effectiveApprovals = localApprovals;
@@ -306,11 +311,19 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
   async function performComplete(step: StepRow, link?: string) {
     setCompletingStepId(step.id);
+    setStepError(null);
     try {
       const res = await completeActiveStep(caseId, step.id);
       if (res?.error) {
         setStepError(res.error);
       } else {
+        // Optimistic UI: show step as DONE immediately
+        const now = new Date().toISOString();
+        setLocalSteps((prev) =>
+          prev.map((s) =>
+            s.id === step.id ? { ...s, state: 'DONE' as const, completed_at: now, completed_by: null } : s
+          )
+        );
         // If FIXCAR link provided, save it
         if (step.step_key === 'FIXCAR_PHOTOS' && link) {
           const supabase = (await import('@/lib/supabase/client')).createClient();
