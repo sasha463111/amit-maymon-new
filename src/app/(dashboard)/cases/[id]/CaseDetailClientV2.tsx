@@ -12,7 +12,7 @@ import { PARTS_STATUS_LABELS } from '@/types/database';
 const DEFAULT_STEP_LABELS: Record<string, string> = {
   OPEN_CASE: 'פתיחת תיק',
   FIXCAR_PHOTOS: 'צילום FixCar',
-  WHEELS_CHECK: 'תפסי גלגלים',
+  WHEELS_CHECK: 'טפסי גלגלים',
   PREP_ESTIMATE: 'אומדן',
   SUMMARIZE_ESTIMATE: 'סיכום אומדן',
   SEND_TO_APPRAISER: 'שליחה לשמאי',
@@ -617,7 +617,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                   {isDone && hasWheelsLink && s.step_key === 'WHEELS_CHECK' && (
                     <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-600">קישור תפסי גלגלים:</span>
+                        <span className="text-xs font-medium text-gray-600">קישור טפסי גלגלים:</span>
                         <a
                           href={wheelsCheckLink!}
                           target="_blank"
@@ -675,7 +675,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                   {/* WHEELS CHECK file/link panel */}
                   {canEdit && isWheelsPanel && STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key) && !isDone && !isSkipped && (
                     <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-purple-300 shadow-md">
-                      <p className="text-xs font-semibold text-purple-700 mb-3">📎 הוסף לינק או קובץ לתפסי גלגלים</p>
+                      <p className="text-xs font-semibold text-purple-700 mb-3">📎 הוסף לינק או קובץ לטפסי גלגלים</p>
                       {/* Tab switcher */}
                       <div className="flex gap-1 mb-3 bg-gray-100 rounded-lg p-1 w-fit">
                         <button

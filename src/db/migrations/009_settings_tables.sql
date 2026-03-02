@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS workflow_step_templates (
 INSERT INTO workflow_step_templates (step_key, step_label, order_index, is_enabled, requires_link, requires_file_or_link) VALUES
   ('OPEN_CASE',               'פתיחת תיק',                          0,  true,  false, false),
   ('FIXCAR_PHOTOS',           'צילום FixCar',                        1,  true,  true,  false),
-  ('WHEELS_CHECK',            'תפסי גלגלים',                         2,  true,  false, true),
+  ('WHEELS_CHECK',            'טפסי גלגלים',                         2,  true,  false, true),
   ('PREP_ESTIMATE',           'אומדן',                               3,  true,  false, false),
   ('SEND_TO_APPRAISER',       'שליחה לשמאי',                         4,  true,  false, false),
   ('WAIT_APPRAISER_APPROVAL', 'המתנה לאישור שמאי',                   5,  true,  false, false),

@@ -85,7 +85,7 @@ export default async function CasesPage() {
   const STEP_LABELS: Record<string, string> = {
     OPEN_CASE: 'פתיחת תיק',
     FIXCAR_PHOTOS: 'צילום FixCar',
-    WHEELS_CHECK: 'תפסי גלגלים',
+    WHEELS_CHECK: 'טפסי גלגלים',
     PREP_ESTIMATE: 'אומדן',
     SEND_TO_APPRAISER: 'שליחה לשמאי',
     WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',

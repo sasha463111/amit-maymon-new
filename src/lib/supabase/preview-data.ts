@@ -294,7 +294,7 @@ const MOCK_ROLE_PERMISSIONS: RolePermission[] = [
 const MOCK_WORKFLOW_STEP_TEMPLATES: WorkflowStepTemplate[] = [
   { id: 'wst-1', step_key: 'OPEN_CASE', step_label: 'פתיחת תיק', order_index: 0, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
   { id: 'wst-2', step_key: 'FIXCAR_PHOTOS', step_label: 'צילום FixCar', order_index: 1, is_enabled: true, requires_link: true, requires_file_or_link: false, created_at: now },
-  { id: 'wst-3', step_key: 'WHEELS_CHECK', step_label: 'תפסי גלגלים', order_index: 2, is_enabled: true, requires_link: false, requires_file_or_link: true, created_at: now },
+  { id: 'wst-3', step_key: 'WHEELS_CHECK', step_label: 'טפסי גלגלים', order_index: 2, is_enabled: true, requires_link: false, requires_file_or_link: true, created_at: now },
   { id: 'wst-4', step_key: 'PREP_ESTIMATE', step_label: 'אומדן', order_index: 3, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
   { id: 'wst-5', step_key: 'SEND_TO_APPRAISER', step_label: 'שליחה לשמאי', order_index: 4, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
   { id: 'wst-6', step_key: 'WAIT_APPRAISER_APPROVAL', step_label: 'המתנה לאישור שמאי', order_index: 5, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },

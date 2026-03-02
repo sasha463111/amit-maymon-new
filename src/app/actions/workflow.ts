@@ -85,8 +85,8 @@ export async function createCase(input: CreateCaseInput) {
         branch_id: branchId,
         license_plate: input.plate_number,
         first_registration_date: input.first_registration_date,
-        vehicle_type: input.vehicle_type ?? null,
-        year: input.vehicle_year ?? null,
+        ...(input.vehicle_type != null ? { vehicle_type: input.vehicle_type } : {}),
+        ...(input.vehicle_year != null ? { year: input.vehicle_year } : {}),
       } as never)
       .select('id')
       .single();
@@ -106,14 +106,15 @@ export async function createCase(input: CreateCaseInput) {
       claim_number: input.claim_number ?? null,
       insurance_type: input.insurance_type ?? null,
       claim_type: input.claim_type ?? null,
-      sub_claim_type: input.sub_claim_type ?? null,
-      customer_name: input.customer_name ?? null,
-      phone: input.phone ?? null,
-      insurance_company: input.insurance_company ?? null,
-      appraiser_name: input.appraiser_name ?? null,
-      event_date: input.event_date ?? null,
       opened_at: openedAt,
       created_by: user.id,
+      // New fields (migration 006) — only send if not null to avoid schema cache errors
+      ...(input.sub_claim_type != null ? { sub_claim_type: input.sub_claim_type } : {}),
+      ...(input.customer_name != null ? { customer_name: input.customer_name } : {}),
+      ...(input.phone != null ? { phone: input.phone } : {}),
+      ...(input.insurance_company != null ? { insurance_company: input.insurance_company } : {}),
+      ...(input.appraiser_name != null ? { appraiser_name: input.appraiser_name } : {}),
+      ...(input.event_date != null ? { event_date: input.event_date } : {}),
     } as never)
     .select('id')
     .single();
@@ -338,12 +339,12 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         user_id: profile!.id,
         type: 'BLOCKED_ACTION',
         title: 'פעולה חסומה',
-        body: 'חסר או נדחה אישור CEO לתפסי גלגלים',
+        body: 'חסר או נדחה אישור CEO לטפסי גלגלים',
       } as never);
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'ceo_approval_missing_or_rejected',
       });
-      return { error: 'נדרש אישור CEO לתפסי גלגלים' };
+      return { error: 'נדרש אישור CEO לטפסי גלגלים' };
     }
   }
 

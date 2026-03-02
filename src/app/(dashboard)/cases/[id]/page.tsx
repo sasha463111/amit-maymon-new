@@ -27,35 +27,31 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   const profile = profileData as { role: string; branch_id: string | null } | null;
 
-  const { data: caseRow } = await supabase
-    .from('cases')
-    .select(
-      `
-      id,
-      case_key,
-      claim_number,
-      fixcar_link,
-      wheels_check_link,
-      parts_status,
-      opened_at,
-      treatment_finished_at,
-      closed_at,
-      general_status,
-      branch_id,
-      customer_name,
-      phone,
-      insurance_company,
-      appraiser_name,
-      event_date,
-      sub_claim_type,
-      insurance_type,
-      claim_type,
-      cars(license_plate, first_registration_date, vehicle_type, year),
-      branches(name)
-    `
-    )
-    .eq('id', id)
-    .single();
+  // Try full select with new columns first; fall back to basic select if migration 006 not yet applied
+  let caseRow: unknown = null;
+  {
+    const { data, error } = await supabase
+      .from('cases')
+      .select(
+        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,cars(license_plate,first_registration_date,vehicle_type,year),branches(name)'
+      )
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      // Fallback: select only stable columns (migrations not yet applied to this DB)
+      const { data: basicData } = await supabase
+        .from('cases')
+        .select(
+          'id,case_key,claim_number,fixcar_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,insurance_type,claim_type,cars(license_plate,first_registration_date),branches(name)'
+        )
+        .eq('id', id)
+        .single();
+      caseRow = basicData;
+    } else {
+      caseRow = data;
+    }
+  }
 
   if (!caseRow) notFound();
 
@@ -349,16 +345,16 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       age={age}
       partsStatus={c.parts_status as PartsStatus}
       generalStatus={c.general_status as GeneralStatus}
-      fixcarLink={c.fixcar_link}
-      wheelsCheckLink={c.wheels_check_link}
-      customerName={c.customer_name}
-      phone={c.phone}
-      insuranceCompany={c.insurance_company}
-      appraiserName={c.appraiser_name}
-      eventDate={c.event_date}
-      subClaimType={c.sub_claim_type}
-      insuranceType={c.insurance_type}
-      claimType={c.claim_type}
+      fixcarLink={c.fixcar_link ?? null}
+      wheelsCheckLink={c.wheels_check_link ?? null}
+      customerName={c.customer_name ?? null}
+      phone={c.phone ?? null}
+      insuranceCompany={c.insurance_company ?? null}
+      appraiserName={c.appraiser_name ?? null}
+      eventDate={c.event_date ?? null}
+      subClaimType={c.sub_claim_type ?? null}
+      insuranceType={c.insurance_type ?? null}
+      claimType={c.claim_type ?? null}
       steps={steps}
       approvals={approvals ?? []}
       extras={extras ?? []}
