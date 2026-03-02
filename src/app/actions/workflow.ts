@@ -324,6 +324,23 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .eq('state', 'DONE')
       .maybeSingle();
     const needsWheelsApproval = !!(wheelsStep as { id: string } | null)?.id;
+
+    // Ensure CEO approvals exist before blocking — so the case always מופיע במסך האישורים
+    if (!estimateApproval) {
+      await supabase.from('ceo_approvals').insert({
+        case_id: caseId,
+        approval_type: 'ESTIMATE_AND_DETAILS',
+        status: 'PENDING',
+      } as never);
+    }
+    if (needsWheelsApproval && !wheelsApproval) {
+      await supabase.from('ceo_approvals').insert({
+        case_id: caseId,
+        approval_type: 'WHEELS_CHECK',
+        status: 'PENDING',
+      } as never);
+    }
+
     if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
       await supabase.from('notifications').insert({
         user_id: profile!.id,
