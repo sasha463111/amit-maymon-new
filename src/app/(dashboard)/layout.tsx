@@ -19,6 +19,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   CEO: [
     { label: 'אישורים', href: '/approvals' },
+    { label: 'סגירה', href: '/closure' },
     { label: 'תיקים', href: '/cases' },
     { label: 'התראות', href: '/notifications' },
     { label: 'הגדרות', href: '/settings' },

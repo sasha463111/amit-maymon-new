@@ -33,7 +33,6 @@ export function CreateCaseButton({
     appraiser_name: '',
     event_date: '',
     claim_number: '',
-    first_registration_date: '',
     insurance_type: '' as InsuranceType | '',
     claim_type: '' as ClaimType | '',
     sub_claim_type: '' as SubClaimType | '',
@@ -52,7 +51,6 @@ export function CreateCaseButton({
     const res = await createCase({
       plate_number: form.plate_number.trim(),
       claim_number: form.claim_number.trim() || null,
-      first_registration_date: form.first_registration_date,
       insurance_type: (form.insurance_type as InsuranceType) || null,
       claim_type: (form.claim_type as ClaimType) || null,
       sub_claim_type: (form.sub_claim_type as SubClaimType) || null,
@@ -93,7 +91,6 @@ export function CreateCaseButton({
       appraiser_name: '',
       event_date: '',
       claim_number: '',
-      first_registration_date: '',
       insurance_type: '',
       claim_type: '',
       sub_claim_type: '',
@@ -166,16 +163,6 @@ export function CreateCaseButton({
                       className="w-full border rounded px-3 py-2 text-sm"
                       dir="ltr"
                       placeholder="2022"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">תאריך עלייה לכביש *</label>
-                    <input
-                      type="date"
-                      required
-                      value={form.first_registration_date}
-                      onChange={(e) => set('first_registration_date', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
                     />
                   </div>
                 </div>

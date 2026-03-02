@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
@@ -76,9 +77,10 @@ function DocumentDownloadButton({ filePath, fileName }: { filePath: string; file
 }
 
 export function ApprovalsList({ approvals: initialApprovals }: { approvals: ApprovalRow[] }) {
+  const router = useRouter();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [localApprovals, setLocalApprovals] = useState<ApprovalRow[]>(initialApprovals);
   const [documents, setDocuments] = useState<CaseDocument[]>([]);
@@ -139,20 +141,36 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
 
   async function handleDecide(approvalId: string, status: 'APPROVED' | 'REJECTED') {
     setError(null);
-    setLoading(true);
+    const note = status === 'REJECTED' ? rejectNote : undefined;
+
     if (isPreview) {
-      await decideApprovalPreview(approvalId, status, status === 'REJECTED' ? rejectNote : undefined);
+      setDecidingId(approvalId);
+      await decideApprovalPreview(approvalId, status, note);
       setLocalApprovals((prev) => prev.filter((a) => a.id !== approvalId));
-      setSelectedId(null);
+      setSelectedId((prev) => {
+        const next = localApprovals.filter((a) => a.id !== approvalId);
+        return next[0]?.id ?? next[next.length - 1]?.id ?? null;
+      });
       setRejectNote('');
       setDocuments([]);
-    } else {
-      const { decideApproval: action } = await import('@/app/actions/approvals');
-      const res = await action({ approval_id: approvalId, status, rejection_note: status === 'REJECTED' ? rejectNote : undefined });
-      if (res?.error) setError(res.error);
-      else { setLocalApprovals((prev) => prev.filter((a) => a.id !== approvalId)); setSelectedId(null); setRejectNote(''); setDocuments([]); }
+      setDecidingId(null);
+      return;
     }
-    setLoading(false);
+
+    const nextList = localApprovals.filter((a) => a.id !== approvalId);
+    const nextSelectedId = nextList[0]?.id ?? nextList[nextList.length - 1]?.id ?? null;
+    setLocalApprovals(nextList);
+    setSelectedId(nextSelectedId);
+    setRejectNote('');
+    setDocuments([]);
+
+    const { decideApproval: action } = await import('@/app/actions/approvals');
+    action({ approval_id: approvalId, status, rejection_note: note }).then((res) => {
+      if (res?.error) {
+        setError(res.error);
+        router.refresh();
+      }
+    });
   }
 
   if (localApprovals.length === 0) {
@@ -291,11 +309,11 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
               <div className="flex gap-3 items-start flex-wrap">
                 <button
                   type="button"
-                  disabled={loading}
-                  onClick={() => handleDecide(selected.id, 'APPROVED')}
+                  disabled={decidingId === selected.id}
+                  onClick={() => void handleDecide(selected.id, 'APPROVED')}
                   className="px-6 py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm"
                 >
-                  {loading ? '...' : '✓ אשר'}
+                  {decidingId === selected.id ? '...' : '✓ אשר'}
                 </button>
                 <div className="flex gap-2 items-center flex-1">
                   <input
@@ -307,8 +325,8 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                   />
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => handleDecide(selected.id, 'REJECTED')}
+                    disabled={decidingId === selected.id}
+                    onClick={() => void handleDecide(selected.id, 'REJECTED')}
                     className="px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm flex-shrink-0"
                   >
                     ✕ דחה

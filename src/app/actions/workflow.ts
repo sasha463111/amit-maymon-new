@@ -39,8 +39,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export async function createCase(input: CreateCaseInput) {
   const supabase = await createClient();
   if (!input.plate_number?.trim()) return { error: 'מספר רישוי חובה' };
-  if (!input.first_registration_date) return { error: 'תאריך עלייה לכביש חובה' };
   if (!input.branch_id || !UUID_REGEX.test(input.branch_id)) return { error: 'סניף לא תקין' };
+  const firstRegDate = input.first_registration_date?.trim() || null;
 
   const {
     data: { user },
@@ -74,7 +74,7 @@ export async function createCase(input: CreateCaseInput) {
     await supabase
       .from('cars')
       .update({
-        first_registration_date: input.first_registration_date,
+        ...(firstRegDate != null ? { first_registration_date: firstRegDate } : {}),
         ...(input.vehicle_type != null ? { vehicle_type: input.vehicle_type } : {}),
         ...(input.vehicle_year != null ? { year: input.vehicle_year } : {}),
       } as never)
@@ -85,7 +85,7 @@ export async function createCase(input: CreateCaseInput) {
       .insert({
         branch_id: branchId,
         license_plate: input.plate_number,
-        first_registration_date: input.first_registration_date,
+        ...(firstRegDate != null ? { first_registration_date: firstRegDate } : {}),
         ...(input.vehicle_type != null ? { vehicle_type: input.vehicle_type } : {}),
         ...(input.vehicle_year != null ? { year: input.vehicle_year } : {}),
       } as never)
@@ -137,7 +137,7 @@ export async function createCase(input: CreateCaseInput) {
   if (runErr || !run) return { error: runErr?.message ?? 'שגיאה ביצירת workflow' };
   const runId = (run as { id: string }).id;
 
-  const age = vehicleAgeYears(input.first_registration_date);
+  const age = vehicleAgeYears(firstRegDate);
   const skipWheels = age !== null && age <= 2;
 
   // Load step templates from DB; fallback to hardcoded array

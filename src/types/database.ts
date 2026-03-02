@@ -277,7 +277,7 @@ export const SUB_CLAIM_TYPE_LABELS: Record<SubClaimType, string> = {
 export interface CreateCaseInput {
   plate_number: string;
   claim_number?: string | null;
-  first_registration_date: string; // ISO date
+  first_registration_date?: string | null; // ISO date — optional (תאריך עלייה לכביש הוסר מהטופס)
   insurance_type?: InsuranceType | null;
   claim_type?: ClaimType | null;
   sub_claim_type?: SubClaimType | null;
