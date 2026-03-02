@@ -10,6 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +46,7 @@ export default function LoginPage() {
     }
     
     try {
-      const result = await loginAction({ email, password });
+      const result = await loginAction({ email, password, rememberMe });
       if (result?.error) {
         setError(result.error);
         setLoading(false);
@@ -63,7 +64,13 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 border border-gray-200">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">התחברות — CRM תהילה</h1>
+          {/* Logo */}
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="bg-brand-red rounded-xl px-5 py-2">
+              <span className="font-black text-3xl text-white tracking-tight">תהילה</span>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500">CRM — מערכת ניהול תיקים</p>
           {isPreview && (
             <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200">
               מצב תצוגה מקדימה — התחברות לא נדרשת. תועבר אוטומטית בעוד רגע.
@@ -101,13 +108,24 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
           </div>
+          {!isPreview && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-gray-300 text-brand-red focus:ring-brand-red"
+              />
+              זכור אותי (30 יום)
+            </label>
+          )}
           {error && (
             <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-2.5 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all shadow-md hover:shadow-lg"
+            className="w-full bg-brand-red hover:bg-brand-red-dark text-white py-2.5 rounded-lg font-medium disabled:opacity-50 transition-colors shadow-md hover:shadow-lg"
           >
             {loading ? 'מתחבר...' : isPreview ? 'המשך למצב תצוגה מקדימה' : 'התחבר'}
           </button>

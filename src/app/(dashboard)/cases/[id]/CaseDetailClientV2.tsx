@@ -309,31 +309,61 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     }
   }
 
+  async function reloadStepsFromDB() {
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { data: runs } = await supabase
+      .from('case_workflow_runs')
+      .select('id')
+      .eq('case_id', caseId)
+      .eq('workflow_type', 'PROFESSIONAL');
+    const runIds = (runs as { id: string }[] | null)?.map((r) => r.id) ?? [];
+    if (!runIds.length) return;
+    const { data } = await supabase
+      .from('case_workflow_steps')
+      .select('id, step_key, state, order_index, completed_at, completed_by')
+      .in('run_id', runIds)
+      .order('order_index');
+    if (data) setLocalSteps(data as StepRow[]);
+  }
+
   async function performComplete(step: StepRow, link?: string) {
+    // Optimistic update: mark step as DONE immediately before server call
+    const now = new Date().toISOString();
+    setLocalSteps((prev) =>
+      prev.map((s) =>
+        s.id === step.id ? { ...s, state: 'DONE' as const, completed_at: now, completed_by: null } : s
+      )
+    );
     setCompletingStepId(step.id);
     setStepError(null);
     try {
       const res = await completeActiveStep(caseId, step.id);
       if (res?.error) {
-        setStepError(res.error);
-      } else {
-        // Optimistic UI: show step as DONE immediately
-        const now = new Date().toISOString();
+        // Revert optimistic update on error
         setLocalSteps((prev) =>
           prev.map((s) =>
-            s.id === step.id ? { ...s, state: 'DONE' as const, completed_at: now, completed_by: null } : s
+            s.id === step.id ? { ...s, state: 'ACTIVE' as const, completed_at: null } : s
           )
         );
+        setStepError(res.error);
+      } else {
         // If FIXCAR link provided, save it
         if (step.step_key === 'FIXCAR_PHOTOS' && link) {
           const supabase = (await import('@/lib/supabase/client')).createClient();
           await supabase.from('cases').update({ fixcar_link: link } as never).eq('id', caseId);
           setFixcarValue(link);
         }
-        router.refresh();
+        // Reload from DB to get accurate server state (next step activated, etc.)
+        await reloadStepsFromDB();
       }
     } catch (e) {
       console.error('[CaseDetailClientV2] complete failed:', e);
+      // Revert optimistic update on exception
+      setLocalSteps((prev) =>
+        prev.map((s) =>
+          s.id === step.id ? { ...s, state: 'ACTIVE' as const, completed_at: null } : s
+        )
+      );
       setStepError('שגיאה בהשלמת השלב');
     } finally {
       setCompletingStepId(null);

@@ -14,6 +14,8 @@ export async function createClient() {
 
   const cookieStore = await cookies();
 
+  const hasRemember = cookieStore.get('tehila_remember')?.value === '1';
+
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,9 +26,12 @@ export async function createClient() {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const finalOptions = hasRemember
+                ? { ...options, maxAge: 30 * 24 * 60 * 60 }
+                : options;
+              cookieStore.set(name, value, finalOptions);
+            });
           } catch {
             // Called from Server Component; ignore.
           }

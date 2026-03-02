@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 
 export function NotificationsBadge({ userId }: { userId: string }) {
@@ -75,12 +74,11 @@ export function NotificationsBadge({ userId }: { userId: string }) {
   if (unreadCount === 0) return null;
 
   return (
-    <Link
-      href="/notifications"
-      className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white shadow-lg hover:bg-red-600 transition-colors"
+    <span
+      className="absolute -top-1 -right-1 flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white shadow-lg pointer-events-none"
       title={`${unreadCount} התראות לא נקראו`}
     >
       {unreadCount > 99 ? '99+' : unreadCount}
-    </Link>
+    </span>
   );
 }
