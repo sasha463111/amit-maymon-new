@@ -38,6 +38,7 @@ export default async function ApprovalsPage() {
         id,
         case_key,
         fixcar_link,
+        wheels_check_link,
         parts_status,
         cars(license_plate),
         branches(name)
@@ -57,6 +58,7 @@ export default async function ApprovalsPage() {
         id: string;
         case_key: string | null;
         fixcar_link: string | null;
+        wheels_check_link: string | null;
         parts_status: string;
         cars: { license_plate: string | null } | null;
         branches: { name: string } | null;
@@ -72,6 +74,7 @@ export default async function ApprovalsPage() {
       rejection_note: row.rejection_note,
       case_key: c?.case_key ?? null,
       fixcar_link: c?.fixcar_link ?? null,
+      wheels_check_link: c?.wheels_check_link ?? null,
       parts_status: c?.parts_status ?? null,
       plate: car?.license_plate ?? '—',
       branch_name: branch?.name ?? '—',

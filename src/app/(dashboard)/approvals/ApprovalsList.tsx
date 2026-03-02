@@ -12,6 +12,7 @@ interface ApprovalRow {
   rejection_note: string | null;
   case_key: string | null;
   fixcar_link: string | null;
+  wheels_check_link: string | null;
   parts_status: string | null;
   plate: string;
   branch_name: string;
@@ -87,12 +88,12 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
       const { data } = await supabase
         .from('ceo_approvals')
         .select(`id, case_id, approval_type, status, rejection_note,
-          cases(id, case_key, fixcar_link, parts_status, cars(license_plate), branches(name))`)
+          cases(id, case_key, fixcar_link, wheels_check_link, parts_status, cars(license_plate), branches(name))`)
         .eq('status', 'PENDING');
       if (!data) return;
       const rows = (data as unknown as Array<{
         id: string; case_id: string; approval_type: string; status: string; rejection_note: string | null;
-        cases: { case_key: string | null; fixcar_link: string | null; parts_status: string;
+        cases: { case_key: string | null; fixcar_link: string | null; wheels_check_link: string | null; parts_status: string;
           cars: { license_plate: string | null } | null; branches: { name: string } | null } | null;
       }>).map((a) => {
         const c = Array.isArray(a.cases) ? (a.cases as typeof a.cases[])[0] : a.cases;
@@ -101,7 +102,8 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
         return {
           id: a.id, case_id: a.case_id, approval_type: a.approval_type,
           rejection_note: a.rejection_note, case_key: c?.case_key ?? null,
-          fixcar_link: c?.fixcar_link ?? null, parts_status: c?.parts_status ?? null,
+          fixcar_link: c?.fixcar_link ?? null, wheels_check_link: (c as { wheels_check_link?: string | null })?.wheels_check_link ?? null,
+          parts_status: c?.parts_status ?? null,
           plate: car?.license_plate ?? '—', branch_name: branch?.name ?? '—',
         };
       });
@@ -216,19 +218,34 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                 <p className="text-xs text-gray-500 mb-1">סטטוס חלקים</p>
                 <p className={`font-semibold ${parts?.color ?? 'text-gray-700'}`}>{parts?.label ?? selected.parts_status ?? '—'}</p>
               </div>
-              {selected.fixcar_link && (
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1">קישור FixCar</p>
-                  <a
-                    href={selected.fixcar_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600 text-xs underline font-medium hover:text-blue-800"
-                  >
-                    פתח קישור ↗
-                  </a>
-                </div>
-              )}
+            </div>
+
+            {/* לינקים וקבצים מצורפים — כל הלינקים והקבצים מהצ'קליסט */}
+            <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
+              <p className="text-sm font-semibold text-indigo-800 mb-2">🔗 לינקים וקבצים מצורפים</p>
+              <ul className="space-y-2 text-sm">
+                {selected.fixcar_link && (
+                  <li className="flex items-center gap-2">
+                    <span className="text-indigo-600 font-medium">FixCar:</span>
+                    <a href={selected.fixcar_link} target="_blank" rel="noreferrer" className="text-blue-600 underline hover:text-blue-800 truncate max-w-[280px]">
+                      {selected.fixcar_link}
+                    </a>
+                    <a href={selected.fixcar_link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:text-indigo-800 flex-shrink-0">פתח ↗</a>
+                  </li>
+                )}
+                {selected.wheels_check_link && (
+                  <li className="flex items-center gap-2">
+                    <span className="text-indigo-600 font-medium">טפסי גלגלים:</span>
+                    <a href={selected.wheels_check_link} target="_blank" rel="noreferrer" className="text-blue-600 underline hover:text-blue-800 truncate max-w-[280px]">
+                      {selected.wheels_check_link}
+                    </a>
+                    <a href={selected.wheels_check_link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:text-indigo-800 flex-shrink-0">פתח ↗</a>
+                  </li>
+                )}
+                {!selected.fixcar_link && !selected.wheels_check_link && (
+                  <li className="text-gray-500 text-xs">אין לינקים מוזנים</li>
+                )}
+              </ul>
             </div>
 
             {/* View full case button */}
@@ -242,9 +259,9 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
               </Link>
             </div>
 
-            {/* Case Documents */}
+            {/* Case Documents — קבצים מהצ'קליסט עבודה */}
             <div className="border-t pt-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">📎 מסמכים שהועלו לתיק</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3">📎 מסמכים שהועלו לתיק (כולל מהצ'קליסט)</p>
               {docsLoading ? (
                 <p className="text-xs text-gray-400">טוען מסמכים...</p>
               ) : documents.length === 0 ? (

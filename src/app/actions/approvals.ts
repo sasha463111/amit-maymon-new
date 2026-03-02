@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { ApprovalDecisionInput } from '@/types/database';
 
@@ -70,5 +71,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     }
   }
 
+  revalidatePath('/approvals');
+  revalidatePath(`/cases/${approval.case_id}`);
   return { ok: true };
 }

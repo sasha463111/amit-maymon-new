@@ -100,9 +100,12 @@ export default async function DashboardLayout({
             <div className="bg-white/20 px-3 py-1 rounded-full">
               <span className="font-medium">{profile?.full_name ?? user.email}</span>
             </div>
-            <div className="bg-white/20 px-3 py-1 rounded-full relative">
-              <span>{roleLabel}</span>
+            <Link href="/notifications" className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full relative inline-flex items-center gap-1.5 transition-colors">
+              <span>התראות</span>
               <NotificationsBadge userId={user.id} />
+            </Link>
+            <div className="bg-white/20 px-3 py-1 rounded-full">
+              <span>{roleLabel}</span>
             </div>
             <div className="bg-white/20 px-3 py-1 rounded-full">
               <span>{branchName}</span>

@@ -215,7 +215,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
       if (stepsData && stepsData.length > 0) {
         setLocalSteps(stepsData as StepRow[]);
-      } else {
+      } else if (steps.length > 0) {
         setLocalSteps(steps);
       }
     };

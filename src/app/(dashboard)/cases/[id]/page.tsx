@@ -162,26 +162,30 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       });
     }
     
-    // CRITICAL FIX: If we have a run but no steps, create them (PREVIEW mode only)
-    // This happens because steps are created on server but not saved to localStorage
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true' && steps.length === 0) {
-      console.log('[CASE DETAIL PAGE] Creating missing workflow steps for run:', actualRun.id);
+    // If we have a run but no steps, create them from templates (new cases or missing steps)
+    if (steps.length === 0) {
+      const { data: templates } = await supabase
+        .from('workflow_step_templates')
+        .select('step_key, order_index')
+        .eq('is_enabled', true)
+        .order('order_index');
+      const stepsToCreate = (templates && templates.length > 0)
+        ? (templates as { step_key: string; order_index: number }[])
+        : PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, order_index: i }));
+
       const openedAt = (caseRow as { opened_at: string | null }).opened_at || new Date().toISOString();
-      // Extract car data from caseRow
       const carData = Array.isArray((caseRow as { cars: unknown }).cars)
-        ? (caseRow as { cars: { license_plate: string; first_registration_date: string | null }[] }).cars[0]
-        : (caseRow as { cars: { license_plate: string; first_registration_date: string | null } | null }).cars;
+        ? (caseRow as { cars: { first_registration_date: string | null }[] }).cars[0]
+        : (caseRow as { cars: { first_registration_date: string | null } | null }).cars;
       const firstReg = carData?.first_registration_date ?? null;
       const age = firstReg ? (Date.now() - new Date(firstReg).getTime()) / (365.25 * 24 * 60 * 60 * 1000) : null;
       const skipWheels = age !== null && age <= 2;
-      
-      // Create all steps with correct states
-      for (let i = 0; i < PROFESSIONAL_WORKFLOW_STEPS.length; i++) {
-        const stepKey = PROFESSIONAL_WORKFLOW_STEPS[i];
+
+      for (const { step_key: stepKey, order_index: orderIndex } of stepsToCreate) {
         let state: 'PENDING' | 'ACTIVE' | 'DONE' | 'SKIPPED' = 'ACTIVE';
         let completedAt: string | null = null;
         let activatedAt: string | null = openedAt;
-        
+
         if (stepKey === 'OPEN_CASE') {
           state = 'DONE';
           completedAt = openedAt;
@@ -195,33 +199,23 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           activatedAt = openedAt;
           completedAt = null;
         }
-        
+
         await supabase.from('case_workflow_steps').insert({
           run_id: actualRun.id,
           step_key: stepKey,
           state,
-          order_index: i,
+          order_index: orderIndex,
           activated_at: activatedAt,
           completed_at: completedAt,
         } as never);
       }
-      
-      // Reload steps after creating them
+
       const { data: newStepsData } = await supabase
         .from('case_workflow_steps')
         .select('id, step_key, state, order_index, completed_at, completed_by')
         .eq('run_id', actualRun.id)
         .order('order_index');
       steps = newStepsData ?? [];
-      
-      // DEBUG: Log after creating steps
-      if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-        console.log('[CASE DETAIL PAGE] Created and loaded steps:', {
-          runId: actualRun.id,
-          stepsCount: steps.length,
-          steps: steps.map(s => ({ step_key: s.step_key, state: s.state })),
-        });
-      }
     }
     
     // DEBUG: Log steps loading
