@@ -3,6 +3,8 @@
  */
 import type {
   Branch,
+  RolePermission,
+  WorkflowStepTemplate,
   Profile,
   Car,
   Case,
@@ -278,6 +280,33 @@ export const MOCK_AUDIT: AuditEvent[] = [
   },
 ];
 
+const MOCK_ROLE_PERMISSIONS: RolePermission[] = [
+  { id: 'rp-1', role: 'CEO', action: 'create_case', enabled: true, created_at: now },
+  { id: 'rp-2', role: 'CEO', action: 'complete_professional_step', enabled: true, created_at: now },
+  { id: 'rp-3', role: 'CEO', action: 'complete_closure_step', enabled: true, created_at: now },
+  { id: 'rp-4', role: 'CEO', action: 'manage_settings', enabled: true, created_at: now },
+  { id: 'rp-5', role: 'SERVICE_MANAGER', action: 'create_case', enabled: true, created_at: now },
+  { id: 'rp-6', role: 'SERVICE_MANAGER', action: 'complete_professional_step', enabled: true, created_at: now },
+  { id: 'rp-7', role: 'OFFICE', action: 'create_case', enabled: true, created_at: now },
+  { id: 'rp-8', role: 'OFFICE', action: 'complete_closure_step', enabled: true, created_at: now },
+];
+
+const MOCK_WORKFLOW_STEP_TEMPLATES: WorkflowStepTemplate[] = [
+  { id: 'wst-1', step_key: 'OPEN_CASE', step_label: 'פתיחת תיק', order_index: 0, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-2', step_key: 'FIXCAR_PHOTOS', step_label: 'צילום FixCar', order_index: 1, is_enabled: true, requires_link: true, requires_file_or_link: false, created_at: now },
+  { id: 'wst-3', step_key: 'WHEELS_CHECK', step_label: 'תפסי גלגלים', order_index: 2, is_enabled: true, requires_link: false, requires_file_or_link: true, created_at: now },
+  { id: 'wst-4', step_key: 'PREP_ESTIMATE', step_label: 'אומדן', order_index: 3, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-5', step_key: 'SEND_TO_APPRAISER', step_label: 'שליחה לשמאי', order_index: 4, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-6', step_key: 'WAIT_APPRAISER_APPROVAL', step_label: 'המתנה לאישור שמאי', order_index: 5, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-7', step_key: 'ENTER_WORK', step_label: 'כניסה לעבודה', order_index: 6, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-8', step_key: 'ISSUE_CATALOG_NUMBERS', step_label: 'ניפוק מק"טים', order_index: 7, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-9', step_key: 'PARTS_DISCOUNTS', step_label: 'הנחות חלקים', order_index: 8, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-10', step_key: 'QUALITY_CONTROL', step_label: 'בקרת איכות', order_index: 9, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-11', step_key: 'WASH', step_label: 'שטיפה', order_index: 10, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-12', step_key: 'SEND_COMPLETION_PHOTOS', step_label: 'שליחת תמונות לשמאי גמר תיקון', order_index: 11, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+  { id: 'wst-13', step_key: 'READY_FOR_OFFICE', step_label: 'מוכן למשרד', order_index: 12, is_enabled: true, requires_link: false, requires_file_or_link: false, created_at: now },
+];
+
 export function getPreviewStore() {
   return {
     branches: [...MOCK_BRANCHES],
@@ -290,5 +319,7 @@ export function getPreviewStore() {
     bodywork_extras: [...MOCK_EXTRAS],
     notifications: [...MOCK_NOTIFICATIONS],
     audit_events: [...MOCK_AUDIT],
+    role_permissions: [...MOCK_ROLE_PERMISSIONS],
+    workflow_step_templates: [...MOCK_WORKFLOW_STEP_TEMPLATES],
   };
 }
