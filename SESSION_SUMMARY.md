@@ -1,403 +1,451 @@
 # סיכום שינויים - Tehila Bodyshop CRM
-## תאריך: היום
+## תיעוד מלא של כל מה שנבנה
 
 ---
 
-## 1. תיקון שמירת שלבי סגירה (Closure Workflow Persistence)
+## גרסאות קודמות (Session 1)
 
-### בעיה:
-- שלבי הסגירה לא נשמרו אחרי רענון דף
-- כשחוזרים לדף התיק, השלבים חזרו למצב הקודם
+### 1. שלבי סגירה (Closure Workflow)
+- **`ClosureDetailClient.tsx`** — שמירת שלבים אחרי רענון דף
+- **`workflow.ts`** — אישור CEO אוטומטי ב-`CLOSURE_PREPARE_CLOSING_FORMS`, חסימת `CLOSE_CASE`
+- **`types/database.ts`** — הוספת `CASE_CLOSURE` ל-`ApprovalType`
 
-### פתרון:
-- **קובץ**: `src/app/(dashboard)/closure/[id]/ClosureDetailClient.tsx`
-- הוספתי `useEffect` שטוען מחדש את השלבים מהמסד נתונים כשה-component נטען
-- עדכון `completePreviewStep` לטעון מחדש את השלבים אחרי השלמה
-- הוספתי `completingStepId` state כדי למנוע טעינה כפולה
+### 2. ENTER_WORK — אזהרה במקום חסימה
+- שלב ENTER_WORK לא חוסם יותר אם חלקים לא זמינים — מציג התראה בלבד
 
-### קוד רלוונטי:
+### 3. סטטוס חלקים — ללא איפוס
+- הסרת `router.refresh()` מ-`savePartsStatus` — הצ'קליסט לא מתאפס
+
+### 4. מסמכים לתיק
+- **`case_documents`** — טבלה חדשה ב-DB + RLS
+- **`documents.ts`** — server actions: `uploadCaseDocument`, `deleteCaseDocument`
+- **`CaseDetailClientV2.tsx`** — UI העלאה + הצגה + מחיקה
+- **`CreateCaseButton.tsx`** — העלאת קבצים בפתיחת תיק
+
+### 5. תצוגת אישורים
+- **`ApprovalsList.tsx`** — כפתור "צפה בתיק המלא", תמיכה ב-`CASE_CLOSURE`
+
+### 6. Badge התראות
+- **`NotificationsBadge.tsx`** — polling כל 10 שניות, browser notifications, PWA
+
+### 7. עמודת "השלב הבא" בטבלת תיקים
+- **`cases/page.tsx`** + **`CasesTable.tsx`** — טעינת workflow steps + תצוגת שלב פעיל
+
+---
+
+---
+
+## Session 2 — השינויים הגדולים (commit: `fb98c56`)
+
+---
+
+### A. שדות חדשים בפתיחת תיק
+
+**קובץ:** `src/app/(dashboard)/cases/CreateCaseButton.tsx`
+
+| שדה | סוג | הערות |
+|-----|-----|--------|
+| `customer_name` | text | שם לקוח |
+| `phone` | tel | טלפון |
+| `insurance_company` | text | חברת ביטוח (חופשי, לא enum) |
+| `appraiser_name` | text | שמאי |
+| `vehicle_type` | text | סוג רכב |
+| `vehicle_year` | number | שנת הרכב (1990–2026) |
+| `event_date` | date | תאריך אירוע |
+| `sub_claim_type` | select | פוליסה / צד ג' / הסדר ג' / תיקון פרטי / שלמה פוליסה / שלמה צד ג' |
+
+- Modal הורחב (max-w-xl, overflow-y-auto, max-h-[90vh])
+- CEO מורשה ליצור תיקים
+
+---
+
+### B. שינוי Workflow Steps (צ'קליסט)
+
+**הוסר:** `SUMMARIZE_ESTIMATE`
+
+**שם שונה:** `WHEELS_CHECK` → "טפסי גלגלים" (היה "בדיקת גלגלים")
+
+**שם שונה:** `PREP_ESTIMATE` → "אומדן" (היה "הכנת אומדן")
+
+**שלבים חדשים:**
+| step_key | שם עברי | מיקום |
+|----------|---------|--------|
+| `ISSUE_CATALOG_NUMBERS` | ניפוק מק"טים | 7 |
+| `PARTS_DISCOUNTS` | הנחות חלקים | 8 |
+| `SEND_COMPLETION_PHOTOS` | שליחת תמונות לשמאי גמר תיקון | 11 |
+
+**סדר סופי (13 שלבים):**
+```
+0  OPEN_CASE
+1  FIXCAR_PHOTOS
+2  WHEELS_CHECK
+3  PREP_ESTIMATE
+4  SEND_TO_APPRAISER
+5  WAIT_APPRAISER_APPROVAL
+6  ENTER_WORK
+7  ISSUE_CATALOG_NUMBERS
+8  PARTS_DISCOUNTS
+9  QUALITY_CONTROL
+10 WASH
+11 SEND_COMPLETION_PHOTOS
+12 READY_FOR_OFFICE
+```
+
+**לוגיקת WHEELS_CHECK (טפסי גלגלים):**
+- רכב ≤ 2 שנים → שלב מדולג אוטומטית (SKIPPED)
+- רכב > 2 שנים → פאנל פתיחה עם 2 tabs: "קישור" (URL) ו-"קובץ" (file upload)
+- לאחר שמירה: קישור נשמר ב-`cases.wheels_check_link`, קובץ עולה ל-`case-documents`
+
+**Steps נטענים מ-DB** (`workflow_step_templates`) עם fallback למערך hardcoded
+
+---
+
+### C. שדות חדשים בפרטי תיק
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
+
+- תצוגת כל השדות החדשים בפאנל פרטים: שם לקוח, טלפון, חברת ביטוח, שמאי, תאריך אירוע, תת סוג תביעה, סוג רכב
+
+---
+
+### D. סטטוס חלקים חדש: AIRMAIL_PENDING
+
+**קבצים:**
+- `src/types/database.ts` — הוספת `'AIRMAIL_PENDING'` ל-`PartsStatus`
+- `CaseDetailClientV2.tsx` — תצוגה "ממתין לדואר אוויר"
+- `ApprovalsList.tsx` — תצוגה בפאנל אישורים
+
+---
+
+### E. שדרוג דשבורד — 5 כרטיסי סטטיסטיקה
+
+**קובץ:** `src/app/(dashboard)/cases/page.tsx`
+
+| כרטיס | צבע | לוגיקה |
+|-------|-----|---------|
+| סה"כ תיקים פתוחים | כחול | `general_status = ACTIVE` |
+| רכבים בעבודה | ירוק | שלב פעיל ≥ `ENTER_WORK` (order_index ≥ 6) |
+| ממתינים לחלקים | צהוב | `parts_status IN ('ORDERED', 'NO_PARTS')` |
+| ממתין לדואר אוויר | סגול | `parts_status = 'AIRMAIL_PENDING'` |
+| ממתינים למוסך | אפור | שלב פעיל < `ENTER_WORK` (order_index < 6) |
+
+---
+
+### F. ציר זמן — ייחוס משתמש
+
+**קבצים:** `page.tsx` + `CaseDetailClientV2.tsx`
+
+- אחרי טעינת audit_events: אוסף `user_id` ייחודיים
+- שולף `profiles.full_name` לכל ה-IDs
+- ציר הזמן מציג: "בוצע על ידי: [שם]"
+
+---
+
+### G. עמוד הגדרות (CEO בלבד)
+
+**קבצים חדשים:**
+- `src/app/(dashboard)/settings/page.tsx`
+- `src/app/(dashboard)/settings/PermissionsTab.tsx`
+- `src/app/(dashboard)/settings/ChecklistTab.tsx`
+- `src/app/actions/settings.ts`
+
+#### טאב הרשאות (PermissionsTab):
+- מטריצת roles × actions
+- Checkbox לכל צלב (שמירה מיידית)
+- CEO נעול — לא ניתן לשנות
+
+**Roles:** SERVICE_MANAGER, OFFICE, CEO, PAINTER, SERVICE_ADVISOR
+
+**Actions:**
+| action | תיאור |
+|--------|--------|
+| `create_case` | פתיחת תיק |
+| `complete_professional_step` | השלמת שלב מקצועי |
+| `complete_closure_step` | השלמת שלב סגירה |
+| `manage_settings` | ניהול הגדרות |
+| `decide_approvals` | אישור/דחיית אישורים |
+| `manage_extras_status` | ניהול תוספות |
+| `upload_documents` | העלאת מסמכים |
+| `delete_documents` | מחיקת מסמכים |
+
+#### טאב צ'קליסט (ChecklistTab):
+- רשימת שלבי workflow הניתנת לעריכה
+- הפעלה/השבתה של כל שלב
+- עריכת שם שלב
+- הוספת שלב חדש
+- מחיקת שלב (מלבד OPEN_CASE ו-READY_FOR_OFFICE)
+
+**Server Actions (`settings.ts`):**
 ```typescript
-// טעינה מחדש של steps אחרי השלמה
-useEffect(() => {
-  if (!isPreview) return;
-  if (completingStepId !== null) return;
-  // ... טעינת steps מהמסד נתונים
-}, [isPreview, caseId, completingStepId]);
+getRolePermissions()
+updateRolePermission(role, action, enabled)
+getWorkflowStepTemplates()
+updateWorkflowStep(id, updates)
+addWorkflowStep(step)
+removeWorkflowStep(id)
 ```
 
 ---
 
-## 2. הוספת אישור CEO לסגירת תיק
+### H. הרשאות CEO מלאות
 
-### תכונה חדשה:
-- אישור CEO נדרש לפני סגירת תיק סופית
-- האישור נוצר אוטומטית כשמגיעים לשלב `CLOSURE_PREPARE_CLOSING_FORMS`
-- שלב `CLOSE_CASE` חסום עד שהאישור מאושר
+**קובץ:** `src/app/actions/workflow.ts`
 
-### שינויים:
+- `createCase` — CEO מורשה
+- `completeActiveStep` — CEO מורשה לסיים שלבים מקצועיים וסגירה
+- `returnToEstimate` — CEO מורשה
 
-#### `src/types/database.ts`:
-- הוספתי `'CASE_CLOSURE'` ל-`ApprovalType`
-
-#### `src/app/actions/workflow.ts`:
-- יצירת אישור CEO אוטומטית בשלב `CLOSURE_PREPARE_CLOSING_FORMS`
-- בדיקת אישור לפני סגירת תיק ב-`CLOSE_CASE`
-- החזרת שגיאה אם האישור לא מאושר
-
-#### `src/app/(dashboard)/closure/[id]/ClosureDetailClient.tsx`:
-- הוספתי `closureApprovalStatus` prop
-- בדיקת אישור סגירה לפני הצגת כפתור סגירה
-- הודעות ברורות על חסימות
-
-#### `src/app/(dashboard)/closure/[id]/page.tsx`:
-- טעינת סטטוס אישור סגירה מהמסד נתונים
-- העברת הסטטוס ל-client component
-
-#### `src/app/(dashboard)/approvals/ApprovalsList.tsx`:
-- הוספתי `'CASE_CLOSURE': 'אישור סגירת תיק'` ל-`APPROVAL_TYPE_LABELS`
-- האישורים מופיעים במסך האישורים של עמית
+**קובץ:** `CaseDetailClientV2.tsx`
+- `canEdit` — כולל CEO
+- `canManageExtras` — כולל CEO
 
 ---
 
-## 3. שינוי ENTER_WORK מהחסימה להתראה בלבד
+### I. DB Migrations (006–009)
 
-### בעיה:
-- שלב `ENTER_WORK` היה חסום לחלוטין אם חלקים לא זמינים
-- המשתמש לא יכול היה להמשיך גם אם רצה
+**קובץ:** `src/db/run_all_migrations.sql` — סקריפט מאוחד להרצה ב-Supabase
 
-### פתרון:
-- **קובץ**: `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
-- הסרתי את החסימה - השלב יכול להשלים גם אם חלקים לא זמינים
-- הוספתי אזהרה ויזואלית מתחת לשלב במקום חסימה
-- **קובץ**: `src/app/actions/workflow.ts`
-- הסרתי את החזרת השגיאה ב-`ENTER_WORK`
-- הוספתי audit event עם אזהרה במקום
+| Migration | תיאור |
+|-----------|--------|
+| **006** | שדות חדשים בתיק: `customer_name, phone, insurance_company, appraiser_name, event_date, wheels_check_link, sub_claim_type`; שדה `vehicle_type` לרכב |
+| **007** | `ALTER TYPE parts_status ADD VALUE 'AIRMAIL_PENDING'` |
+| **008** | מחיקת SUMMARIZE_ESTIMATE, הוספת 3 שלבים חדשים, עדכון `order_index` |
+| **009** | טבלאות `role_permissions` + `workflow_step_templates` + Seed data + RLS |
 
-### קוד:
+**CEO Test User** (נוצר ב-run_all_migrations.sql):
+- email: `ceo@test.com`
+- password: `TestCEO123!`
+
+---
+
+### J. TypeScript Types עודכנו
+
+**קובץ:** `src/types/database.ts`
+
 ```typescript
-// במקום חסימה - רק התראה
-if (s.step_key === 'ENTER_WORK' && partsStatus !== 'AVAILABLE') {
-  showWarning = true;
-  warningMessage = 'חלקים לא זמינים - יש לעדכן את סטטוס החלקים ל"זמינים"';
+// עודכן
+export type PartsStatus = 'NO_PARTS' | 'ORDERED' | 'AVAILABLE' | 'AIRMAIL_PENDING';
+
+// חדש
+export type SubClaimType = 'POLICY' | 'THIRD_PARTY' | 'THIRD_PARTY_SETTLEMENT'
+  | 'PRIVATE_REPAIR' | 'SHLOMO_POLICY' | 'SHLOMO_THIRD_PARTY';
+
+// עודכן — הוסר SUMMARIZE_ESTIMATE, נוספו 3 חדשים
+export const PROFESSIONAL_WORKFLOW_STEPS = [
+  'OPEN_CASE', 'FIXCAR_PHOTOS', 'WHEELS_CHECK', 'PREP_ESTIMATE',
+  'SEND_TO_APPRAISER', 'WAIT_APPRAISER_APPROVAL', 'ENTER_WORK',
+  'ISSUE_CATALOG_NUMBERS', 'PARTS_DISCOUNTS',
+  'QUALITY_CONTROL', 'WASH', 'SEND_COMPLETION_PHOTOS', 'READY_FOR_OFFICE',
+] as const;
+
+// חדש
+export interface RolePermission { id, role, action, enabled }
+export interface WorkflowStepTemplate { id, step_key, step_label, order_index, is_enabled, requires_link, requires_file_or_link }
+
+// עודכן
+export interface CreateCaseInput {
+  // ... + customer_name, phone, insurance_company, appraiser_name,
+  //         event_date, vehicle_type, vehicle_year, sub_claim_type
 }
 ```
 
 ---
 
-## 4. תיקון איפוס צ'קליסט כשמשנים parts_status
+---
 
-### בעיה:
-- כשמשנים את `parts_status`, ה-`router.refresh()` מאפס את כל הצ'קליסט
-
-### פתרון:
-- **קובץ**: `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
-- הסרתי את `router.refresh()` מ-`savePartsStatus`
-- הוספתי הודעה "חלקים עודכנו כזמינים" כשמשנים לזמינים
-- הוספתי audit event לעדכון סטטוס חלקים
-- הצ'קליסט נשאר במצבו ולא מתאפס
+## Session 3 — תיקוני Bugs ו-Vercel (commits: `0ac1595` עד `fb0dc91`)
 
 ---
 
-## 5. הוספת קבצים ומסמכים לתיק
+### 1. Vercel Auto-Deploy — GitHub Actions
 
-### תכונה חדשה:
-- אפשרות להעלות קבצים לכל תיק
-- תצוגה של כל הקבצים עם אפשרות הורדה ומחיקה
-- שמירה ב-Supabase Storage ב-bucket `case-documents`
+**בעיה:** GitHub App webhook לא עבד, Vercel לא קיבל push events
 
-### קבצים חדשים:
-
-#### `src/db/migrations/005_case_documents.sql`:
-- יצירת טבלת `case_documents`
-- RLS policies: branch-scoped access
-- Indexes לביצועים
-
-#### `src/app/actions/documents.ts`:
-- `uploadCaseDocument` - העלאת קובץ
-- `deleteCaseDocument` - מחיקת קובץ
-- בדיקות הרשאות (branch-scoped)
-- Audit events
-
-#### `src/types/database.ts`:
-- הוספתי `CaseDocument` interface
-
-#### `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`:
-- UI להעלאת קבצים
-- תצוגת רשימת קבצים
-- אפשרות מחיקה (למשתמשים מורשים)
-- תמיכה בתמונות (תצוגה מיוחדת)
-
-### הערה חשובה:
-- צריך ליצור bucket `case-documents` ב-Supabase Storage
-- להריץ את migration `005_case_documents.sql`
+**פתרון:**
+- **`.github/workflows/deploy.yml`** — GitHub Actions workflow:
+  ```yaml
+  on:
+    push:
+      branches: [main]
+  jobs:
+    deploy:
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-args: '--prod'
+  ```
+- GitHub Secrets הוגדרו: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`
+- כל push ל-`main` מפעיל deploy אוטומטי
 
 ---
 
-## 6. תצוגה מלאה ממסך אישורים
+### 2. Conditional Inserts — מניעת Schema Cache Errors
 
-### תכונה:
-- כפתור "צפה בתיק המלא" במסך האישורים של עמית
-- מוביל לדף התיק המלא עם כל הפרטים
+**קובץ:** `src/app/actions/workflow.ts`
 
-### שינויים:
-- **קובץ**: `src/app/(dashboard)/approvals/ApprovalsList.tsx`
-- הוספתי כפתור Link לדף התיק המלא
-- מופיע לפני כפתורי האישור/דחייה
+**בעיה:** שדות חדשים (migration 006) גרמו לשגיאות כשה-DB לא עדכן עדיין
 
----
-
-## 7. Badge התראות עם תמיכה ב-PWA
-
-### תכונה:
-- Badge קטן עם מספר התראות לא נקראות
-- מופיע ליד התפקיד ב-header
-- תמיכה ב-PWA עם browser notifications
-
-### קבצים:
-
-#### `src/components/NotificationsBadge.tsx` (חדש):
-- קומפוננט שמציג את מספר ההתראות
-- Polling כל 10 שניות (במקום realtime subscriptions - לא עובד עם mock client)
-- זיהוי התראות חדשות והצגת browser notification
-- בקשת הרשאות אוטומטית
-
-#### `src/app/(dashboard)/layout.tsx`:
-- הוספתי את `NotificationsBadge` ליד התפקיד
-- עם `relative` positioning כדי שה-badge יופיע מעל
-
-### תיקון:
-- במקור ניסיתי להשתמש ב-`supabase.channel()` ל-realtime subscriptions
-- זה לא עבד עם mock client, אז עברתי ל-polling
-- Browser notifications עדיין עובדות
-
----
-
-## 8. תיקון שמירת צ'קליסט כשחוזרים לדף
-
-### בעיה:
-- כשחוזרים לדף התיק, הצ'קליסט לא נטען מהמסד נתונים
-
-### פתרון:
-- **קובץ**: `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
-- הוספתי `useEffect` שטוען מחדש את ה-steps מהמסד נתונים כשה-component נטען
-- טעינה גם ב-preview mode וגם ב-production mode
-
-### קוד:
+**פתרון:** כל שדה חדש נשלח רק אם לא `null`:
 ```typescript
-useEffect(() => {
-  if (!caseId) return;
-  
-  const loadSteps = async () => {
-    // טעינת steps מהמסד נתונים
-    const { data: stepsData } = await supabase
-      .from('case_workflow_steps')
-      .select('id, step_key, state, order_index, completed_at')
-      .in('run_id', runIds)
-      .order('order_index');
-    
-    if (stepsData && stepsData.length > 0) {
-      setLocalSteps(stepsData as StepRow[]);
-    }
-  };
+// Car INSERT
+...(input.vehicle_type != null ? { vehicle_type: input.vehicle_type } : {}),
+...(input.vehicle_year != null ? { year: input.vehicle_year } : {}),
 
-  loadSteps().catch(console.error);
-}, [caseId, steps]);
+// Case INSERT
+...(input.sub_claim_type != null ? { sub_claim_type: input.sub_claim_type } : {}),
+...(input.customer_name != null ? { customer_name: input.customer_name } : {}),
+// ...וכן הלאה
 ```
 
 ---
 
-## 9. הוספת השלב הבא בדף התיקים
+### 3. Resilient Case SELECT — Fallback Pattern
 
-### תכונה:
-- עמודה חדשה בטבלת התיקים: "השלב הבא"
-- מציגה את השלב הפעיל הבא שצריך להשלים
+**קובץ:** `src/app/(dashboard)/cases/[id]/page.tsx`
 
-### שינויים:
+**בעיה:** SELECT עם עמודות חדשות נכשל אם migration 006 לא הורץ
 
-#### `src/app/(dashboard)/cases/page.tsx`:
-- טעינת workflow runs ו-steps לכל התיקים
-- חישוב השלב הפעיל הבא לכל תיק
-- הוספת `nextStep` ל-`casesWithMeta`
-
-#### `src/app/(dashboard)/cases/CasesTable.tsx`:
-- הוספתי עמודה `nextStep` לטבלה
-- תצוגה עם badge כחול
-
-### לוגיקה:
+**פתרון:** try/fallback:
 ```typescript
-// מציאת השלב הפעיל הבא
-const activeStep = sortedSteps.find((s) => s.state === 'ACTIVE');
-if (activeStep) {
-  const stepKey = activeStep.step_key;
-  caseIdToNextStep.set(caseId, STEP_LABELS[stepKey] || stepKey);
-}
-```
-
----
-
-## 10. הוספת העלאת קבצים בפתיחת תיק
-
-### תכונה:
-- אפשרות להעלות קבצים כבר בפתיחת תיק חדש
-- הקבצים מועלים אוטומטית אחרי יצירת התיק
-
-### שינויים:
-
-#### `src/app/(dashboard)/cases/CreateCaseButton.tsx`:
-- הוספתי `files` state
-- הוספתי `input type="file" multiple` בטופס
-- העלאת קבצים אחרי יצירת התיק (גם בטופס רגיל וגם ב-רנדומלי)
-- תצוגה של הקבצים שנבחרו
-
-### קוד:
-```typescript
-// העלאת קבצים אחרי יצירת תיק
-if (newCaseId && files.length > 0) {
-  const { uploadCaseDocument } = await import('@/app/actions/documents');
-  for (const file of files) {
-    const formData = new FormData();
-    formData.append('case_id', newCaseId);
-    formData.append('file', file);
-    await uploadCaseDocument(formData);
+let caseRow: unknown = null;
+{
+  const { data, error } = await supabase.from('cases').select('...full columns...').eq('id', id).single();
+  if (error) {
+    const { data: basicData } = await supabase.from('cases').select('...stable columns...').eq('id', id).single();
+    caseRow = basicData;
+  } else {
+    caseRow = data;
   }
 }
 ```
 
 ---
 
-## 11. תיקונים נוספים
+### 4. revalidatePath — עדכון UI אחרי פעולות
 
-### תיקון תצוגת תיקים סגורים:
-- הסתרת אזהרות אחרי שסגירת תיק הושלמה
-- בדיקת `isCaseClosed` לפני הצגת אזהרות
+**קובץ:** `src/app/actions/workflow.ts`
 
-### תיקון שגיאת initialization:
-- תיקון סדר הגדרת משתנים ב-`cases/page.tsx`
-- `caseIdToNextStep` מוגדר לפני השימוש בו
+**בעיה:** אחרי השלמת שלב, ה-UI לא התעדכן
+
+**פתרון:**
+```typescript
+// בסוף completeActiveStep:
+revalidatePath(`/cases/${caseId}`);
+revalidatePath('/cases');
+
+// בסוף createCase:
+revalidatePath('/cases');
+```
 
 ---
 
-## קבצים שעודכנו:
+### 5. Fix RLS — CEO יכול לפתוח תיקים
+
+**קובץ:** `src/db/migrations/010_fix_rls_ceo.sql`
+
+**בעיה:** CEO עם `branch_id = null` חסום על ידי INSERT policies של `cars` ו-`cases`
+
+**פתרון:** הוספת CEO bypass לכל policy:
+```sql
+DROP POLICY IF EXISTS cars_insert ON cars;
+CREATE POLICY cars_insert ON cars FOR INSERT TO authenticated
+  WITH CHECK (
+    branch_id IN (SELECT branch_id FROM profiles WHERE id = auth.uid())
+    OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'CEO')
+  );
+-- גם: cars_update, cases_insert
+```
+
+> **⚠️ חשוב:** להריץ SQL זה ב-Supabase Dashboard → SQL Editor!
+
+---
+
+### 6. מסמכים בפאנל אישורים CEO
+
+**קובץ:** `src/app/(dashboard)/approvals/ApprovalsList.tsx`
+
+**תכונה:** כשמנהל (CEO) בוחר אישור, הוא רואה את כל המסמכים שהועלו לאותו תיק
+
+**מה נוסף:**
+- `DocumentDownloadButton` — כפתור הורדה עם Signed URL
+- `useEffect` שטוען מסמכים מ-`case_documents` כשהבחירה משתנה
+- רשימת מסמכים עם אייקונים (🖼️/📄/📎) + אפשרות הורדה
+- אם אין מסמכים — הודעה "אין מסמכים מועלים לתיק זה"
+
+---
+
+---
+
+## סיכום קבצים שנוצרו/שונו — Session 2+3
 
 ### קבצים חדשים:
-1. `src/db/migrations/005_case_documents.sql`
-2. `src/app/actions/documents.ts`
-3. `src/components/NotificationsBadge.tsx`
+| קובץ | תיאור |
+|------|--------|
+| `src/app/(dashboard)/settings/page.tsx` | עמוד הגדרות (CEO only) |
+| `src/app/(dashboard)/settings/PermissionsTab.tsx` | ניהול הרשאות |
+| `src/app/(dashboard)/settings/ChecklistTab.tsx` | ניהול שלבי workflow |
+| `src/app/actions/settings.ts` | Server actions לניהול הגדרות |
+| `src/db/migrations/006_new_case_fields.sql` | שדות חדשים בתיק + enum |
+| `src/db/migrations/007_new_parts_status.sql` | AIRMAIL_PENDING |
+| `src/db/migrations/008_workflow_steps_update.sql` | עדכון workflow steps |
+| `src/db/migrations/009_settings_tables.sql` | טבלאות הגדרות |
+| `src/db/migrations/010_fix_rls_ceo.sql` | תיקון RLS ל-CEO |
+| `src/db/run_all_migrations.sql` | סקריפט מאוחד (006–010 + CEO user) |
+| `.github/workflows/deploy.yml` | GitHub Actions CI/CD |
 
 ### קבצים שעודכנו:
-1. `src/types/database.ts` - הוספת `CASE_CLOSURE` ו-`CaseDocument`
-2. `src/app/(dashboard)/closure/[id]/ClosureDetailClient.tsx`
-3. `src/app/(dashboard)/closure/[id]/page.tsx`
-4. `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
-5. `src/app/(dashboard)/cases/[id]/page.tsx`
-6. `src/app/(dashboard)/cases/page.tsx`
-7. `src/app/(dashboard)/cases/CasesTable.tsx`
-8. `src/app/(dashboard)/cases/CreateCaseButton.tsx`
-9. `src/app/(dashboard)/approvals/ApprovalsList.tsx`
-10. `src/app/(dashboard)/layout.tsx`
-11. `src/app/actions/workflow.ts`
+| קובץ | שינויים עיקריים |
+|------|----------------|
+| `src/types/database.ts` | SubClaimType, AIRMAIL_PENDING, workflow steps, interfaces חדשים |
+| `src/app/actions/workflow.ts` | conditional inserts, CEO permissions, revalidatePath |
+| `src/app/(dashboard)/cases/CreateCaseButton.tsx` | 8 שדות חדשים, modal גדול יותר |
+| `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx` | labels חדשים, WHEELS_CHECK panel, timeline user, CEO permissions |
+| `src/app/(dashboard)/cases/[id]/page.tsx` | fallback SELECT, userNames, stepTemplates |
+| `src/app/(dashboard)/cases/page.tsx` | 5 כרטיסי דשבורד חדשים |
+| `src/app/(dashboard)/layout.tsx` | קישור "הגדרות" ל-CEO |
+| `src/app/(dashboard)/approvals/ApprovalsList.tsx` | מסמכי תיק, DocumentDownloadButton |
 
 ---
 
-## הערות חשובות:
+## Git Commits (כרונולוגי)
 
-1. **Storage Bucket**: צריך ליצור bucket `case-documents` ב-Supabase Storage
-2. **Migration**: להריץ `005_case_documents.sql` אחרי יצירת ה-bucket
-3. **Preview Mode**: כל השינויים עובדים גם ב-preview mode (עם mock client)
-4. **RLS**: כל השינויים מכבדים RLS policies
-5. **Audit Events**: כל הפעולות החשובות נרשמות ב-`audit_events`
-
----
-
-## מבנה הנתונים:
-
-### טבלת `case_documents`:
-- `id` (UUID)
-- `case_id` (UUID, FK to cases)
-- `file_name` (TEXT)
-- `file_path` (TEXT) - path ב-Storage
-- `file_size` (BIGINT)
-- `mime_type` (TEXT)
-- `uploaded_by` (UUID, FK to profiles)
-- `created_at`, `updated_at`
-
-### סוג אישור חדש:
-- `CASE_CLOSURE` - אישור סגירת תיק
+```
+c5a2063  Initial commit
+fb98c56  feat: major CRM update - new fields, workflow steps, settings, dashboard
+ace6c52  fix: add new Case/Car fields to MOCK_CASES and MOCK_CARS in preview-data
+08ed956  fix: add missing 'unknown as' in type cast in mock-client.ts
+f9365e1  fix: replace upsert with update in updateRolePermission
+308f59b  fix: add role_permissions and workflow_step_templates to preview-data store
+0ac1595  fix: make new column inserts conditional + resilient case SELECT + SQL setup script
+25d27ea  chore: trigger Vercel redeploy
+992309c  ci: add GitHub Actions workflow to auto-deploy to Vercel on push to main
+a56fe05  ci: test GitHub Actions auto-deploy
+fb0dc91  Fix step revalidation, CEO RLS, and add documents to approvals panel
+```
 
 ---
 
-## Workflow Logic:
+## מה צריך עדיין לעשות ב-Supabase
 
-### Closure Workflow:
-1. `CLOSURE_VERIFY_DETAILS_DOCS` - אימות פרטים ומסמכים
-2. `CLOSURE_PROFORMA_IF_NEEDED` - פרופורמה במידת הצורך
-3. `CLOSURE_PREPARE_CLOSING_FORMS` - **יוצר אישור CEO אוטומטית**
-4. `CLOSE_CASE` - **חסום עד אישור CEO**
+```sql
+-- הרץ את כל זה ב-Supabase Dashboard → SQL Editor:
+-- (הכל נמצא ב: src/db/run_all_migrations.sql)
 
-### Professional Workflow:
-- `ENTER_WORK` - **לא חוסם יותר, רק מציג התראה** אם חלקים לא זמינים
-
----
-
-## UI/UX Improvements:
-
-1. **הודעות ברורות** - כל חסימה מציגה סיבה ברורה
-2. **תצוגה ויזואלית** - badges, צבעים, אייקונים
-3. **פרסיסטנס** - כל השינויים נשמרים גם אחרי רענון
-4. **Real-time updates** - badge התראות מתעדכן אוטומטית
-5. **PWA Ready** - תמיכה בהתראות דפדפן
+-- 1. Migration 006-009 (אם לא הרצת עדיין)
+-- 2. Migration 010 — תיקון RLS ל-CEO (חשוב לפתיחת תיקים כ-CEO!)
+-- 3. CEO test user נוצר אוטומטית: ceo@test.com / TestCEO123!
+```
 
 ---
 
-## Testing Notes:
+## הרשאות Default (נשמרות ב-DB)
 
-- כל השינויים נבדקו ב-preview mode
-- יש לוודא ש-Storage bucket נוצר
-- יש לוודא ש-migration הורץ
-- יש לבדוק הרשאות RLS
-
----
-
-## Git Commits:
-
-1. `Add closure workflow persistence and CEO approval for case closure`
-2. `Fix closure workflow: hide warnings after closure, change ENTER_WORK to warning only, fix parts status reset`
-3. `Add case documents, approval case view, and notifications badge with PWA support`
-4. `Fix NotificationsBadge: use polling instead of realtime subscriptions`
-5. `Fix checklist persistence, add next step to cases list, add file upload to create case`
-6. `Fix caseIdToNextStep initialization order`
-7. `Fix casesWithMeta definition order`
-
----
-
-## Next Steps (להמשך עבודה):
-
-1. יצירת Storage bucket `case-documents` ב-Supabase
-2. הרצת migration `005_case_documents.sql`
-3. בדיקת RLS policies
-4. בדיקת PWA notifications בדפדפן
-5. בדיקת העלאת קבצים בגדלים שונים
-
----
-
-## Technical Stack:
-
-- **Next.js 14+** App Router
-- **TypeScript**
-- **Supabase** (Postgres, Auth, Storage)
-- **TailwindCSS**
-- **Preview Mode** עם mock client (localStorage)
-
----
-
-## Important Patterns:
-
-1. **Preview Mode**: כל הקוד צריך לעבוד גם ב-preview mode
-2. **RLS**: כל הפעולות מכבדות Row Level Security
-3. **Audit Events**: כל פעולה חשובה נרשמת
-4. **State Management**: שימוש ב-localState + server state
-5. **Error Handling**: try-catch-finally בכל מקום
-
----
-
-סיכום זה מכיל את כל השינויים שבוצעו היום. כל השינויים עלו ל-Git וזמינים ב-branch `master`.
+| פעולה | SERVICE_MANAGER | OFFICE | CEO | PAINTER | SERVICE_ADVISOR |
+|-------|:-:|:-:|:-:|:-:|:-:|
+| create_case | ✅ | ✅ | ✅ | ❌ | ❌ |
+| complete_professional_step | ✅ | ❌ | ✅ | ❌ | ❌ |
+| complete_closure_step | ❌ | ✅ | ✅ | ❌ | ❌ |
+| manage_settings | ❌ | ❌ | ✅ | ❌ | ❌ |
+| decide_approvals | ❌ | ❌ | ✅ | ❌ | ❌ |
+| manage_extras_status | ✅ | ❌ | ✅ | ❌ | ❌ |
+| upload_documents | ✅ | ✅ | ✅ | ❌ | ❌ |
+| delete_documents | ✅ | ✅ | ✅ | ❌ | ❌ |
