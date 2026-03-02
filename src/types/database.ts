@@ -12,7 +12,7 @@ export type UserRole =
 
 export type GeneralStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED';
 
-export type PartsStatus = 'NO_PARTS' | 'ORDERED' | 'AVAILABLE';
+export type PartsStatus = 'NO_PARTS' | 'ORDERED' | 'AVAILABLE' | 'AIRMAIL_PENDING';
 
 export type InsuranceType =
   | 'COMPREHENSIVE'
@@ -21,6 +21,14 @@ export type InsuranceType =
   | 'OTHER';
 
 export type ClaimType = 'PRIVATE' | 'ACCIDENT' | 'FLOOD';
+
+export type SubClaimType =
+  | 'POLICY'
+  | 'THIRD_PARTY'
+  | 'THIRD_PARTY_SETTLEMENT'
+  | 'PRIVATE_REPAIR'
+  | 'SHLOMO_POLICY'
+  | 'SHLOMO_THIRD_PARTY';
 
 export type WorkflowType = 'PROFESSIONAL' | 'CLOSURE';
 
@@ -66,6 +74,7 @@ export interface Car {
   year: number | null;
   vin: string | null;
   first_registration_date: string | null; // DATE as ISO string
+  vehicle_type: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,7 +89,14 @@ export interface Case {
   parts_status: PartsStatus;
   insurance_type: InsuranceType | null;
   claim_type: ClaimType | null;
+  sub_claim_type: SubClaimType | null;
   fixcar_link: string | null;
+  wheels_check_link: string | null;
+  customer_name: string | null;
+  phone: string | null;
+  insurance_company: string | null;
+  appraiser_name: string | null;
+  event_date: string | null;
   opened_at: string | null;
   treatment_finished_at: string | null;
   closed_at: string | null;
@@ -174,18 +190,39 @@ export interface AuditEvent {
   created_at: string;
 }
 
-// Step keys for professional workflow (order)
+export interface RolePermission {
+  id: string;
+  role: string;
+  action: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface WorkflowStepTemplate {
+  id: string;
+  step_key: string;
+  step_label: string;
+  order_index: number;
+  is_enabled: boolean;
+  requires_link: boolean;
+  requires_file_or_link: boolean;
+  created_at: string;
+}
+
+// Step keys for professional workflow (order) — used as fallback
 export const PROFESSIONAL_WORKFLOW_STEPS = [
   'OPEN_CASE',
   'FIXCAR_PHOTOS',
   'WHEELS_CHECK',
   'PREP_ESTIMATE',
-  'SUMMARIZE_ESTIMATE',
   'SEND_TO_APPRAISER',
   'WAIT_APPRAISER_APPROVAL',
   'ENTER_WORK',
+  'ISSUE_CATALOG_NUMBERS',
+  'PARTS_DISCOUNTS',
   'QUALITY_CONTROL',
   'WASH',
+  'SEND_COMPLETION_PHOTOS',
   'READY_FOR_OFFICE',
 ] as const;
 
@@ -217,6 +254,24 @@ export type AuditActionType =
   | 'BLOCKED_ACTION'
   | 'RETURNED_TO_ESTIMATE';
 
+// Labels for parts status
+export const PARTS_STATUS_LABELS: Record<PartsStatus, string> = {
+  NO_PARTS: 'אין חלקים',
+  ORDERED: 'הוזמנו',
+  AVAILABLE: 'זמינים',
+  AIRMAIL_PENDING: 'ממתין לדואר אוויר',
+};
+
+// Labels for sub_claim_type
+export const SUB_CLAIM_TYPE_LABELS: Record<SubClaimType, string> = {
+  POLICY: 'פוליסה',
+  THIRD_PARTY: 'צד ג\'',
+  THIRD_PARTY_SETTLEMENT: 'הסדר ג\'',
+  PRIVATE_REPAIR: 'תיקון פרטי',
+  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
+  SHLOMO_THIRD_PARTY: 'מוקד שלמה צד ג\'',
+};
+
 // DTOs for actions
 export interface CreateCaseInput {
   plate_number: string;
@@ -224,7 +279,16 @@ export interface CreateCaseInput {
   first_registration_date: string; // ISO date
   insurance_type?: InsuranceType | null;
   claim_type?: ClaimType | null;
+  sub_claim_type?: SubClaimType | null;
   branch_id: string;
+  // New fields
+  customer_name?: string | null;
+  phone?: string | null;
+  insurance_company?: string | null;
+  appraiser_name?: string | null;
+  event_date?: string | null;
+  vehicle_type?: string | null;
+  vehicle_year?: number | null;
 }
 
 export interface CompleteStepInput {
@@ -263,6 +327,8 @@ export type Database = {
       bodywork_extras: { Row: BodyworkExtra; Insert: Omit<BodyworkExtra, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<BodyworkExtra> };
       notifications: { Row: Notification; Insert: Omit<Notification, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<Notification> };
       audit_events: { Row: AuditEvent; Insert: Omit<AuditEvent, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<AuditEvent> };
+      role_permissions: { Row: RolePermission; Insert: Omit<RolePermission, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<RolePermission> };
+      workflow_step_templates: { Row: WorkflowStepTemplate; Insert: Omit<WorkflowStepTemplate, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<WorkflowStepTemplate> };
     };
     Enums: {
       user_role: UserRole;
@@ -270,6 +336,7 @@ export type Database = {
       parts_status: PartsStatus;
       insurance_type: InsuranceType;
       claim_type: ClaimType;
+      sub_claim_type: SubClaimType;
       workflow_type: WorkflowType;
       workflow_run_status: WorkflowRunStatus;
       step_state: StepState;

@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import type { PartsStatus } from '@/types/database';
 import { CasesTable } from './CasesTable';
 import { CreateCaseButton } from './CreateCaseButton';
@@ -65,7 +64,7 @@ export default async function CasesPage() {
     if (a.status !== 'APPROVED') caseIdsApprovalBlocked.add(a.case_id);
   }
 
-  // Get next step for each case
+  // Get active steps for each case (for dashboard metrics)
   const { data: runsData } = await supabase
     .from('case_workflow_runs')
     .select('id, case_id')
@@ -86,39 +85,46 @@ export default async function CasesPage() {
   const STEP_LABELS: Record<string, string> = {
     OPEN_CASE: 'פתיחת תיק',
     FIXCAR_PHOTOS: 'צילום FixCar',
-    WHEELS_CHECK: 'בדיקת גלגלים',
-    PREP_ESTIMATE: 'הכנת אומדן',
-    SUMMARIZE_ESTIMATE: 'סיכום אומדן',
+    WHEELS_CHECK: 'תפסי גלגלים',
+    PREP_ESTIMATE: 'אומדן',
     SEND_TO_APPRAISER: 'שליחה לשמאי',
     WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
     ENTER_WORK: 'כניסה לעבודה',
+    ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
+    PARTS_DISCOUNTS: 'הנחות חלקים',
     QUALITY_CONTROL: 'בקרת איכות',
     WASH: 'שטיפה',
+    SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
     READY_FOR_OFFICE: 'מוכן למשרד',
   };
 
+  // ENTER_WORK order_index in new workflow = 6
+  const ENTER_WORK_ORDER_INDEX = 6;
+
   const caseIdToNextStep = new Map<string, string>();
+  const caseIdToActiveStepIndex = new Map<string, number>();
+
   if (stepsData && runIds.length > 0) {
     const stepsByRun = new Map<string, typeof stepsData>();
     for (const step of stepsData) {
       const runId = (step as { run_id: string }).run_id;
-      if (!stepsByRun.has(runId)) {
-        stepsByRun.set(runId, []);
-      }
+      if (!stepsByRun.has(runId)) stepsByRun.set(runId, []);
       stepsByRun.get(runId)!.push(step);
     }
 
-    for (const [runId, steps] of Array.from(stepsByRun.entries())) {
+    for (const [runId, runSteps] of Array.from(stepsByRun.entries())) {
       const caseId = runIdToCaseId.get(runId);
       if (!caseId) continue;
 
-      const sortedSteps = [...steps].sort((a, b) => 
+      const sortedSteps = [...runSteps].sort((a, b) =>
         (a as { order_index: number }).order_index - (b as { order_index: number }).order_index
       );
       const activeStep = sortedSteps.find((s) => (s as { state: string }).state === 'ACTIVE');
       if (activeStep) {
         const stepKey = (activeStep as { step_key: string }).step_key;
+        const stepOrderIndex = (activeStep as { order_index: number }).order_index;
         caseIdToNextStep.set(caseId, STEP_LABELS[stepKey] || stepKey);
+        caseIdToActiveStepIndex.set(caseId, stepOrderIndex);
       }
     }
   }
@@ -153,7 +159,7 @@ export default async function CasesPage() {
     };
   });
 
-  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE';
+  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
   const isCeo = role === 'CEO';
   let branches: { id: string; name: string }[] = [];
   if (isCeo) {
@@ -162,22 +168,26 @@ export default async function CasesPage() {
   }
 
   const totalCases = casesWithMeta.length;
-  const casesWithBlockers = casesWithMeta.filter((c) => 
-    caseIdsWithExtras.has(c.id) || caseIdsApprovalBlocked.has(c.id)
+
+  // Dashboard metric: vehicles in work (active step order_index >= ENTER_WORK)
+  const inWorkCount = openCases.filter((c) => {
+    const idx = caseIdToActiveStepIndex.get((c as { id: string }).id);
+    return idx !== undefined && idx >= ENTER_WORK_ORDER_INDEX;
+  }).length;
+
+  // Dashboard metric: waiting for garage (active step order_index < ENTER_WORK)
+  const waitingGarageCount = openCases.filter((c) => {
+    const idx = caseIdToActiveStepIndex.get((c as { id: string }).id);
+    return idx !== undefined && idx < ENTER_WORK_ORDER_INDEX;
+  }).length;
+
+  // Dashboard metric: waiting for parts (ORDERED or NO_PARTS)
+  const waitingPartsCount = casesWithMeta.filter(
+    (c) => c.parts_status === 'ORDERED' || c.parts_status === 'NO_PARTS'
   ).length;
 
-  // Calculate statistics by status
-  const statsByPartsStatus = {
-    AVAILABLE: casesWithMeta.filter((c) => c.parts_status === 'AVAILABLE').length,
-    ORDERED: casesWithMeta.filter((c) => c.parts_status === 'ORDERED').length,
-    NO_PARTS: casesWithMeta.filter((c) => c.parts_status === 'NO_PARTS').length,
-  };
-
-  const statsByGeneralStatus = {
-    IN_PROGRESS: casesWithMeta.filter((c) => c.general_status === 'IN_PROGRESS').length,
-    WAITING_APPROVAL: casesWithMeta.filter((c) => c.general_status === 'WAITING_APPROVAL').length,
-    READY_FOR_CLOSURE: casesWithMeta.filter((c) => c.general_status === 'READY_FOR_CLOSURE').length,
-  };
+  // Dashboard metric: airmail pending
+  const airmailCount = casesWithMeta.filter((c) => c.parts_status === 'AIRMAIL_PENDING').length;
 
   return (
     <div>
@@ -188,7 +198,7 @@ export default async function CasesPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-800">תיקים פתוחים</h1>
               <p className="text-gray-600 text-sm mt-1">
-                {totalCases} תיקים פעילים {casesWithBlockers > 0 && `• ${casesWithBlockers} עם חסימות`}
+                {totalCases} תיקים פעילים
               </p>
             </div>
           </div>
@@ -202,11 +212,11 @@ export default async function CasesPage() {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm font-medium">סה"כ תיקים פתוחים</p>
+                <p className="text-blue-100 text-xs font-medium">סה&quot;כ תיקים פתוחים</p>
                 <p className="text-3xl font-bold mt-1">{totalCases}</p>
               </div>
               <span className="text-4xl opacity-80">📊</span>
@@ -216,73 +226,43 @@ export default async function CasesPage() {
           <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-100 text-sm font-medium">חלקים זמינים</p>
-                <p className="text-3xl font-bold mt-1">{statsByPartsStatus.AVAILABLE}</p>
+                <p className="text-green-100 text-xs font-medium">רכבים בעבודה</p>
+                <p className="text-3xl font-bold mt-1">{inWorkCount}</p>
               </div>
-              <span className="text-4xl opacity-80">✅</span>
+              <span className="text-4xl opacity-80">🔧</span>
             </div>
           </div>
 
           <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-4 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-yellow-100 text-sm font-medium">חלקים הוזמנו</p>
-                <p className="text-3xl font-bold mt-1">{statsByPartsStatus.ORDERED}</p>
+                <p className="text-yellow-100 text-xs font-medium">ממתינים לחלקים</p>
+                <p className="text-3xl font-bold mt-1">{waitingPartsCount}</p>
               </div>
               <span className="text-4xl opacity-80">⏳</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-red-100 text-sm font-medium">אין חלקים</p>
-                <p className="text-3xl font-bold mt-1">{statsByPartsStatus.NO_PARTS}</p>
+                <p className="text-purple-100 text-xs font-medium">ממתינים לדואר אוויר</p>
+                <p className="text-3xl font-bold mt-1">{airmailCount}</p>
               </div>
-              <span className="text-4xl opacity-80">❌</span>
+              <span className="text-4xl opacity-80">✈️</span>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-100 text-xs font-medium">ממתינים למוסך</p>
+                <p className="text-3xl font-bold mt-1">{waitingGarageCount}</p>
+              </div>
+              <span className="text-4xl opacity-80">🏭</span>
             </div>
           </div>
         </div>
-
-        {/* General Status Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">בטיפול</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{statsByGeneralStatus.IN_PROGRESS}</p>
-              </div>
-              <span className="text-3xl">🔧</span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">ממתין לאישור</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{statsByGeneralStatus.WAITING_APPROVAL}</p>
-              </div>
-              <span className="text-3xl">⏸️</span>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm font-medium">מוכן לסגירה</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{statsByGeneralStatus.READY_FOR_CLOSURE}</p>
-              </div>
-              <span className="text-3xl">✅</span>
-            </div>
-          </div>
-        </div>
-        {role === 'SERVICE_MANAGER' && (
-          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
-            <p className="text-sm text-blue-800 font-medium">
-              💡 <strong>ערן:</strong> לחץ על תיק כדי לראות את הצ'קליסט עבודה ולסמן שלבים כבוצעים
-            </p>
-          </div>
-        )}
       </div>
       <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
         <CasesTable

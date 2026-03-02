@@ -4,6 +4,13 @@ import type { PartsStatus, GeneralStatus } from '@/types/database';
 import { PROFESSIONAL_WORKFLOW_STEPS } from '@/types/database';
 import { CaseDetailClientV2 } from './CaseDetailClientV2';
 
+type StepTemplate = {
+  step_key: string;
+  step_label: string;
+  requires_link: boolean;
+  requires_file_or_link: boolean;
+};
+
 export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -28,13 +35,22 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       case_key,
       claim_number,
       fixcar_link,
+      wheels_check_link,
       parts_status,
       opened_at,
       treatment_finished_at,
       closed_at,
       general_status,
       branch_id,
-      cars(license_plate, first_registration_date),
+      customer_name,
+      phone,
+      insurance_company,
+      appraiser_name,
+      event_date,
+      sub_claim_type,
+      insurance_type,
+      claim_type,
+      cars(license_plate, first_registration_date, vehicle_type, year),
       branches(name)
     `
     )
@@ -54,7 +70,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     .eq('case_id', id)
     .eq('workflow_type', 'PROFESSIONAL');
   
-  let steps: { id: string; step_key: string; state: string; order_index: number }[] = [];
+  let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null }[] = [];
   
   if (allRuns && allRuns.length > 0) {
     // Get all run IDs for this case
@@ -62,7 +78,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     // Load steps for any of these runs
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index')
+      .select('id, step_key, state, order_index, completed_at, completed_by')
       .in('run_id', runIds)
       .order('order_index');
     steps = stepsData ?? [];
@@ -136,7 +152,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   if (actualRun && steps.length === 0) {
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index')
+      .select('id, step_key, state, order_index, completed_at, completed_by')
       .eq('run_id', actualRun.id)
       .order('order_index');
     steps = stepsData ?? [];
@@ -197,7 +213,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       // Reload steps after creating them
       const { data: newStepsData } = await supabase
         .from('case_workflow_steps')
-        .select('id, step_key, state, order_index')
+        .select('id, step_key, state, order_index, completed_at, completed_by')
         .eq('run_id', actualRun.id)
         .order('order_index');
       steps = newStepsData ?? [];
@@ -265,12 +281,55 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     .order('created_at', { ascending: false });
   const documents = (documentsData ?? []) as { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; created_at: string }[];
 
-  const car = Array.isArray((caseRow as { cars: unknown }).cars)
-    ? (caseRow as { cars: { license_plate: string; first_registration_date: string | null }[] }).cars[0]
-    : (caseRow as { cars: { license_plate: string; first_registration_date: string | null } | null }).cars;
-  const branch = Array.isArray((caseRow as { branches: unknown }).branches)
-    ? (caseRow as { branches: { name: string }[] }).branches[0]
-    : (caseRow as { branches: { name: string } | null }).branches;
+  // Build userNames map from audit events + step.completed_by
+  const userIdSet = new Set<string>();
+  for (const e of auditRows) {
+    if (e.user_id) userIdSet.add(e.user_id);
+  }
+  for (const s of steps) {
+    if (s.completed_by) userIdSet.add(s.completed_by);
+  }
+  const userNames: Record<string, string> = {};
+  if (userIdSet.size > 0) {
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', Array.from(userIdSet));
+    for (const p of (profilesData ?? []) as { id: string; full_name: string | null }[]) {
+      if (p.full_name) userNames[p.id] = p.full_name;
+    }
+  }
+
+  // Load workflow step templates
+  const { data: stepTemplatesData } = await supabase
+    .from('workflow_step_templates')
+    .select('step_key, step_label, requires_link, requires_file_or_link')
+    .eq('is_enabled', true)
+    .order('order_index');
+  const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
+
+  type CaseRowTyped = {
+    case_key: string | null;
+    claim_number: string | null;
+    fixcar_link: string | null;
+    wheels_check_link: string | null;
+    parts_status: string;
+    opened_at: string | null;
+    general_status: string;
+    customer_name: string | null;
+    phone: string | null;
+    insurance_company: string | null;
+    appraiser_name: string | null;
+    event_date: string | null;
+    sub_claim_type: string | null;
+    insurance_type: string | null;
+    claim_type: string | null;
+    cars: { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null } | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null }[] | null;
+    branches: { name: string } | { name: string }[] | null;
+  };
+  const c = caseRow as CaseRowTyped;
+  const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+  const branch = Array.isArray(c.branches) ? c.branches[0] : c.branches;
   const plate = car?.license_plate ?? '—';
   const firstReg = car?.first_registration_date ?? null;
   let age = '—';
@@ -282,21 +341,32 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   return (
     <CaseDetailClientV2
       caseId={id}
-      caseKey={(caseRow as { case_key: string | null }).case_key}
-      claimNumber={(caseRow as { claim_number: string | null }).claim_number}
+      caseKey={c.case_key}
+      claimNumber={c.claim_number}
       plate={plate}
       branchName={branch?.name ?? '—'}
-      openedAt={(caseRow as { opened_at: string | null }).opened_at}
+      openedAt={c.opened_at}
       age={age}
-      partsStatus={(caseRow as { parts_status: string }).parts_status as PartsStatus}
-      generalStatus={(caseRow as { general_status: string }).general_status as GeneralStatus}
-      fixcarLink={(caseRow as { fixcar_link: string | null }).fixcar_link}
+      partsStatus={c.parts_status as PartsStatus}
+      generalStatus={c.general_status as GeneralStatus}
+      fixcarLink={c.fixcar_link}
+      wheelsCheckLink={c.wheels_check_link}
+      customerName={c.customer_name}
+      phone={c.phone}
+      insuranceCompany={c.insurance_company}
+      appraiserName={c.appraiser_name}
+      eventDate={c.event_date}
+      subClaimType={c.sub_claim_type}
+      insuranceType={c.insurance_type}
+      claimType={c.claim_type}
       steps={steps}
       approvals={approvals ?? []}
       extras={extras ?? []}
       auditEvents={auditRows ?? []}
       documents={documents}
       role={profile?.role ?? null}
+      userNames={userNames}
+      stepTemplates={stepTemplates}
     />
   );
 }

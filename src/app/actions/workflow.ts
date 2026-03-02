@@ -54,7 +54,7 @@ export async function createCase(input: CreateCaseInput) {
 
   const profile = profileData as { id: string; role: string; branch_id: string | null } | null;
   const role = profile?.role as UserRole | undefined;
-  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE') {
+  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO') {
     return { error: 'אין הרשאה ליצירת תיק' };
   }
 
@@ -70,12 +70,14 @@ export async function createCase(input: CreateCaseInput) {
 
   if (existingCar) {
     carId = (existingCar as { id: string }).id;
-    if (input.first_registration_date) {
-      await supabase
-        .from('cars')
-        .update({ first_registration_date: input.first_registration_date } as never)
-        .eq('id', carId);
-    }
+    await supabase
+      .from('cars')
+      .update({
+        first_registration_date: input.first_registration_date,
+        ...(input.vehicle_type != null ? { vehicle_type: input.vehicle_type } : {}),
+        ...(input.vehicle_year != null ? { year: input.vehicle_year } : {}),
+      } as never)
+      .eq('id', carId);
   } else {
     const { data: newCar, error: carErr } = await supabase
       .from('cars')
@@ -83,6 +85,8 @@ export async function createCase(input: CreateCaseInput) {
         branch_id: branchId,
         license_plate: input.plate_number,
         first_registration_date: input.first_registration_date,
+        vehicle_type: input.vehicle_type ?? null,
+        year: input.vehicle_year ?? null,
       } as never)
       .select('id')
       .single();
@@ -102,6 +106,12 @@ export async function createCase(input: CreateCaseInput) {
       claim_number: input.claim_number ?? null,
       insurance_type: input.insurance_type ?? null,
       claim_type: input.claim_type ?? null,
+      sub_claim_type: input.sub_claim_type ?? null,
+      customer_name: input.customer_name ?? null,
+      phone: input.phone ?? null,
+      insurance_company: input.insurance_company ?? null,
+      appraiser_name: input.appraiser_name ?? null,
+      event_date: input.event_date ?? null,
       opened_at: openedAt,
       created_by: user.id,
     } as never)
@@ -128,8 +138,20 @@ export async function createCase(input: CreateCaseInput) {
   const age = vehicleAgeYears(input.first_registration_date);
   const skipWheels = age !== null && age <= 2;
 
-  for (let i = 0; i < PROFESSIONAL_WORKFLOW_STEPS.length; i++) {
-    const stepKey = PROFESSIONAL_WORKFLOW_STEPS[i];
+  // Load step templates from DB; fallback to hardcoded array
+  let stepsToCreate: { step_key: string; order_index: number }[] = [];
+  const { data: templateData } = await supabase
+    .from('workflow_step_templates')
+    .select('step_key, order_index')
+    .eq('is_enabled', true)
+    .order('order_index');
+  if (templateData && templateData.length > 0) {
+    stepsToCreate = templateData as { step_key: string; order_index: number }[];
+  } else {
+    stepsToCreate = PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, order_index: i }));
+  }
+
+  for (const { step_key: stepKey, order_index } of stepsToCreate) {
     let state: 'PENDING' | 'ACTIVE' | 'DONE' | 'SKIPPED' = 'ACTIVE';
     let completedAt: string | null = null;
     let activatedAt: string | null = openedAt;
@@ -152,7 +174,7 @@ export async function createCase(input: CreateCaseInput) {
       run_id: runId,
       step_key: stepKey,
       state,
-      order_index: i,
+      order_index,
       activated_at: activatedAt,
       completed_at: completedAt,
     } as never);
@@ -179,15 +201,11 @@ export async function createCase(input: CreateCaseInput) {
 }
 
 export async function completeActiveStep(caseId: string, stepId?: string) {
-  console.log('[WORKFLOW ACTION] completeActiveStep called:', { caseId, stepId });
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    console.error('[WORKFLOW ACTION] User not logged in');
-    return { error: 'לא מחובר' };
-  }
+  if (!user) return { error: 'לא מחובר' };
 
   const { data: profileData } = await supabase
     .from('profiles')
@@ -215,8 +233,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   const run = runData as { id: string; workflow_type: string };
 
   const isClosure = run.workflow_type === 'CLOSURE';
-  if (isClosure && role !== 'OFFICE') return { error: 'רק משרד יכול להשלים שלבי סגירה' };
-  if (!isClosure && role !== 'SERVICE_MANAGER') return { error: 'רק מנהל שירות יכול להשלים שלב' };
+  if (isClosure && role !== 'OFFICE' && role !== 'CEO') return { error: 'רק משרד יכול להשלים שלבי סגירה' };
+  if (!isClosure && role !== 'SERVICE_MANAGER' && role !== 'CEO') return { error: 'רק מנהל שירות יכול להשלים שלב' };
 
   let activeStep: { id: string; step_key: string; order_index: number } | null = null;
 
@@ -320,12 +338,12 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         user_id: profile!.id,
         type: 'BLOCKED_ACTION',
         title: 'פעולה חסומה',
-        body: 'חסר או נדחה אישור CEO לבדיקת גלגלים',
+        body: 'חסר או נדחה אישור CEO לתפסי גלגלים',
       } as never);
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'ceo_approval_missing_or_rejected',
       });
-      return { error: 'נדרש אישור CEO לבדיקת גלגלים' };
+      return { error: 'נדרש אישור CEO לתפסי גלגלים' };
     }
   }
 
@@ -359,8 +377,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   }
 
   const now = new Date().toISOString();
-  console.log('[WORKFLOW ACTION] Updating step to DONE:', { stepId: activeStep.id, stepKey, now });
-  const updateResult = await supabase
+  await supabase
     .from('case_workflow_steps')
     .update({
       state: 'DONE',
@@ -368,7 +385,6 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       completed_by: user.id,
     } as never)
     .eq('id', activeStep.id);
-  console.log('[WORKFLOW ACTION] Update result:', updateResult);
 
   if (stepKey === 'READY_FOR_OFFICE') {
     await supabase
@@ -432,7 +448,6 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     step_key: stepKey,
   });
 
-  console.log('[WORKFLOW ACTION] Step completed successfully:', { stepId: activeStep.id, stepKey });
   return { ok: true, error: null };
 }
 
@@ -445,7 +460,7 @@ export async function returnToEstimate(caseId: string) {
 
   const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   const profile = profileData as { role: string } | null;
-  if (profile?.role !== 'SERVICE_MANAGER') return { error: 'רק מנהל שירות יכול להחזיר לאומדן' };
+  if (profile?.role !== 'SERVICE_MANAGER' && profile?.role !== 'CEO') return { error: 'רק מנהל שירות יכול להחזיר לאומדן' };
 
   const { data: runData } = await supabase
     .from('case_workflow_runs')
@@ -463,7 +478,7 @@ export async function returnToEstimate(caseId: string) {
     .eq('run_id', run.id)
     .eq('step_key', 'PREP_ESTIMATE')
     .single();
-  if (!prepStepData) return { error: 'שלב PREP_ESTIMATE לא נמצא' };
+  if (!prepStepData) return { error: 'שלב אומדן לא נמצא' };
   const prepStepId = (prepStepData as { id: string }).id;
 
   await supabase
