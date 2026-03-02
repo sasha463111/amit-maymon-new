@@ -451,15 +451,19 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   const nextOrder = activeStep.order_index + 1;
   const { data: nextSteps } = await supabase
     .from('case_workflow_steps')
-    .select('id')
+    .select('id, state')
     .eq('run_id', run.id)
     .eq('order_index', nextOrder)
     .limit(1);
   if (nextSteps && nextSteps.length > 0) {
-    await supabase
-      .from('case_workflow_steps')
-      .update({ state: 'ACTIVE', activated_at: now } as never)
-      .eq('id', (nextSteps[0] as { id: string }).id);
+    const nextStep = nextSteps[0] as { id: string; state: string };
+    // Only activate if not already SKIPPED (e.g. WHEELS_CHECK auto-skipped for young cars)
+    if (nextStep.state !== 'SKIPPED') {
+      await supabase
+        .from('case_workflow_steps')
+        .update({ state: 'ACTIVE', activated_at: now } as never)
+        .eq('id', nextStep.id);
+    }
   } else if (run.workflow_type === 'PROFESSIONAL') {
     await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
   }
@@ -516,4 +520,39 @@ export async function returnToEstimate(caseId: string) {
 
   await writeAudit(supabase, 'WORKFLOW_STEP', prepStepId, 'RETURNED_TO_ESTIMATE', user.id);
   return { ok: true };
+}
+
+export async function deleteCase(caseId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+
+  const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const profile = profileData as { role: string } | null;
+  if (profile?.role !== 'CEO') return { error: 'רק CEO יכול למחוק תיקים' };
+
+  // Delete related data in dependency order
+  await supabase.from('audit_events').delete().eq('entity_id', caseId).eq('entity_type', 'CASE');
+
+  const { data: runsData } = await supabase.from('case_workflow_runs').select('id').eq('case_id', caseId);
+  const runIds = (runsData as { id: string }[] | null)?.map((r) => r.id) ?? [];
+  if (runIds.length > 0) {
+    await supabase.from('audit_events').delete().eq('entity_type', 'WORKFLOW_STEP').in('entity_id',
+      (await supabase.from('case_workflow_steps').select('id').in('run_id', runIds))
+        .data?.map((s: { id: string }) => s.id) ?? []
+    );
+    await supabase.from('case_workflow_steps').delete().in('run_id', runIds);
+    await supabase.from('case_workflow_runs').delete().eq('case_id', caseId);
+  }
+
+  await supabase.from('ceo_approvals').delete().eq('case_id', caseId);
+  await supabase.from('bodywork_extras').delete().eq('case_id', caseId);
+  await supabase.from('case_documents').delete().eq('case_id', caseId);
+  await supabase.from('notifications').delete().eq('case_id', caseId);
+  await supabase.from('cases').delete().eq('id', caseId);
+
+  revalidatePath('/cases');
+  return { ok: true, error: null };
 }

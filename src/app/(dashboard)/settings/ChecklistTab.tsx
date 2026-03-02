@@ -61,6 +61,34 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
     }
   }
 
+  async function handleToggleRequiresLink(step: WorkflowStepTemplate) {
+    const newVal = !step.requires_link;
+    setSaving(step.id);
+    setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_link: newVal } : s)));
+    const res = await updateWorkflowStep(step.id, { requires_link: newVal });
+    setSaving(null);
+    if (res.error) {
+      showMsg(res.error, false);
+      setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_link: !newVal } : s)));
+    } else {
+      showMsg(newVal ? 'דורש קישור — הופעל' : 'דורש קישור — הושבת', true);
+    }
+  }
+
+  async function handleToggleRequiresFileOrLink(step: WorkflowStepTemplate) {
+    const newVal = !step.requires_file_or_link;
+    setSaving(step.id);
+    setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_file_or_link: newVal } : s)));
+    const res = await updateWorkflowStep(step.id, { requires_file_or_link: newVal });
+    setSaving(null);
+    if (res.error) {
+      showMsg(res.error, false);
+      setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_file_or_link: !newVal } : s)));
+    } else {
+      showMsg(newVal ? 'דורש קובץ/קישור — הופעל' : 'דורש קובץ/קישור — הושבת', true);
+    }
+  }
+
   async function handleRemove(step: WorkflowStepTemplate) {
     if (PROTECTED_KEYS.has(step.step_key)) return;
     if (!confirm(`האם אתה בטוח שברצונך להסיר את שלב "${step.step_label}"?`)) return;
@@ -223,7 +251,39 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                {/* Requires link / file toggles */}
+                {!isEditing && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleToggleRequiresLink(step)}
+                    title="האם השלב דורש הזנת קישור?"
+                    className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
+                      step.requires_link
+                        ? 'bg-blue-100 text-blue-700 border-blue-300 font-semibold'
+                        : 'bg-white text-gray-400 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+                    }`}
+                  >
+                    🔗 קישור
+                  </button>
+                )}
+                {!isEditing && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleToggleRequiresFileOrLink(step)}
+                    title="האם השלב דורש קובץ או קישור?"
+                    className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
+                      step.requires_file_or_link
+                        ? 'bg-purple-100 text-purple-700 border-purple-300 font-semibold'
+                        : 'bg-white text-gray-400 border-gray-200 hover:border-purple-300 hover:text-purple-600'
+                    }`}
+                  >
+                    📎 קובץ/קישור
+                  </button>
+                )}
+
                 {!isEditing && (
                   <button
                     type="button"

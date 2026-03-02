@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { completeActiveStep, returnToEstimate } from '@/app/actions/workflow';
+import { completeActiveStep, returnToEstimate, deleteCase } from '@/app/actions/workflow';
 import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
@@ -464,12 +464,62 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     }
   }
 
+  const [deletingCase, setDeletingCase] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  async function handleDeleteCase() {
+    setDeletingCase(true);
+    try {
+      const res = await deleteCase(caseId);
+      if (res?.error) {
+        setStepError(res.error);
+        setDeleteConfirm(false);
+      } else {
+        router.push('/cases');
+      }
+    } finally {
+      setDeletingCase(false);
+    }
+  }
+
   return (
     <div className="space-y-6" dir="rtl">
-      <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
-        <span>←</span>
-        <span>חזרה לתיקים</span>
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
+          <span>←</span>
+          <span>חזרה לתיקים</span>
+        </Link>
+        {role === 'CEO' && (
+          deleteConfirm ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-red-700 font-medium">למחוק תיק זה לצמיתות?</span>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCase()}
+                disabled={deletingCase}
+                className="px-3 py-1.5 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700 disabled:opacity-50"
+              >
+                {deletingCase ? 'מוחק...' : 'כן, מחק'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(false)}
+                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded text-xs font-semibold hover:bg-gray-300"
+              >
+                ביטול
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirm(true)}
+              className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded text-xs font-semibold hover:bg-red-100"
+            >
+              🗑 מחק תיק
+            </button>
+          )
+        )}
+      </div>
 
       {/* ── פרטי תיק ── */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
@@ -614,7 +664,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     {canEdit && !isDone && !isSkipped && (
                       <button
                         type="button"
-                        disabled={!!completingStepId || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
+                        disabled={completingStepId === s.id || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
                         onClick={() => void handleComplete(s)}
                         className={`px-3 py-1 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                           isBlocked
@@ -698,7 +748,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         />
                         <button
                           type="button"
-                          disabled={!!completingStepId}
+                          disabled={completingStepId === s.id}
                           onClick={() => void handleSaveLinkAndComplete(s)}
                           className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
                         >
@@ -762,7 +812,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                       <div className="flex gap-2 mt-3">
                         <button
                           type="button"
-                          disabled={wheelsUploading || !!completingStepId}
+                          disabled={wheelsUploading || completingStepId === s.id}
                           onClick={() => void handleWheelsConfirm(s)}
                           className="px-4 py-1.5 bg-purple-600 text-white rounded-md text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
                         >
