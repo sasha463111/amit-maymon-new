@@ -268,6 +268,30 @@ CREATE POLICY case_workflow_steps_update_ceo ON case_workflow_steps
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- MIGRATION 011: Fix RLS INSERT for case_workflow_steps — allow CEO
+-- CEO has branch_id = NULL so the existing policy blocks step creation
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DROP POLICY IF EXISTS case_workflow_steps_insert_ceo ON case_workflow_steps;
+CREATE POLICY case_workflow_steps_insert_ceo ON case_workflow_steps
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'CEO')
+  );
+
+DROP POLICY IF EXISTS case_workflow_steps_insert_creator ON case_workflow_steps;
+CREATE POLICY case_workflow_steps_insert_creator ON case_workflow_steps
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    run_id IN (
+      SELECT cwr.id FROM case_workflow_runs cwr
+      JOIN cases c ON c.id = cwr.case_id
+      WHERE c.created_by = auth.uid()
+    )
+  );
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- CEO TEST USER
 -- Creates a CEO test user: email = ceo@test.com, password = TestCEO123!
 -- ─────────────────────────────────────────────────────────────────────────────
