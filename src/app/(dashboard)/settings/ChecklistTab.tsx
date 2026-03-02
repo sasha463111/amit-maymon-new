@@ -140,6 +140,7 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
         is_enabled: true,
         requires_link: false,
         requires_file_or_link: false,
+        requires_ceo_approval: false,
         created_at: new Date().toISOString(),
       };
       setSteps((prev) => [...prev, newStep].sort((a, b) => a.order_index - b.order_index));
