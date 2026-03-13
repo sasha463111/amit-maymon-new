@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
+import { createClient } from '@/lib/supabase/client';
 import type { InsuranceType, ClaimType, SubClaimType } from '@/types/database';
 
 interface Branch {
@@ -12,17 +13,16 @@ interface Branch {
 
 export function CreateCaseButton({
   branchId,
-  branches = [],
   isCeo = false,
 }: {
   branchId: string | null;
-  branches?: Branch[];
   isCeo?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [form, setForm] = useState({
     plate_number: '',
     vehicle_type: '',
@@ -36,12 +36,25 @@ export function CreateCaseButton({
     insurance_type: '' as InsuranceType | '',
     claim_type: '' as ClaimType | '',
     sub_claim_type: '' as SubClaimType | '',
-    branch_id: branchId ?? (branches[0]?.id ?? ''),
+    branch_id: branchId ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleOpen() {
+    setOpen(true);
+    if (isCeo && branches.length === 0) {
+      const supabase = createClient();
+      const { data } = await supabase.from('branches').select('id, name');
+      const loaded = (data ?? []) as Branch[];
+      setBranches(loaded);
+      if (loaded.length > 0 && !form.branch_id) {
+        setForm((f) => ({ ...f, branch_id: loaded[0].id }));
+      }
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -94,7 +107,7 @@ export function CreateCaseButton({
       insurance_type: '',
       claim_type: '',
       sub_claim_type: '',
-      branch_id: branchId ?? branches[0]?.id ?? '',
+      branch_id: branchId ?? '',
     });
     setFiles([]);
     router.push('/cases');
@@ -105,7 +118,7 @@ export function CreateCaseButton({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
       >
         פתיחת תיק
@@ -286,20 +299,24 @@ export function CreateCaseButton({
               </div>
 
               {/* ── סניף (CEO בלבד) ── */}
-              {isCeo && branches.length > 0 && (
+              {isCeo && (
                 <div className="border-t pt-3">
                   <label className="block text-sm font-medium mb-1">סניף</label>
-                  <select
-                    value={form.branch_id}
-                    onChange={(e) => set('branch_id', e.target.value)}
-                    className="w-full border rounded px-3 py-2 text-sm"
-                  >
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
+                  {branches.length > 0 ? (
+                    <select
+                      value={form.branch_id}
+                      onChange={(e) => set('branch_id', e.target.value)}
+                      className="w-full border rounded px-3 py-2 text-sm"
+                    >
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="w-full border rounded px-3 py-2 text-sm text-gray-400">טוען סניפים...</div>
+                  )}
                 </div>
               )}
 

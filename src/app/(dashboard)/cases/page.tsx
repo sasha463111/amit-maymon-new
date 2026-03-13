@@ -1,25 +1,43 @@
+import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { PartsStatus } from '@/types/database';
 import { CasesTable } from './CasesTable';
 import { CreateCaseButton } from './CreateCaseButton';
 
-export default async function CasesPage() {
+// ── Skeleton shown while data loads ──────────────────────────────────────────
+
+function CasesPageSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="rounded-xl h-24 bg-gray-200 animate-pulse" />
+        ))}
+      </div>
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Heavy data component (streams in after shell) ─────────────────────────────
+
+async function CasesDataSection({
+  role,
+  branchId,
+  isCeo,
+}: {
+  role: string | null;
+  branchId: string | null;
+  isCeo: boolean;
+}) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('role, branch_id')
-    .eq('id', user.id)
-    .single();
-
-  const profile = profileData as { role: string; branch_id: string | null } | null;
-  const role = profile?.role ?? null;
-  const branchId = profile?.branch_id ?? null;
 
   let casesQuery = supabase
     .from('cases')
@@ -156,14 +174,6 @@ export default async function CasesPage() {
     };
   });
 
-  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
-  const isCeo = role === 'CEO';
-  let branches: { id: string; name: string }[] = [];
-  if (isCeo) {
-    const { data: b } = await supabase.from('branches').select('id, name');
-    branches = b ?? [];
-  }
-
   const totalCases = casesWithMeta.length;
 
   // Dashboard metric: vehicles in work (active step order_index >= ENTER_WORK)
@@ -187,80 +197,62 @@ export default async function CasesPage() {
   const airmailCount = casesWithMeta.filter((c) => c.parts_status === 'AIRMAIL_PENDING').length;
 
   return (
-    <div>
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">📁</span>
+    <>
+      <p className="text-gray-600 text-sm mb-4">{totalCases} תיקים פעילים</p>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800">תיקים פתוחים</h1>
-              <p className="text-gray-600 text-sm mt-1">
-                {totalCases} תיקים פעילים
-              </p>
+              <p className="text-blue-100 text-xs font-medium">סה&quot;כ תיקים פתוחים</p>
+              <p className="text-3xl font-bold mt-1">{totalCases}</p>
             </div>
+            <span className="text-4xl opacity-80">📊</span>
           </div>
-          {canCreate && (
-            <CreateCaseButton
-              branchId={branchId}
-              branches={branches}
-              isCeo={isCeo}
-            />
-          )}
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-xs font-medium">סה&quot;כ תיקים פתוחים</p>
-                <p className="text-3xl font-bold mt-1">{totalCases}</p>
-              </div>
-              <span className="text-4xl opacity-80">📊</span>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-green-100 text-xs font-medium">רכבים בעבודה</p>
+              <p className="text-3xl font-bold mt-1">{inWorkCount}</p>
             </div>
+            <span className="text-4xl opacity-80">🔧</span>
           </div>
+        </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-xs font-medium">רכבים בעבודה</p>
-                <p className="text-3xl font-bold mt-1">{inWorkCount}</p>
-              </div>
-              <span className="text-4xl opacity-80">🔧</span>
+        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-yellow-100 text-xs font-medium">ממתינים לחלקים</p>
+              <p className="text-3xl font-bold mt-1">{waitingPartsCount}</p>
             </div>
+            <span className="text-4xl opacity-80">⏳</span>
           </div>
+        </div>
 
-          <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-yellow-100 text-xs font-medium">ממתינים לחלקים</p>
-                <p className="text-3xl font-bold mt-1">{waitingPartsCount}</p>
-              </div>
-              <span className="text-4xl opacity-80">⏳</span>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-100 text-xs font-medium">ממתינים לדואר אוויר</p>
+              <p className="text-3xl font-bold mt-1">{airmailCount}</p>
             </div>
+            <span className="text-4xl opacity-80">✈️</span>
           </div>
+        </div>
 
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-100 text-xs font-medium">ממתינים לדואר אוויר</p>
-                <p className="text-3xl font-bold mt-1">{airmailCount}</p>
-              </div>
-              <span className="text-4xl opacity-80">✈️</span>
+        <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-100 text-xs font-medium">ממתינים למוסך</p>
+              <p className="text-3xl font-bold mt-1">{waitingGarageCount}</p>
             </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-100 text-xs font-medium">ממתינים למוסך</p>
-                <p className="text-3xl font-bold mt-1">{waitingGarageCount}</p>
-              </div>
-              <span className="text-4xl opacity-80">🏭</span>
-            </div>
+            <span className="text-4xl opacity-80">🏭</span>
           </div>
         </div>
       </div>
+
       <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
         <CasesTable
           cases={casesWithMeta.map((c) => ({
@@ -270,6 +262,52 @@ export default async function CasesPage() {
           }))}
           role={role}
         />
+      </div>
+    </>
+  );
+}
+
+// ── Shell (renders immediately) ───────────────────────────────────────────────
+
+export default async function CasesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('role, branch_id')
+    .eq('id', user.id)
+    .single();
+
+  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const role = profile?.role ?? null;
+  const branchId = profile?.branch_id ?? null;
+
+  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
+  const isCeo = role === 'CEO';
+
+  return (
+    <div>
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl">📁</span>
+            <h1 className="text-3xl font-bold text-gray-800">תיקים פתוחים</h1>
+          </div>
+          {canCreate && (
+            <CreateCaseButton
+              branchId={branchId}
+              isCeo={isCeo}
+            />
+          )}
+        </div>
+
+        <Suspense fallback={<CasesPageSkeleton />}>
+          <CasesDataSection role={role} branchId={branchId} isCeo={isCeo} />
+        </Suspense>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import type { PartsStatus, GeneralStatus } from '@/types/database';
@@ -13,118 +14,91 @@ type StepTemplate = {
   requires_ceo_approval?: boolean;
 };
 
-export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+// ── Skeleton shown while heavy data loads ─────────────────────────────────────
+
+function CaseDetailSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-100 h-96" />
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 h-96" />
+      </div>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 h-48" />
+    </div>
+  );
+}
+
+// ── Heavy data component (streams in) ─────────────────────────────────────────
+
+type CaseRowMinimal = {
+  id: string;
+  branch_id: string;
+  case_key: string | null;
+  claim_number: string | null;
+  fixcar_link: string | null;
+  wheels_check_link: string | null;
+  parts_status: string;
+  opened_at: string | null;
+  treatment_finished_at: string | null;
+  closed_at: string | null;
+  general_status: string;
+  customer_name: string | null;
+  phone: string | null;
+  insurance_company: string | null;
+  appraiser_name: string | null;
+  event_date: string | null;
+  sub_claim_type: string | null;
+  insurance_type: string | null;
+  claim_type: string | null;
+  cars:
+    | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }
+    | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }[]
+    | null;
+  branches: { name: string } | { name: string }[] | null;
+};
+
+async function CaseDetailData({
+  id,
+  profile,
+  caseRow,
+}: {
+  id: string;
+  profile: { role: string; branch_id: string | null } | null;
+  caseRow: CaseRowMinimal;
+}) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('role, branch_id')
-    .eq('id', user.id)
-    .single();
-
-  const profile = profileData as { role: string; branch_id: string | null } | null;
-
-  // Try full select with new columns first; fall back to basic select if migration 006 not yet applied
-  let caseRow: unknown = null;
-  {
-    const { data, error } = await supabase
-      .from('cases')
-      .select(
-        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
-      )
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      // Fallback: select only stable columns (migrations not yet applied to this DB)
-      const { data: basicData } = await supabase
-        .from('cases')
-        .select(
-          'id,case_key,claim_number,fixcar_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,insurance_type,claim_type,cars(license_plate,first_registration_date),branches(name)'
-        )
-        .eq('id', id)
-        .single();
-      caseRow = basicData;
-    } else {
-      caseRow = data;
-    }
-  }
-
-  if (!caseRow) notFound();
-
-  const branchId = (caseRow as { branch_id: string }).branch_id;
-  if (profile?.role !== 'CEO' && profile?.branch_id !== branchId) notFound();
 
   // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes
-  // First, get all runs for this case (include status to avoid a separate active-run query)
   const { data: allRuns } = await supabase
     .from('case_workflow_runs')
     .select('id, status')
     .eq('case_id', id)
     .eq('workflow_type', 'PROFESSIONAL');
-  
+
   let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null }[] = [];
-  
+
   if (allRuns && allRuns.length > 0) {
-    // Get all run IDs for this case
     const runIds = allRuns.map((r) => (r as { id: string }).id);
-    // Load steps for any of these runs
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
       .select('id, step_key, state, order_index, completed_at, completed_by')
       .in('run_id', runIds)
       .order('order_index');
     steps = stepsData ?? [];
-    
-    // DEBUG: Log what we found
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-      console.log('[CASE DETAIL PAGE] Loaded steps by case_id:', {
-        caseId: id,
-        allRunsCount: allRuns.length,
-        runIds,
-        stepsCount: steps.length,
-        steps: steps.map(s => ({ step_key: s.step_key, state: s.state })),
-      });
-    }
-  } else {
-    // DEBUG: Log if no runs found
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-      console.log('[CASE DETAIL PAGE] No runs found for case:', id);
-    }
   }
-  
+
   // Derive active run from allRuns (avoids a separate DB round-trip)
   const activeRunEntry = (allRuns ?? []).find(
     (r) => (r as { id: string; status: string }).status === 'ACTIVE'
   ) as { id: string; status: string } | undefined;
   const run = activeRunEntry ? { id: activeRunEntry.id } : null;
 
-  // DEBUG: Log run status
-  if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-    console.log('[CASE DETAIL PAGE] Run check:', {
-      caseId: id,
-      hasRun: !!run,
-      runId: run?.id,
-      stepsCount: steps.length,
-    });
-  }
-  
-  // CRITICAL FIX: In PREVIEW mode, use the first run we found (don't create a new one)
-  // This prevents creating duplicate runs that break the step lookup
+  // In PREVIEW mode, use the first run we found (don't create a new one)
   let actualRun = run;
   if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-    // If we have runs but no active run, use the first one
     if (!run && allRuns && allRuns.length > 0) {
       actualRun = { id: (allRuns[0] as { id: string }).id };
-      console.log('[CASE DETAIL PAGE] Using existing run instead of creating new one:', actualRun.id);
     } else if (!run) {
-      // Only create a new run if there are NO runs at all
-      console.log('[CASE DETAIL PAGE] No run found, creating one for case:', id);
       const { data: newRunData } = await supabase
         .from('case_workflow_runs')
         .insert({
@@ -136,12 +110,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         .single();
       if (newRunData) {
         actualRun = newRunData as { id: string };
-        console.log('[CASE DETAIL PAGE] Created new run:', actualRun.id);
       }
     }
   }
-  
-  // Load workflow step templates once — used for step creation AND display
+
+  // Load workflow step templates once
   const { data: stepTemplatesData } = await supabase
     .from('workflow_step_templates')
     .select('step_key, step_label, order_index, requires_link, requires_file_or_link, requires_ceo_approval')
@@ -157,26 +130,17 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       .eq('run_id', actualRun.id)
       .order('order_index');
     steps = stepsData ?? [];
-    
-    // DEBUG: Log if no steps found
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-      console.log('[CASE DETAIL PAGE] Steps check:', {
-        runId: actualRun.id,
-        stepsCount: steps.length,
-        hasRun: !!actualRun,
-      });
-    }
-    
-    // If we have a run but no steps, create them from templates (new cases or missing steps)
+
+    // If we have a run but no steps, create them from templates
     if (steps.length === 0) {
       const stepsToCreate = stepTemplates.length > 0
         ? stepTemplates
         : PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, step_label: sk, order_index: i, requires_link: false, requires_file_or_link: false, requires_ceo_approval: false }));
 
-      const openedAt = (caseRow as { opened_at: string | null }).opened_at || new Date().toISOString();
-      const carData = Array.isArray((caseRow as { cars: unknown }).cars)
-        ? (caseRow as { cars: { first_registration_date: string | null }[] }).cars[0]
-        : (caseRow as { cars: { first_registration_date: string | null } | null }).cars;
+      const openedAt = caseRow.opened_at || new Date().toISOString();
+      const carData = Array.isArray(caseRow.cars)
+        ? caseRow.cars[0]
+        : caseRow.cars;
       const firstReg = carData?.first_registration_date ?? null;
       const age = firstReg ? (Date.now() - new Date(firstReg).getTime()) / (365.25 * 24 * 60 * 60 * 1000) : null;
       const skipWheels = age !== null && age <= 2;
@@ -216,21 +180,6 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         .eq('run_id', actualRun.id)
         .order('order_index');
       steps = newStepsData ?? [];
-    }
-    
-    // DEBUG: Log steps loading
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-      console.log('[CASE DETAIL PAGE] Loaded steps:', {
-        runId: actualRun.id,
-        caseId: id,
-        stepsCount: steps.length,
-        steps: steps.map(s => ({ step_key: s.step_key, state: s.state })),
-      });
-    }
-  } else {
-    // DEBUG: Log if run not found (and couldn't create one)
-    if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
-      console.warn('[CASE DETAIL PAGE] No workflow run found for case and couldn\'t create one:', id);
     }
   }
 
@@ -283,28 +232,8 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  type CaseRowTyped = {
-    case_key: string | null;
-    claim_number: string | null;
-    fixcar_link: string | null;
-    wheels_check_link: string | null;
-    parts_status: string;
-    opened_at: string | null;
-    general_status: string;
-    customer_name: string | null;
-    phone: string | null;
-    insurance_company: string | null;
-    appraiser_name: string | null;
-    event_date: string | null;
-    sub_claim_type: string | null;
-    insurance_type: string | null;
-    claim_type: string | null;
-    cars: { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null } | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }[] | null;
-    branches: { name: string } | { name: string }[] | null;
-  };
-  const c = caseRow as CaseRowTyped;
-  const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
-  const branch = Array.isArray(c.branches) ? c.branches[0] : c.branches;
+  const car = Array.isArray(caseRow.cars) ? caseRow.cars[0] : caseRow.cars;
+  const branch = Array.isArray(caseRow.branches) ? caseRow.branches[0] : caseRow.branches;
   const plate = car?.license_plate ?? '—';
   const firstReg = car?.first_registration_date ?? null;
   let age = '—';
@@ -316,24 +245,24 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   return (
     <CaseDetailClientV2
       caseId={id}
-      caseKey={c.case_key}
-      claimNumber={c.claim_number}
+      caseKey={caseRow.case_key}
+      claimNumber={caseRow.claim_number}
       plate={plate}
       branchName={branch?.name ?? '—'}
-      openedAt={c.opened_at}
+      openedAt={caseRow.opened_at}
       age={age}
-      partsStatus={c.parts_status as PartsStatus}
-      generalStatus={c.general_status as GeneralStatus}
-      fixcarLink={c.fixcar_link ?? null}
-      wheelsCheckLink={c.wheels_check_link ?? null}
-      customerName={c.customer_name ?? null}
-      phone={c.phone ?? null}
-      insuranceCompany={c.insurance_company ?? null}
-      appraiserName={c.appraiser_name ?? null}
-      eventDate={c.event_date ?? null}
-      subClaimType={c.sub_claim_type ?? null}
-      insuranceType={c.insurance_type ?? null}
-      claimType={c.claim_type ?? null}
+      partsStatus={caseRow.parts_status as PartsStatus}
+      generalStatus={caseRow.general_status as GeneralStatus}
+      fixcarLink={caseRow.fixcar_link ?? null}
+      wheelsCheckLink={caseRow.wheels_check_link ?? null}
+      customerName={caseRow.customer_name ?? null}
+      phone={caseRow.phone ?? null}
+      insuranceCompany={caseRow.insurance_company ?? null}
+      appraiserName={caseRow.appraiser_name ?? null}
+      eventDate={caseRow.event_date ?? null}
+      subClaimType={caseRow.sub_claim_type ?? null}
+      insuranceType={caseRow.insurance_type ?? null}
+      claimType={caseRow.claim_type ?? null}
       vehicleType={car?.vehicle_type ?? null}
       vehicleYear={car?.year ?? null}
       carMake={car?.make ?? null}
@@ -348,5 +277,61 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       userNames={userNames}
       stepTemplates={stepTemplates}
     />
+  );
+}
+
+// ── Shell (renders immediately after case fetch) ───────────────────────────────
+
+export default async function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('role, branch_id')
+    .eq('id', user.id)
+    .single();
+
+  const profile = profileData as { role: string; branch_id: string | null } | null;
+
+  // Case fetch — needed for access control and to pass data to CaseDetailData
+  let caseRow: CaseRowMinimal | null = null;
+  {
+    const { data, error } = await supabase
+      .from('cases')
+      .select(
+        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
+      )
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      // Fallback: select only stable columns
+      const { data: basicData } = await supabase
+        .from('cases')
+        .select(
+          'id,case_key,claim_number,fixcar_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,insurance_type,claim_type,cars(license_plate,first_registration_date),branches(name)'
+        )
+        .eq('id', id)
+        .single();
+      caseRow = basicData as CaseRowMinimal | null;
+    } else {
+      caseRow = data as CaseRowMinimal | null;
+    }
+  }
+
+  if (!caseRow) notFound();
+
+  const branchId = caseRow.branch_id;
+  if (profile?.role !== 'CEO' && profile?.branch_id !== branchId) notFound();
+
+  return (
+    <Suspense fallback={<CaseDetailSkeleton />}>
+      <CaseDetailData id={id} profile={profile} caseRow={caseRow} />
+    </Suspense>
   );
 }
