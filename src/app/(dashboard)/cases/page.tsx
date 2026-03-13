@@ -46,31 +46,28 @@ export default async function CasesPage() {
 
   const openCases = (casesRows ?? []).filter((c) => !(c as { closed_at: string | null }).closed_at);
   const caseIds = openCases.map((c) => (c as { id: string }).id);
-  const { data: extrasByCaseData } = await supabase
-    .from('bodywork_extras')
-    .select('case_id')
-    .eq('status', 'IN_TREATMENT')
-    .in('case_id', caseIds);
+
+  // Parallelise: extras, approvals, and runs are all independent of each other
+  const [{ data: extrasByCaseData }, { data: approvalsByCaseData }, { data: runsData }] =
+    await Promise.all([
+      supabase.from('bodywork_extras').select('case_id').eq('status', 'IN_TREATMENT').in('case_id', caseIds),
+      supabase.from('ceo_approvals').select('case_id, status').in('case_id', caseIds),
+      supabase
+        .from('case_workflow_runs')
+        .select('id, case_id')
+        .in('case_id', caseIds)
+        .eq('workflow_type', 'PROFESSIONAL')
+        .eq('status', 'ACTIVE'),
+    ]);
+
   const extrasByCase = (extrasByCaseData ?? []) as { case_id: string }[];
   const caseIdsWithExtras = new Set(extrasByCase.map((e) => e.case_id));
 
-  const { data: approvalsByCaseData } = await supabase
-    .from('ceo_approvals')
-    .select('case_id, status')
-    .in('case_id', caseIds);
   const approvalsByCase = (approvalsByCaseData ?? []) as { case_id: string; status: string }[];
   const caseIdsApprovalBlocked = new Set<string>();
   for (const a of approvalsByCase) {
     if (a.status !== 'APPROVED') caseIdsApprovalBlocked.add(a.case_id);
   }
-
-  // Get active steps for each case (for dashboard metrics)
-  const { data: runsData } = await supabase
-    .from('case_workflow_runs')
-    .select('id, case_id')
-    .in('case_id', caseIds)
-    .eq('workflow_type', 'PROFESSIONAL')
-    .eq('status', 'ACTIVE');
   const runIds = (runsData ?? []).map((r) => (r as { id: string; case_id: string }).id);
   const runIdToCaseId = new Map(
     (runsData ?? []).map((r) => [(r as { id: string; case_id: string }).id, (r as { id: string; case_id: string }).case_id])

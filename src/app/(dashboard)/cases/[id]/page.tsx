@@ -7,6 +7,7 @@ import { CaseDetailClientV2 } from './CaseDetailClientV2';
 type StepTemplate = {
   step_key: string;
   step_label: string;
+  order_index: number;
   requires_link: boolean;
   requires_file_or_link: boolean;
   requires_ceo_approval?: boolean;
@@ -34,7 +35,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     const { data, error } = await supabase
       .from('cases')
       .select(
-        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,cars(license_plate,first_registration_date,vehicle_type,year),branches(name)'
+        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
       )
       .eq('id', id)
       .single();
@@ -60,10 +61,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   if (profile?.role !== 'CEO' && profile?.branch_id !== branchId) notFound();
 
   // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes
-  // First, get all runs for this case
+  // First, get all runs for this case (include status to avoid a separate active-run query)
   const { data: allRuns } = await supabase
     .from('case_workflow_runs')
-    .select('id')
+    .select('id, status')
     .eq('case_id', id)
     .eq('workflow_type', 'PROFESSIONAL');
   
@@ -97,17 +98,12 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
   
-  // Get the active run for display
-  const { data: runData } = await supabase
-    .from('case_workflow_runs')
-    .select('id')
-    .eq('case_id', id)
-    .eq('workflow_type', 'PROFESSIONAL')
-    .eq('status', 'ACTIVE')
-    .maybeSingle();
-  
-  const run = runData as { id: string } | null;
-  
+  // Derive active run from allRuns (avoids a separate DB round-trip)
+  const activeRunEntry = (allRuns ?? []).find(
+    (r) => (r as { id: string; status: string }).status === 'ACTIVE'
+  ) as { id: string; status: string } | undefined;
+  const run = activeRunEntry ? { id: activeRunEntry.id } : null;
+
   // DEBUG: Log run status
   if (process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true') {
     console.log('[CASE DETAIL PAGE] Run check:', {
@@ -145,6 +141,14 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
   
+  // Load workflow step templates once — used for step creation AND display
+  const { data: stepTemplatesData } = await supabase
+    .from('workflow_step_templates')
+    .select('step_key, step_label, order_index, requires_link, requires_file_or_link, requires_ceo_approval')
+    .eq('is_enabled', true)
+    .order('order_index');
+  const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
+
   // If we still have no steps but have a run, try loading by run_id
   if (actualRun && steps.length === 0) {
     const { data: stepsData } = await supabase
@@ -165,14 +169,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     
     // If we have a run but no steps, create them from templates (new cases or missing steps)
     if (steps.length === 0) {
-      const { data: templates } = await supabase
-        .from('workflow_step_templates')
-        .select('step_key, order_index')
-        .eq('is_enabled', true)
-        .order('order_index');
-      const stepsToCreate = (templates && templates.length > 0)
-        ? (templates as { step_key: string; order_index: number }[])
-        : PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, order_index: i }));
+      const stepsToCreate = stepTemplates.length > 0
+        ? stepTemplates
+        : PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, step_label: sk, order_index: i, requires_link: false, requires_file_or_link: false, requires_ceo_approval: false }));
 
       const openedAt = (caseRow as { opened_at: string | null }).opened_at || new Date().toISOString();
       const carData = Array.isArray((caseRow as { cars: unknown }).cars)
@@ -235,41 +234,34 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  const { data: approvals } = await supabase
-    .from('ceo_approvals')
-    .select('id, approval_type, status, rejection_note')
-    .eq('case_id', id);
-
-  const { data: extras } = await supabase
-    .from('bodywork_extras')
-    .select('id, description, status')
-    .eq('case_id', id);
-
+  // Parallelise independent queries
   const stepIds = steps.map((s) => s.id);
-  let auditRows: { id: string; action: string; user_id: string | null; created_at: string; payload: unknown }[] = [];
-  const { data: caseAudit } = await supabase
-    .from('audit_events')
-    .select('id, action, user_id, created_at, payload')
-    .eq('entity_type', 'CASE')
-    .eq('entity_id', id);
-  auditRows = (caseAudit ?? []) as typeof auditRows;
-  if (stepIds.length > 0) {
-    const { data: stepAudit } = await supabase
-      .from('audit_events')
-      .select('id, action, user_id, created_at, payload')
-      .eq('entity_type', 'WORKFLOW_STEP')
-      .in('entity_id', stepIds);
-    auditRows = [...auditRows, ...((stepAudit ?? []) as typeof auditRows)];
+  type AuditRow = { id: string; action: string; user_id: string | null; created_at: string; payload: unknown };
+  type AuditResult = { data: AuditRow[] | null };
+
+  const [
+    { data: approvals },
+    { data: extras },
+    { data: caseAudit },
+    { data: documentsData },
+    stepAuditResult,
+  ] = await Promise.all([
+    supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
+    supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
+    supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'CASE').eq('entity_id', id).limit(50),
+    supabase.from('case_documents').select('id, file_name, file_path, file_size, mime_type, created_at').eq('case_id', id).order('created_at', { ascending: false }),
+    (stepIds.length > 0
+      ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
+      : Promise.resolve({ data: null })) as Promise<AuditResult>,
+  ]);
+
+  let auditRows: AuditRow[] = (caseAudit ?? []) as AuditRow[];
+  if (stepAuditResult.data) {
+    auditRows = [...auditRows, ...stepAuditResult.data];
   }
   auditRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   auditRows = auditRows.slice(0, 20);
 
-  // Load case documents
-  const { data: documentsData } = await supabase
-    .from('case_documents')
-    .select('id, file_name, file_path, file_size, mime_type, created_at')
-    .eq('case_id', id)
-    .order('created_at', { ascending: false });
   const documents = (documentsData ?? []) as { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; created_at: string }[];
 
   // Build userNames map from audit events + step.completed_by
@@ -291,14 +283,6 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  // Load workflow step templates (includes requires_ceo_approval for blocking "סמן בוצע")
-  const { data: stepTemplatesData } = await supabase
-    .from('workflow_step_templates')
-    .select('step_key, step_label, requires_link, requires_file_or_link, requires_ceo_approval')
-    .eq('is_enabled', true)
-    .order('order_index');
-  const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
-
   type CaseRowTyped = {
     case_key: string | null;
     claim_number: string | null;
@@ -315,7 +299,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     sub_claim_type: string | null;
     insurance_type: string | null;
     claim_type: string | null;
-    cars: { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null } | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null }[] | null;
+    cars: { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null } | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }[] | null;
     branches: { name: string } | { name: string }[] | null;
   };
   const c = caseRow as CaseRowTyped;
@@ -350,6 +334,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       subClaimType={c.sub_claim_type ?? null}
       insuranceType={c.insurance_type ?? null}
       claimType={c.claim_type ?? null}
+      vehicleType={car?.vehicle_type ?? null}
+      vehicleYear={car?.year ?? null}
+      carMake={car?.make ?? null}
+      carModel={car?.model ?? null}
+      carVin={car?.vin ?? null}
       steps={steps}
       approvals={approvals ?? []}
       extras={extras ?? []}

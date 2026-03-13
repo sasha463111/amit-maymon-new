@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { completeActiveStep, returnToEstimate, deleteCase } from '@/app/actions/workflow';
+import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
@@ -63,6 +64,11 @@ interface CaseDetailClientProps {
   subClaimType: string | null;
   insuranceType: string | null;
   claimType: string | null;
+  vehicleType: string | null;
+  vehicleYear: number | null;
+  carMake: string | null;
+  carModel: string | null;
+  carVin: string | null;
   steps: StepRow[];
   approvals: { id: string; approval_type: string; status: string; rejection_note: string | null }[];
   extras: { id: string; description: string; status: string }[];
@@ -95,9 +101,31 @@ const CLAIM_TYPE_LABELS: Record<string, string> = {
   FLOOD: 'הצפה',
 };
 
+const CASE_FIELD_MAP: Record<string, string> = {
+  customerName: 'customer_name',
+  phone: 'phone',
+  insuranceCompany: 'insurance_company',
+  appraiserName: 'appraiser_name',
+  eventDate: 'event_date',
+  insuranceType: 'insurance_type',
+  claimType: 'claim_type',
+  subClaimType: 'sub_claim_type',
+  claimNumber: 'claim_number',
+};
+
+const CAR_FIELD_MAP: Record<string, string> = {
+  plate: 'license_plate',
+  carMake: 'make',
+  carModel: 'model',
+  carVin: 'vin',
+  vehicleType: 'vehicle_type',
+  vehicleYear: 'year',
+};
+
 export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const {
     caseId,
+    claimNumber,
     plate,
     branchName,
     openedAt,
@@ -113,6 +141,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     subClaimType,
     insuranceType,
     claimType,
+    vehicleType,
+    vehicleYear,
+    carMake,
+    carModel,
+    carVin,
     steps,
     approvals,
     extras,
@@ -145,6 +178,74 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   );
 
   const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO';
+  const canEditDetails = role !== 'PAINTER' && role !== null;
+
+  // Inline-edit state for "פרטי תיק" fields
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({
+    plate: plate !== '—' ? plate : '',
+    claimNumber: claimNumber ?? '',
+    customerName: customerName ?? '',
+    phone: phone ?? '',
+    insuranceCompany: insuranceCompany ?? '',
+    appraiserName: appraiserName ?? '',
+    eventDate: eventDate ?? '',
+    insuranceType: insuranceType ?? '',
+    claimType: claimType ?? '',
+    subClaimType: subClaimType ?? '',
+    carMake: carMake ?? '',
+    carModel: carModel ?? '',
+    carVin: carVin ?? '',
+    vehicleType: vehicleType ?? '',
+    vehicleYear: vehicleYear?.toString() ?? '',
+  });
+  const [fieldSaveError, setFieldSaveError] = useState<string | null>(null);
+
+  function startEdit(field: string, value: string) {
+    setEditingField(field);
+    setEditValue(value);
+  }
+
+  function cancelEdit() {
+    setEditingField(null);
+    setEditValue('');
+  }
+
+  async function saveField() {
+    if (!editingField) return;
+    const field = editingField;
+    const value = editValue;
+    setEditingField(null);
+    setEditValue('');
+
+    if (value === fieldValues[field]) return;
+
+    const oldValues = { ...fieldValues };
+    setFieldValues((prev) => ({ ...prev, [field]: value }));
+
+    const caseKey = CASE_FIELD_MAP[field];
+    const carKey = CAR_FIELD_MAP[field];
+    const caseUpdates: Record<string, string | number | null> = {};
+    const carUpdates: Record<string, string | number | null> = {};
+
+    if (caseKey) {
+      caseUpdates[caseKey] = value || null;
+    } else if (carKey) {
+      carUpdates[carKey] = field === 'vehicleYear' ? (value ? parseInt(value, 10) : null) : (value || null);
+    }
+
+    const res = await updateCaseDetails(
+      caseId,
+      caseUpdates,
+      Object.keys(carUpdates).length > 0 ? carUpdates : undefined
+    );
+    if (res?.error) {
+      setFieldValues(oldValues);
+      setFieldSaveError(res.error);
+      setTimeout(() => setFieldSaveError(null), 5000);
+    }
+  }
 
   const [partsValue, setPartsValue] = useState<PartsStatus>(partsStatus);
   const [fixcarValue, setFixcarValue] = useState(fixcarLink ?? '');
@@ -522,24 +623,76 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
           <span className="text-2xl">📋</span>
           פרטי תיק
+          {canEditDetails && (
+            <span className="text-xs font-normal text-gray-400 mr-1">(לחץ על ערך לעריכה)</span>
+          )}
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-          <InfoRow label="רישוי" value={plate} />
+
+        {fieldSaveError && (
+          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+            ⚠️ {fieldSaveError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+          {/* Read-only fields */}
           <InfoRow label="סניף" value={branchName} />
           <InfoRow label="נפתח" value={openedAt ? new Date(openedAt).toLocaleDateString('he-IL') : '—'} />
           <InfoRow label="גיל רכב" value={age} />
-          {customerName && <InfoRow label="שם לקוח" value={customerName} />}
-          {phone && <InfoRow label="טלפון" value={phone} />}
-          {insuranceCompany && <InfoRow label="חברת ביטוח" value={insuranceCompany} />}
-          {appraiserName && <InfoRow label="שמאי" value={appraiserName} />}
-          {eventDate && <InfoRow label="תאריך אירוע" value={new Date(eventDate).toLocaleDateString('he-IL')} />}
-          {insuranceType && <InfoRow label="סוג ביטוח" value={INSURANCE_TYPE_LABELS[insuranceType] ?? insuranceType} />}
-          {claimType && <InfoRow label="סוג תביעה" value={CLAIM_TYPE_LABELS[claimType] ?? claimType} />}
-          {subClaimType && <InfoRow label="תת סוג תביעה" value={SUB_CLAIM_LABELS[subClaimType] ?? subClaimType} />}
+
+          {/* Editable car fields */}
+          <EditableInfoRow label="רישוי" field="plate" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="יצרן" field="carMake" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="דגם" field="carModel" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="סוג רכב" field="vehicleType" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="שנת ייצור" field="vehicleYear" type="number" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="מספר שלדה" field="carVin" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+
+          {/* Editable case fields */}
+          <EditableInfoRow label="מספר תביעה" field="claimNumber" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="שם לקוח" field="customerName" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="טלפון" field="phone" type="tel" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="חברת ביטוח" field="insuranceCompany" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="שמאי" field="appraiserName" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="תאריך אירוע" field="eventDate" type="date" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow
+            label="סוג ביטוח" field="insuranceType" type="select"
+            options={[
+              { value: 'COMPREHENSIVE', label: 'מקיף' },
+              { value: 'THIRD_PARTY', label: "צד ג'" },
+              { value: 'PRIVATE', label: 'פרטי' },
+              { value: 'OTHER', label: 'אחר' },
+            ]}
+            displayMap={INSURANCE_TYPE_LABELS}
+            fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit}
+          />
+          <EditableInfoRow
+            label="סוג תביעה" field="claimType" type="select"
+            options={[
+              { value: 'PRIVATE', label: 'פרטי' },
+              { value: 'ACCIDENT', label: 'תאונה' },
+              { value: 'FLOOD', label: 'הצפה' },
+            ]}
+            displayMap={CLAIM_TYPE_LABELS}
+            fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit}
+          />
+          <EditableInfoRow
+            label="תת סוג תביעה" field="subClaimType" type="select"
+            options={[
+              { value: 'POLICY', label: 'פוליסה' },
+              { value: 'THIRD_PARTY', label: "צד ג'" },
+              { value: 'THIRD_PARTY_SETTLEMENT', label: "הסדר ג'" },
+              { value: 'PRIVATE_REPAIR', label: 'תיקון פרטי' },
+              { value: 'SHLOMO_POLICY', label: 'מוקד שלמה פוליסה' },
+              { value: 'SHLOMO_THIRD_PARTY', label: "מוקד שלמה צד ג'" },
+            ]}
+            displayMap={SUB_CLAIM_LABELS}
+            fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit}
+          />
         </div>
 
         {canEdit && (
-          <div className="mt-4">
+          <div className="mt-4 pt-4 border-t border-gray-100">
             <label className="block text-sm font-medium mb-1">סטטוס חלקים</label>
             <div className="flex items-center gap-3">
               <select
@@ -1012,9 +1165,105 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <>
-      <span className="text-gray-500 font-medium">{label}:</span>
-      <span className="text-gray-800">{value}</span>
-    </>
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">{label}:</span>
+      <span className="text-gray-800">{value || '—'}</span>
+    </div>
+  );
+}
+
+function EditableInfoRow({
+  label,
+  field,
+  type = 'text',
+  options,
+  displayMap,
+  fieldValues,
+  editingField,
+  editValue,
+  canEdit,
+  onStartEdit,
+  onEditChange,
+  onSave,
+  onCancel,
+}: {
+  label: string;
+  field: string;
+  type?: 'text' | 'tel' | 'date' | 'number' | 'select';
+  options?: { value: string; label: string }[];
+  displayMap?: Record<string, string>;
+  fieldValues: Record<string, string>;
+  editingField: string | null;
+  editValue: string;
+  canEdit: boolean;
+  onStartEdit: (field: string, value: string) => void;
+  onEditChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const isEditing = editingField === field;
+  const rawValue = fieldValues[field] ?? '';
+
+  let displayValue = rawValue || '—';
+  if (rawValue && displayMap && displayMap[rawValue]) {
+    displayValue = displayMap[rawValue];
+  }
+  if (type === 'date' && rawValue) {
+    try {
+      displayValue = new Date(rawValue).toLocaleDateString('he-IL');
+    } catch {
+      displayValue = rawValue;
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 py-1.5">
+      <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">{label}:</span>
+      {isEditing ? (
+        <div className="flex items-center gap-1 flex-1 min-w-0">
+          {type === 'select' && options ? (
+            <select
+              autoFocus
+              value={editValue}
+              onChange={(e) => onEditChange(e.target.value)}
+              onBlur={onSave}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSave();
+                if (e.key === 'Escape') onCancel();
+              }}
+              className="flex-1 border border-blue-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="">—</option>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              autoFocus
+              type={type}
+              value={editValue}
+              onChange={(e) => onEditChange(e.target.value)}
+              onBlur={onSave}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSave();
+                if (e.key === 'Escape') onCancel();
+              }}
+              className="flex-1 border border-blue-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 min-w-0"
+              dir={type === 'tel' ? 'ltr' : undefined}
+            />
+          )}
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs px-1">✕</button>
+        </div>
+      ) : (
+        <span
+          className={`text-gray-800 flex-1 ${canEdit ? 'cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 hover:text-blue-700 transition-colors' : ''}`}
+          onClick={canEdit ? () => onStartEdit(field, rawValue) : undefined}
+          title={canEdit ? `לחץ לעריכת ${label}` : undefined}
+        >
+          {displayValue}
+        </span>
+      )}
+    </div>
   );
 }
