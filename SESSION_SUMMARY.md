@@ -375,6 +375,204 @@ CREATE POLICY cars_insert ON cars FOR INSERT TO authenticated
 
 ---
 
+## Session 4 — תיעוד שינויים (Cursor/Claude)
+
+תיעוד כל השינויים שבוצעו בסשנים האחרונים: תיקוני RLS, UX, לוגו, אישורים, וסגירה ל-CEO.
+
+---
+
+### 1. תיקון RLS — יצירת תיק ושלבי workflow (מיגרציה 010)
+
+**בעיה:** שגיאה "new row violates row-level security policy for table case_workflow_runs" בפתיחת תיק.
+
+**קבצים:**
+- `src/db/migrations/010_rls_case_workflow_fixes.sql`
+- `RUN_IN_SUPABASE.sql` (בשורש — להרצה ידנית ב-SQL Editor)
+
+**מה נוסף:**
+- **case_workflow_runs_insert_creator** — INSERT מותר כשהתיק נוצר על ידי המשתמש (`created_by = auth.uid()`).
+- **case_workflow_runs_update_ceo** — CEO יכול לעדכן `case_workflow_runs`.
+- **case_workflow_steps_update_ceo** — CEO יכול לעדכן `case_workflow_steps`.
+
+**הרצה:** Supabase → SQL Editor → להדביק את תוכן `RUN_IN_SUPABASE.sql` (או את מיגרציה 010) → Run.
+
+---
+
+### 2. צ'קליסט עבודה — סימון "בוצע" מתעדכן
+
+**בעיה:** אחרי "סמן בוצע" ה-UI לא הציג את השלב כ-DONE.
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
+
+**פתרון:**
+- סנכרון `localSteps` עם `steps` מהשרת אחרי `router.refresh()`.
+- עדכון אופטימי: מיד אחרי הצלחת `completeActiveStep` השלב מסומן כ-DONE בממשק, ואז רענון מהשרת.
+- אם מהשרת חוזרים שלבים ריקים (בגלל run_id וכו') — לא לדרוס את השלבים שנשלחו בדף (לא לעדכן לריק).
+
+---
+
+### 3. תיקים חדשים — "אין שלבים להצגה"
+
+**בעיה:** בתיק חדש הצ'קליסט היה ריק.
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/page.tsx`
+
+**פתרון:**
+- אם יש run אבל אין שלבים — יצירת שלבים אוטומטית מטבלת `workflow_step_templates` (או מ-`PROFESSIONAL_WORKFLOW_STEPS` אם אין טמפלייטים). רץ גם ב-production (לא רק preview).
+- טעינת שלבים לפי `case_id` (דרך כל ה-runs) ולא רק לפי run פעיל, כדי למצוא שלבים גם כשמשתנה run_id.
+
+---
+
+### 4. אישור CEO — התיק מופיע במסך האישורים
+
+**בעיה:** כשנדרש אישור עמית, התיק לא הופיע ב"אישורים".
+
+**קובץ:** `src/app/actions/workflow.ts`
+
+**פתרון:**
+- ב-`completeActiveStep`, כשמגיעים ל-**READY_FOR_OFFICE** (או CLOSE_CASE) וחסר אישור אומדן/גלגלים — יוצרים רשומות `ceo_approvals` במצב PENDING (ESTIMATE_AND_DETAILS, WHEELS_CHECK אם רלוונטי), כדי שהתיק יופיע במסך האישורים.
+- חסימה רק בשלבים READY_FOR_OFFICE ו-CLOSE_CASE — לא בשלבים ביניים שדורשים אישור (למשל WAIT_APPRAISER_APPROVAL). בשלבים כאלה רק נוצרת רשומת אישור; המשתמש יכול להמשיך לשלב הבא.
+
+---
+
+### 5. לוגיקת אישור עמית — חסימה רק בסגירה
+
+**החלטה:** אפשר להתקדם בין כל השלבים; אי אפשר לסגור תיק (או "מוכן למשרד") בלי שעמית יאשר.
+
+**קובץ:** `src/app/actions/workflow.ts`
+
+- שלבים עם `requires_ceo_approval` (למשל WAIT_APPRAISER_APPROVAL): רק יוצרים רשומת PENDING באישורים, **לא** חוסמים סימון השלב כ-DONE.
+- חסימה רק ב-**READY_FOR_OFFICE** ו-**CLOSE_CASE**: תוספות IN_TREATMENT או אישורי CEO חסרים/נדחים → return error.
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
+
+- הוסרה חסימת "סמן בוצע" לשלבים עם `requires_ceo_approval`.
+- נשארה חסימה רק ל-**READY_FOR_OFFICE** (תוספות בטיפול / נדרש אישור CEO).
+
+---
+
+### 6. מסך כניסה ו־Header — לוגו והפניה
+
+**קבצים:**
+- `src/components/Logo.tsx` — קומפוננטת לוגו: תמונה מ-`/logo.png` או טקסט "תהילה" ב-fallback.
+- `src/app/login/page.tsx` — שימוש ב-`<Logo variant="login" />`.
+- `src/app/(dashboard)/layout.tsx` — שימוש ב-`<Logo variant="header" />`.
+- `src/app/page.tsx` — דף הבית מפנה ל-`/login` (אין תוכן ביניים).
+- `middleware.ts` — כניסה ל-`/` מפנה ישירות ל-`/login` (לא preview).
+
+**תוצאה:** כניסה לאתר מובילה ישר להתחברות; לוגו במסך כניסה וב-header. אם יש `public/logo.png` הוא מוצג; אחרת מוצג "תהילה".
+
+---
+
+### 7. טעינה ו־Loading
+
+**קבצים:**
+- `src/app/(dashboard)/loading.tsx` — ספינר "טוען..." בדשבורד.
+- `src/app/(dashboard)/cases/[id]/loading.tsx` — ספינר בדף פרטי תיק.
+
+Next.js משתמש בהם אוטומטית (Streaming) במעבר בין דפים.
+
+---
+
+### 8. התראות ו־Header
+
+**קובץ:** `src/app/(dashboard)/layout.tsx`
+
+- קישור **"התראות"** ב-header (ליד שם המשתמש) — מוביל ל-`/notifications`.
+- באג' אדום עם מספר ההתראות על הקישור.
+
+---
+
+### 9. אישורי עמית — לינקים, קבצים, עדכון אופטימי
+
+**קבצים:** `src/app/(dashboard)/approvals/page.tsx`, `ApprovalsList.tsx`, `src/app/actions/approvals.ts`
+
+**תכונות:**
+- בלוק **"לינקים וקבצים מצורפים"**: קישור FixCar, קישור טפסי גלגלים (`wheels_check_link`).
+- **מסמכים שהועלו לתיק** (כולל מהצ'קליסט) — רשימה + כפתור הורדה.
+- **עדכון אופטימי:** לחיצה על "אשר" או "דחה" מעדכנת את הרשימה מיד (האישור נעלם), ושמירה ל-DB רצה ברקע. אם יש שגיאה — הודעת שגיאה ו-`router.refresh()`.
+- `revalidatePath('/approvals')` ו-`revalidatePath` לדף התיק אחרי אישור/דחייה.
+
+---
+
+### 10. הסרת "תאריך עלייה לכביש" מפתיחת תיק
+
+**קבצים:**
+- `src/app/(dashboard)/cases/CreateCaseButton.tsx` — השדה הוסר מהטופס (state, UI, submit).
+- `src/app/actions/workflow.ts` — `first_registration_date` אופציונלי; אם לא נשלח משתמשים ב-`null` ב-car insert/update.
+- `src/types/database.ts` — `CreateCaseInput.first_registration_date` הפך ל-`string | null` אופציונלי.
+
+**השפעה:** אם לא מזינים תאריך — גיל הרכב לא מחושב; שלב WHEELS_CHECK לא ידולג אוטומטית (יישאר פעיל).
+
+---
+
+### 11. CEO — גישה לסגירת תיקים
+
+**קובץ:** `src/app/(dashboard)/layout.tsx`
+
+- בתפריט של **CEO** נוסף קישור **"סגירה"** (`/closure`) — כמו לאילנה (OFFICE).
+- דף הסגירה כבר אפשר גישה ל-CEO (`profile?.role !== 'OFFICE' && profile?.role !== 'CEO'`); CEO רואה תיקים מכל הסניפים (ללא סינון branch).
+
+---
+
+### 12. מיגרציה 012 — RLS ל-CEO ו־requires_ceo_approval
+
+**קובץ:** `src/db/migrations/012_fix_ceo_rls_and_approval_config.sql`
+
+- **case_workflow_runs INSERT:** CEO או תיק בסניף של המשתמש.
+- **ceo_approvals INSERT:** CEO או תיק בסניף של המשתמש.
+- שדה **requires_ceo_approval** ב-`workflow_step_templates` (ברירת מחדל FALSE).
+- עדכון: `WAIT_APPRAISER_APPROVAL` עם `requires_ceo_approval = TRUE`.
+
+---
+
+### 13. משתמש טסט SERVICE_MANAGER
+
+**קובץ:** `CREATE_SERVICE_MANAGER_USER.sql` (בשורש)
+
+- הרצה ב-Supabase SQL Editor יוצרת משתמש טסט: **manager@test.com** / **TestManager123!**
+- תפקיד: SERVICE_MANAGER, משויך לסניף ראשון ב-`branches`.
+
+---
+
+### קבצים שנוצרו/שונו — Session 4
+
+| קובץ | שינוי |
+|------|--------|
+| `RUN_IN_SUPABASE.sql` | סקריפט להרצת תיקוני RLS ב-Supabase |
+| `CREATE_SERVICE_MANAGER_USER.sql` | יצירת משתמש טסט מנהל שירות |
+| `src/db/migrations/010_rls_case_workflow_fixes.sql` | RLS ל-case_workflow_runs ו-case_workflow_steps |
+| `src/db/migrations/012_fix_ceo_rls_and_approval_config.sql` | RLS ל-CEO + requires_ceo_approval |
+| `src/components/Logo.tsx` | קומפוננטת לוגו (תמונה או טקסט) |
+| `src/app/(dashboard)/loading.tsx` | טעינה לדשבורד |
+| `src/app/(dashboard)/cases/[id]/loading.tsx` | טעינה לדף תיק |
+| `src/app/(dashboard)/cases/[id]/page.tsx` | יצירת שלבים חסרים, טעינת requires_ceo_approval |
+| `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx` | סנכרון שלבים, אופטימי, חסימה רק READY_FOR_OFFICE |
+| `src/app/(dashboard)/cases/CreateCaseButton.tsx` | הסרת תאריך עלייה לכביש |
+| `src/app/(dashboard)/layout.tsx` | לוגו, קישור התראות, סגירה ל-CEO |
+| `src/app/(dashboard)/approvals/page.tsx` | wheels_check_link בשאילתה |
+| `src/app/(dashboard)/approvals/ApprovalsList.tsx` | לינקים/קבצים, עדכון אופטימי לאישורים |
+| `src/app/actions/workflow.ts` | יצירת אישורים חסרים, first_registration_date אופציונלי, לוגיקת חסימה רק בסגירה |
+| `src/app/actions/approvals.ts` | revalidatePath אחרי החלטה |
+| `src/app/login/page.tsx` | לוגו במסך כניסה |
+| `src/app/page.tsx` | הפניה ל-/login |
+| `middleware.ts` | הפניית / ל-/login |
+| `src/types/database.ts` | first_registration_date אופציונלי ב-CreateCaseInput |
+
+---
+
+### Git Commits — Session 4 (דוגמאות)
+
+```
+c7f9277  RUN_IN_SUPABASE.sql, מיגרציה 010, צ'קליסט + loading
+a0d35c6  fix: create CEO approval rows when missing so case appears in approvals screen
+28c65cb  feat: checklist for new cases, approvals links/files, notifications in header
+a17ec6a  feat: redirect / to login, Logo component, CEO approval only blocks closure
+e1872c4  feat: remove תאריך עלייה from new case form, optimistic approvals, CEO closure link
+```
+
+---
+
 ## סיכום קבצים שנוצרו/שונו — Session 2+3
 
 ### קבצים חדשים:
@@ -411,15 +609,13 @@ CREATE POLICY cars_insert ON cars FOR INSERT TO authenticated
 ```
 c5a2063  Initial commit
 fb98c56  feat: major CRM update - new fields, workflow steps, settings, dashboard
-ace6c52  fix: add new Case/Car fields to MOCK_CASES and MOCK_CARS in preview-data
-08ed956  fix: add missing 'unknown as' in type cast in mock-client.ts
-f9365e1  fix: replace upsert with update in updateRolePermission
-308f59b  fix: add role_permissions and workflow_step_templates to preview-data store
-0ac1595  fix: make new column inserts conditional + resilient case SELECT + SQL setup script
-25d27ea  chore: trigger Vercel redeploy
-992309c  ci: add GitHub Actions workflow to auto-deploy to Vercel on push to main
-a56fe05  ci: test GitHub Actions auto-deploy
+...
 fb0dc91  Fix step revalidation, CEO RLS, and add documents to approvals panel
+c7f9277  RUN_IN_SUPABASE.sql, מיגרציה 010, צ'קליסט + loading
+a0d35c6  fix: create CEO approval rows when missing so case appears in approvals screen
+28c65cb  feat: checklist for new cases, approvals links/files, notifications in header
+a17ec6a  feat: redirect / to login, Logo component, CEO approval only blocks closure
+e1872c4  feat: remove תאריך עלייה from new case form, optimistic approvals, CEO closure link
 ```
 
 ---
