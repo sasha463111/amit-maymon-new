@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction } from '@/app/actions/auth';
 import { Logo } from '@/components/Logo';
+import { Eye, EyeOff } from 'lucide-react';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -11,6 +12,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,9 +20,9 @@ export default function LoginPage() {
   // In PREVIEW mode, check if we should show login page
   useEffect(() => {
     // Check if user wants to see login (from logout or direct navigation)
-    const showLogin = sessionStorage.getItem('preview_show_login') || 
+    const showLogin = sessionStorage.getItem('preview_show_login') ||
                      document.cookie.includes('preview_show_login=true');
-    
+
     if (isPreview && !showLogin) {
       // Auto-redirect to cases if not explicitly showing login
       const timer = setTimeout(() => {
@@ -37,7 +39,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    
+
     if (isPreview) {
       // In PREVIEW mode, just redirect to cases
       setLoading(false);
@@ -45,7 +47,7 @@ export default function LoginPage() {
       router.push('/cases');
       return;
     }
-    
+
     try {
       const result = await loginAction({ email, password, rememberMe });
       if (result?.error) {
@@ -62,84 +64,103 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-      <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 border border-gray-200">
-        <div className="text-center mb-6">
-          <div className="flex items-center justify-center gap-2 mb-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-sm">
+        {/* Logo area */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
             <Logo variant="login" />
           </div>
-          <p className="text-sm text-gray-500">CRM — מערכת ניהול תיקים</p>
-          {isPreview && (
-            <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200">
-              מצב תצוגה מקדימה — התחברות לא נדרשת. תועבר אוטומטית בעוד רגע.
-            </p>
-          )}
+          <p className="text-sm text-gray-500 mt-3">מערכת ניהול תיקים</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              אימייל
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              dir="ltr"
-              autoComplete="email"
-            />
-          </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              סיסמה
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-              dir="ltr"
-              autoComplete="current-password"
-            />
-          </div>
-          {!isPreview && (
-            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded border-gray-300 text-brand-red focus:ring-brand-red"
-              />
-              זכור אותי (30 יום)
-            </label>
-          )}
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-red hover:bg-brand-red-dark text-white py-2.5 rounded-lg font-medium disabled:opacity-50 transition-colors shadow-md hover:shadow-lg"
-          >
-            {loading ? 'מתחבר...' : isPreview ? 'המשך למצב תצוגה מקדימה' : 'התחבר'}
-          </button>
+
+        {/* Card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-7">
           {isPreview && (
-            <button
-              type="button"
-              onClick={() => {
-                sessionStorage.setItem('preview_show_login', 'true');
-                router.push('/cases');
-              }}
-              className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-colors mt-2"
-            >
-              המשך למצב תצוגה מקדימה
-            </button>
+            <div className="mb-5 text-sm text-amber-700 bg-amber-50 px-3 py-2.5 rounded-lg border border-amber-200">
+              מצב תצוגה מקדימה — תועבר אוטומטית בעוד רגע.
+            </div>
           )}
-        </form>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                אימייל
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white"
+                dir="ltr"
+                autoComplete="email"
+                placeholder="name@example.com"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                סיסמה
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white pr-3.5 pl-10"
+                  dir="ltr"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {!isPreview && (
+              <label className="flex items-center gap-2.5 text-sm text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-gray-300 text-brand-red focus:ring-brand-red w-4 h-4"
+                />
+                זכור אותי (30 יום)
+              </label>
+            )}
+
+            {error && (
+              <div className="text-sm text-red-700 bg-red-50 px-3 py-2.5 rounded-lg border border-red-100">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-red hover:bg-brand-red-dark active:bg-brand-red-dark text-white py-2.5 rounded-lg font-medium disabled:opacity-50 transition-colors shadow-sm mt-1"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  מתחבר...
+                </span>
+              ) : isPreview ? 'המשך לתצוגה מקדימה' : 'התחבר'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

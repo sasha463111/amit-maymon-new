@@ -6,6 +6,7 @@ import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBadge } from '@/components/NotificationsBadge';
 import { SidebarNav } from '@/components/SidebarNav';
 import { Logo } from '@/components/Logo';
+import { Bell, LogOut } from 'lucide-react';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -93,33 +94,35 @@ export default async function DashboardLayout({
         </div>
       )}
       {isPreview && <PreviewRoleSwitcher />}
-      <header className="bg-brand-dark border-b-4 border-brand-red text-white px-6 py-3 shadow-lg">
-        <div className="flex items-center justify-between">
+      <header className="bg-brand-dark border-b border-brand-red/60 text-white px-6 h-14 flex items-center shadow-md">
+        <div className="flex items-center justify-between w-full">
           <Logo variant="header" />
-          {/* Right side: name + bell + logout */}
-          <div className="flex items-center gap-3 text-sm">
-            <div className="bg-white/10 px-3 py-1.5 rounded-full">
-              <span className="font-medium">{profile?.full_name ?? user.email}</span>
+          {/* Right side: role badge + name + bell + logout */}
+          <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
+              <span className="text-white/50 text-xs">{roleLabel}</span>
+              <span className="text-white/20 text-xs">·</span>
+              <span className="font-medium text-white">{profile?.full_name ?? user.email}</span>
             </div>
             <Link
               href="/notifications"
-              className="relative bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors"
+              className="relative bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors"
               title="התראות"
             >
-              <span className="text-xl leading-none">🔔</span>
+              <Bell size={17} className="text-white/80" />
               <NotificationsBadge userId={user.id} />
             </Link>
-            <a href="/logout" className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-full transition-colors">
-              התנתק
+            <a href="/logout" className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors flex items-center" title="התנתק">
+              <LogOut size={16} className="text-white/80" />
             </a>
           </div>
         </div>
       </header>
       <div className="flex flex-1">
-        <aside className="w-56 border-l bg-white p-3 flex flex-col gap-1 shadow-sm">
+        <aside className="w-52 border-l border-gray-200 bg-white pt-4 px-2 pb-3 flex flex-col gap-1 shadow-sm">
           <SidebarNav links={links} />
         </aside>
-        <main className="flex-1 p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">{children}</main>
+        <main className="flex-1 p-6 bg-gray-50 min-h-screen">{children}</main>
       </div>
     </div>
   );

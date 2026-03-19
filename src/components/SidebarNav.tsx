@@ -2,41 +2,47 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus } from 'lucide-react';
 
-const SIDEBAR_ICONS: Record<string, string> = {
-  '/cases': '📋',
-  '/closure': '🔒',
-  '/approvals': '✅',
-  '/extras': '🎨',
-  '/extras/new': '🎨',
-  '/extras/mine': '🎨',
-  '/notifications': '🔔',
-  '/settings': '⚙️',
+const SIDEBAR_ICONS: Record<string, React.ElementType> = {
+  '/cases': FolderOpen,
+  '/closure': Lock,
+  '/approvals': CheckSquare,
+  '/extras': Paintbrush,
+  '/extras/new': Plus,
+  '/extras/mine': Paintbrush,
+  '/notifications': Bell,
+  '/settings': Settings,
 };
 
 export function SidebarNav({ links }: { links: { label: string; href: string }[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-col gap-1">
+    <nav className="flex flex-col gap-0.5">
       {links.map(({ label, href }) => {
         const isActive =
           pathname === href ||
           (href.length > 1 && pathname.startsWith(href + '/'));
-        const icon = SIDEBAR_ICONS[href] ?? '→';
+        const Icon = SIDEBAR_ICONS[href];
         return (
           <Link
             key={href}
             href={href}
-            className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-2 group border-r-4 ${
+            className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2.5 group border-r-[3px] ${
               isActive
-                ? 'bg-brand-red/10 text-brand-red border-brand-red'
-                : 'text-gray-700 border-transparent hover:bg-gray-100 hover:text-gray-900'
+                ? 'bg-red-50 text-brand-red border-brand-red'
+                : 'text-gray-500 border-transparent hover:bg-gray-50 hover:text-gray-800'
             }`}
           >
-            <span className={`transition-transform ${isActive ? '' : 'group-hover:scale-110'}`}>
-              {icon}
-            </span>
+            {Icon && (
+              <Icon
+                size={15}
+                className={`flex-shrink-0 transition-colors ${
+                  isActive ? 'text-brand-red' : 'text-gray-400 group-hover:text-gray-600'
+                }`}
+              />
+            )}
             <span>{label}</span>
           </Link>
         );

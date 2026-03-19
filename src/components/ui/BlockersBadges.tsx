@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import type { PartsStatus } from '@/types/database';
 
 interface BlockersBadgesProps {
@@ -24,8 +25,9 @@ export function BlockersBadges({
       {badges.map((b) => (
         <span
           key={b}
-          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
         >
+          <AlertTriangle size={10} className="flex-shrink-0" />
           {b}
         </span>
       ))}

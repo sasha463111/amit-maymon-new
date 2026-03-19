@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Search, ChevronUp, ChevronDown, InboxIcon } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -49,27 +50,29 @@ export function DataTable<T extends object>({
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-0">
       {(searchKeys?.length ?? 0) > 0 && (
-        <div className="relative">
-          <input
-            type="search"
-            placeholder={searchPlaceholder}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full max-w-xs border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition-all"
-          />
-          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="relative max-w-xs">
+            <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              placeholder={searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg pr-9 pl-3 py-2 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white"
+            />
+          </div>
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gradient-to-r from-indigo-50 to-purple-50">
-            <tr>
+        <table className="min-w-full divide-y divide-gray-100">
+          <thead>
+            <tr className="bg-gray-50">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-6 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider"
+                  className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"
                 >
                   <button
                     type="button"
@@ -79,13 +82,13 @@ export function DataTable<T extends object>({
                         sortKey === col.key && sortDir === 'asc' ? 'desc' : 'asc'
                       );
                     }}
-                    className="hover:text-indigo-600 transition-colors flex items-center gap-1"
+                    className="hover:text-gray-800 transition-colors flex items-center gap-1"
                   >
                     {col.label}
                     {sortKey === col.key && (
-                      <span className="text-indigo-600">
-                        {sortDir === 'asc' ? '↑' : '↓'}
-                      </span>
+                      sortDir === 'asc'
+                        ? <ChevronUp size={12} className="text-brand-red" />
+                        : <ChevronDown size={12} className="text-brand-red" />
                     )}
                   </button>
                 </th>
@@ -95,10 +98,10 @@ export function DataTable<T extends object>({
           <tbody className="bg-white divide-y divide-gray-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={columns.length} className="px-6 py-12 text-center text-gray-400">
                   <div className="flex flex-col items-center gap-2">
-                    <span className="text-4xl">📭</span>
-                    <span>לא נמצאו תוצאות</span>
+                    <InboxIcon size={32} className="text-gray-300" />
+                    <span className="text-sm">לא נמצאו תוצאות</span>
                   </div>
                 </td>
               </tr>
@@ -109,12 +112,12 @@ export function DataTable<T extends object>({
                   onClick={() => onRowClick?.(row as T)}
                   className={
                     onRowClick
-                      ? 'hover:bg-indigo-50 cursor-pointer transition-colors border-l-4 border-transparent hover:border-indigo-400'
+                      ? 'hover:bg-red-50/50 cursor-pointer transition-colors border-r-2 border-r-transparent hover:border-r-brand-red'
                       : ''
                   }
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className="px-6 py-4 text-sm text-gray-700">
+                    <td key={col.key} className="px-5 py-3.5 text-sm text-gray-700">
                       {col.render
                         ? col.render(row as T)
                         : String(rowRecord(row)[col.key] ?? '')}

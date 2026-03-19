@@ -44,12 +44,12 @@ export function CasesTable({
       label: 'השלב הבא',
       render: (row) =>
         row.nextStep ? (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-semibold ring-1 ring-indigo-200 whitespace-nowrap">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-brand-red rounded-md text-xs font-semibold ring-1 ring-red-100 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" />
             {row.nextStep}
           </span>
         ) : (
-          <span className="text-gray-400 text-xs">—</span>
+          <span className="text-gray-300 text-xs">—</span>
         ),
     },
     {

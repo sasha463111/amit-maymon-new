@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import type { PartsStatus } from '@/types/database';
 import { CasesTable } from './CasesTable';
 import { CreateCaseButton } from './CreateCaseButton';
+import { LayoutGrid, Wrench, Package, Plane, Clock } from 'lucide-react';
 
 // ── Skeleton shown while data loads ──────────────────────────────────────────
 
@@ -198,57 +199,55 @@ async function CasesDataSection({
 
   return (
     <>
-      <p className="text-gray-600 text-sm mb-4">{totalCases} תיקים פעילים</p>
-
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-blue-100 text-xs font-medium">סה&quot;כ תיקים פתוחים</p>
-              <p className="text-3xl font-bold mt-1">{totalCases}</p>
-            </div>
-            <span className="text-4xl opacity-80">📊</span>
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-slate-100 rounded-lg p-2.5 flex-shrink-0">
+            <LayoutGrid size={18} className="text-slate-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800 leading-none">{totalCases}</p>
+            <p className="text-xs text-gray-500 mt-1">סה&quot;כ פתוחים</p>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-xs font-medium">רכבים בעבודה</p>
-              <p className="text-3xl font-bold mt-1">{inWorkCount}</p>
-            </div>
-            <span className="text-4xl opacity-80">🔧</span>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-emerald-50 rounded-lg p-2.5 flex-shrink-0">
+            <Wrench size={18} className="text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800 leading-none">{inWorkCount}</p>
+            <p className="text-xs text-gray-500 mt-1">רכבים בעבודה</p>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg p-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-yellow-100 text-xs font-medium">ממתינים לחלקים</p>
-              <p className="text-3xl font-bold mt-1">{waitingPartsCount}</p>
-            </div>
-            <span className="text-4xl opacity-80">⏳</span>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-amber-50 rounded-lg p-2.5 flex-shrink-0">
+            <Package size={18} className="text-amber-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800 leading-none">{waitingPartsCount}</p>
+            <p className="text-xs text-gray-500 mt-1">ממתינים לחלקים</p>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-100 text-xs font-medium">ממתינים לדואר אוויר</p>
-              <p className="text-3xl font-bold mt-1">{airmailCount}</p>
-            </div>
-            <span className="text-4xl opacity-80">✈️</span>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-sky-50 rounded-lg p-2.5 flex-shrink-0">
+            <Plane size={18} className="text-sky-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800 leading-none">{airmailCount}</p>
+            <p className="text-xs text-gray-500 mt-1">דואר אוויר</p>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-gray-500 to-gray-600 rounded-xl shadow-lg p-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-100 text-xs font-medium">ממתינים למוסך</p>
-              <p className="text-3xl font-bold mt-1">{waitingGarageCount}</p>
-            </div>
-            <span className="text-4xl opacity-80">🏭</span>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+          <div className="bg-violet-50 rounded-lg p-2.5 flex-shrink-0">
+            <Clock size={18} className="text-violet-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-800 leading-none">{waitingGarageCount}</p>
+            <p className="text-xs text-gray-500 mt-1">ממתינים למוסך</p>
           </div>
         </div>
       </div>
@@ -292,10 +291,9 @@ export default async function CasesPage() {
   return (
     <div>
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">📁</span>
-            <h1 className="text-3xl font-bold text-gray-800">תיקים פתוחים</h1>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">תיקים פתוחים</h1>
           </div>
           {canCreate && (
             <CreateCaseButton
