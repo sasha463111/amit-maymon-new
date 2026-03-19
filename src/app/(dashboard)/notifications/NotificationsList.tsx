@@ -68,13 +68,20 @@ function NotificationItem({
     >
       <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
       <div className="flex-1 min-w-0">
-        <p
-          className={`text-sm leading-snug ${
-            !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
-          }`}
-        >
-          {n.title}
-        </p>
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          {n.license_plate && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-900 text-white text-xs font-bold tracking-wide" dir="ltr">
+              🚗 {n.license_plate}
+            </span>
+          )}
+          <p
+            className={`text-sm leading-snug ${
+              !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
+            }`}
+          >
+            {n.title}
+          </p>
+        </div>
         {n.body && (
           <p className="text-sm text-gray-500 mt-0.5 leading-snug">{n.body}</p>
         )}
