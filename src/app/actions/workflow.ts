@@ -137,7 +137,12 @@ export async function createCase(input: CreateCaseInput) {
   if (runErr || !run) return { error: runErr?.message ?? 'שגיאה ביצירת workflow' };
   const runId = (run as { id: string }).id;
 
-  const age = vehicleAgeYears(firstRegDate);
+  const ageFromDate = vehicleAgeYears(firstRegDate);
+  // Fallback: use vehicle_year if no first_registration_date provided
+  const ageFromYear = input.vehicle_year
+    ? (new Date().getFullYear() - input.vehicle_year)
+    : null;
+  const age = ageFromDate ?? ageFromYear;
   const skipWheels = age !== null && age <= 2;
 
   // Load step templates from DB; fallback to hardcoded array

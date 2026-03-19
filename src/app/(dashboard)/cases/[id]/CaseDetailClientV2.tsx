@@ -214,6 +214,14 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   });
   const [fieldSaveError, setFieldSaveError] = useState<string | null>(null);
 
+  // Dynamic age: recompute whenever vehicleYear changes in the inline editor
+  const displayAge = useMemo(() => {
+    const yr = fieldValues.vehicleYear ? parseInt(fieldValues.vehicleYear, 10) : null;
+    if (!yr || isNaN(yr)) return age;
+    const computed = new Date().getFullYear() - yr;
+    return computed < 1 ? '<1' : String(computed);
+  }, [fieldValues.vehicleYear, age]);
+
   function startEdit(field: string, value: string) {
     setEditingField(field);
     setEditValue(value);
@@ -266,8 +274,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [partsOrdered, setPartsOrdered] = useState<boolean | null>(initialPartsOrdered ?? null);
   const [partsArrived, setPartsArrived] = useState<boolean | null>(initialPartsArrived ?? null);
   const [qcAssignee, setQcAssignee] = useState(initialQcAssignee ?? '');
-  const [estimateLink, setEstimateLink] = useState(initialEstimateLink ?? '');
-  const [estimateLinkDirty, setEstimateLinkDirty] = useState(false);
+  // estimateLink kept in DB but not shown in UI (documents section handles file uploads)
   const [painterStatus, setPainterStatus] = useState<PainterStatus | ''>(
     (initialPainterStatus as PainterStatus | null) ?? ''
   );
@@ -278,12 +285,6 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setNotesDirty(false);
     await updateCaseDetails(caseId, { notes: notes || null });
     setNotesSaving(false);
-  }
-
-  async function saveEstimateLink() {
-    if (!estimateLinkDirty) return;
-    setEstimateLinkDirty(false);
-    await updateCaseDetails(caseId, { estimate_link: estimateLink || null });
   }
 
   async function togglePartsOrdered() {
@@ -700,7 +701,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           {/* Read-only fields */}
           <InfoRow label="סניף" value={branchName} />
           <InfoRow label="נפתח" value={openedAt ? new Date(openedAt).toLocaleDateString('he-IL') : '—'} />
-          <InfoRow label="גיל רכב" value={age} />
+          <InfoRow label="גיל רכב" value={displayAge} />
 
           {/* Editable car fields */}
           <EditableInfoRow label="רישוי" field="plate" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
@@ -849,9 +850,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               let warningMessage = '';
 
               if (!isDone && !isSkipped) {
-                if (s.step_key === 'ENTER_WORK' && partsStatus !== 'AVAILABLE') {
+                if (s.step_key === 'ENTER_WORK' && partsValue !== 'AVAILABLE') {
                   showWarning = true;
-                  warningMessage = `חלקים לא זמינים — סטטוס נוכחי: ${PARTS_STATUS_LABELS[partsStatus] ?? partsStatus}`;
+                  warningMessage = `חלקים לא זמינים — סטטוס נוכחי: ${PARTS_STATUS_LABELS[partsValue] ?? partsValue}`;
                 } else if (s.step_key === 'READY_FOR_OFFICE') {
                   const hasExtrasInTreatment = extras.some((e) => e.status === 'IN_TREATMENT');
                   const requiredApprovals = effectiveApprovals.filter(
@@ -968,29 +969,6 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     </div>
                   )}
 
-                  {/* PREP_ESTIMATE — estimate link/upload */}
-                  {s.step_key === 'PREP_ESTIMATE' && canEdit && (
-                    <div className="mr-11 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <p className="text-xs font-semibold text-gray-600 mb-2">קישור / קובץ אומדן (אופציונלי)</p>
-                      <div className="flex gap-2">
-                        <input
-                          type="url"
-                          value={estimateLink}
-                          onChange={(e) => { setEstimateLink(e.target.value); setEstimateLinkDirty(true); }}
-                          onBlur={() => void saveEstimateLink()}
-                          placeholder="https://..."
-                          dir="ltr"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none"
-                        />
-                        {estimateLink && (
-                          <a href={estimateLink} target="_blank" rel="noopener noreferrer"
-                            className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors">
-                            פתח
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                   {/* QUALITY_CONTROL — assignee */}
                   {s.step_key === 'QUALITY_CONTROL' && canEdit && (
