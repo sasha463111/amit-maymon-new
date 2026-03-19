@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
@@ -102,6 +102,7 @@ interface ClosureDetailClientProps {
   canClose: boolean;
   isPreview?: boolean;
   closureApprovalStatus?: string | null;
+  initialChecklistState?: Record<string, boolean>;
 }
 
 export function ClosureDetailClient({
@@ -123,6 +124,7 @@ export function ClosureDetailClient({
   canClose,
   isPreview = false,
   closureApprovalStatus,
+  initialChecklistState = {},
 }: ClosureDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -132,11 +134,33 @@ export function ClosureDetailClient({
   const initRef = useRef<string | null>(null);
   const [completingStepId, setCompletingStepId] = useState<string | null>(null);
 
-  // Dynamic checklist state
+  // Dynamic checklist state — initialized from DB-persisted state
   const checklistItems = subClaimType ? (CLOSURE_CHECKLIST[subClaimType] ?? []) : [];
   const [checkedItems, setCheckedItems] = useState<boolean[]>(
-    () => checklistItems.map(() => false)
+    () => checklistItems.map((_, i) => initialChecklistState[String(i)] === true)
   );
+
+  // Debounce timer ref for checklist save
+  const checklistSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveChecklistState = useCallback(async (state: boolean[]) => {
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const jsonState: Record<string, boolean> = {};
+    state.forEach((v, i) => { if (v) jsonState[String(i)] = true; });
+    await supabase.from('cases').update({ closure_checklist_state: jsonState } as never).eq('id', caseId);
+  }, [caseId]);
+
+  function handleChecklistChange(index: number) {
+    const next = [...checkedItems];
+    next[index] = !next[index];
+    setCheckedItems(next);
+
+    // Debounce save
+    if (checklistSaveTimer.current) clearTimeout(checklistSaveTimer.current);
+    checklistSaveTimer.current = setTimeout(() => {
+      void saveChecklistState(next);
+    }, 800);
+  }
 
   const isShlomoInsurance = insuranceCompany === 'שלמה רשת מוסכים';
 
@@ -455,11 +479,7 @@ export function ClosureDetailClient({
                   <input
                     type="checkbox"
                     checked={checkedItems[i] ?? false}
-                    onChange={() => {
-                      const next = [...checkedItems];
-                      next[i] = !next[i];
-                      setCheckedItems(next);
-                    }}
+                    onChange={() => handleChecklistChange(i)}
                     className="w-5 h-5 rounded border-gray-300 text-brand-red focus:ring-brand-red cursor-pointer flex-shrink-0"
                   />
                   <span className={`text-sm transition-all ${checkedItems[i] ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-gray-900'}`}>

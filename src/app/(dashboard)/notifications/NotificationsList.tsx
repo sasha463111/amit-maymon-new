@@ -53,9 +53,11 @@ function formatDate(dateStr: string): string {
 function NotificationItem({
   n,
   onNavigate,
+  onMarkRead,
 }: {
   n: NotificationRow;
   onNavigate: (n: NotificationRow) => void;
+  onMarkRead: (id: string) => void;
 }) {
   return (
     <div
@@ -89,7 +91,7 @@ function NotificationItem({
             <span className="w-2.5 h-2.5 rounded-full bg-brand-red" />
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); void markRead(n.id); }}
+              onClick={(e) => { e.stopPropagation(); onMarkRead(n.id); }}
               className="text-xs text-brand-red hover:text-brand-red-dark font-medium transition-colors whitespace-nowrap"
             >
               סמן נקרא
@@ -121,8 +123,16 @@ export function NotificationsList({
   }
 
   async function handleClick(n: NotificationRow) {
-    if (!n.read) await markRead(n.id);
+    if (!n.read) {
+      await markRead(n.id);
+      router.refresh();
+    }
     if (n.case_id) router.push(`/cases/${n.case_id}`);
+  }
+
+  async function handleMarkRead(id: string) {
+    await markRead(id);
+    router.refresh();
   }
 
   // Group by case_id — notifications without a case go last under "כללי"
@@ -153,7 +163,7 @@ export function NotificationsList({
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={() => markAllRead()}
+            onClick={async () => { await markAllRead(); router.refresh(); }}
             className="text-sm text-brand-red hover:text-brand-red-dark font-medium flex items-center gap-1 transition-colors"
           >
             ✓ סמן הכל כנקרא
@@ -190,7 +200,7 @@ export function NotificationsList({
             {/* Notifications in this group */}
             <div className="divide-y divide-gray-100">
               {group.items.map((n) => (
-                <NotificationItem key={n.id} n={n} onNavigate={handleClick} />
+                <NotificationItem key={n.id} n={n} onNavigate={handleClick} onMarkRead={handleMarkRead} />
               ))}
             </div>
           </div>
@@ -207,7 +217,7 @@ export function NotificationsList({
           </div>
           <div className="divide-y divide-gray-100">
             {ungrouped.map((n) => (
-              <NotificationItem key={n.id} n={n} onNavigate={handleClick} />
+              <NotificationItem key={n.id} n={n} onNavigate={handleClick} onMarkRead={handleMarkRead} />
             ))}
           </div>
         </div>

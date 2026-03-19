@@ -29,7 +29,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('id, case_key, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, cars(license_plate, make, model), branches(name)')
+    .select('id, case_key, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, closure_checklist_state, cars(license_plate, make, model), branches(name)')
     .eq('id', id)
     .single();
 
@@ -125,6 +125,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     claim_type: string | null;
     sub_claim_type: string | null;
     insurance_company: string | null;
+    closure_checklist_state: Record<string, boolean> | null;
   };
 
   return (
@@ -147,6 +148,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
       canClose={isPreview || profile?.role === 'OFFICE' || profile?.role === 'CEO'}
       isPreview={isPreview}
       closureApprovalStatus={closureApproval?.status ?? null}
+      initialChecklistState={row.closure_checklist_state ?? {}}
     />
   );
 }

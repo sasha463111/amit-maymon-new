@@ -755,29 +755,6 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           />
         </div>
 
-        {canEdit && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            <label className="block text-sm font-medium mb-1">סטטוס חלקים</label>
-            <div className="flex items-center gap-3">
-              <select
-                value={partsValue}
-                onChange={(e) => void savePartsStatus(e.target.value as PartsStatus)}
-                className="border rounded px-3 py-2 text-sm"
-              >
-                {(Object.entries(PARTS_STATUS_LABELS) as [PartsStatus, string][]).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-              {updatingParts && <span className="text-sm text-gray-500">שומר...</span>}
-            </div>
-            {partsStatusMessage && (
-              <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-                ✓ {partsStatusMessage}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── סטטוס פחח ── */}
         {(canEdit || role === 'PAINTER') && (
           <div className="mt-4 pt-4 border-t border-gray-100">
