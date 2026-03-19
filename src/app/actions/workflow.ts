@@ -485,7 +485,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     step_key: stepKey,
   });
 
-  revalidatePath(`/cases/${caseId}`);
+  // Only revalidate the list — the case detail page uses client-side reloadStepsFromDB()
+  // which avoids the RSC push flicker caused by revalidating the current route
   revalidatePath('/cases');
   return { ok: true, error: null };
 }

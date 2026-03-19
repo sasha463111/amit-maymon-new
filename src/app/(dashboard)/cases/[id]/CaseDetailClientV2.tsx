@@ -179,13 +179,14 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     return map;
   }, [stepTemplates]);
 
+  // PREP_ESTIMATE never requires a link/file — documents section handles uploads
   const STEPS_REQUIRING_LINK = useMemo(
-    () => new Set(stepTemplates.filter((t) => t.requires_link).map((t) => t.step_key)),
+    () => new Set(stepTemplates.filter((t) => t.requires_link && t.step_key !== 'PREP_ESTIMATE').map((t) => t.step_key)),
     [stepTemplates]
   );
 
   const STEPS_REQUIRING_FILE_OR_LINK = useMemo(
-    () => new Set(stepTemplates.filter((t) => t.requires_file_or_link).map((t) => t.step_key)),
+    () => new Set(stepTemplates.filter((t) => t.requires_file_or_link && t.step_key !== 'PREP_ESTIMATE').map((t) => t.step_key)),
     [stepTemplates]
   );
 
