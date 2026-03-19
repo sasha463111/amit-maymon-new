@@ -94,7 +94,7 @@ export default async function DashboardLayout({
         </div>
       )}
       {isPreview && <PreviewRoleSwitcher />}
-      <header className="bg-brand-dark border-b border-brand-red/60 text-white px-6 h-14 flex items-center shadow-md">
+      <header className="bg-brand-dark border-b border-brand-red/60 text-white px-6 h-16 flex items-center shadow-md">
         <div className="flex items-center justify-between w-full">
           <Logo variant="header" />
           {/* Right side: role badge + name + bell + logout */}
@@ -119,7 +119,7 @@ export default async function DashboardLayout({
         </div>
       </header>
       <div className="flex flex-1">
-        <aside className="w-52 border-l border-gray-200 bg-white pt-4 px-2 pb-3 flex flex-col gap-1 shadow-sm">
+        <aside className="w-56 border-l border-gray-200 bg-white pt-4 px-2 pb-4 flex flex-col gap-1 shadow-sm">
           <SidebarNav links={links} />
         </aside>
         <main className="flex-1 p-6 bg-gray-50 min-h-screen">{children}</main>

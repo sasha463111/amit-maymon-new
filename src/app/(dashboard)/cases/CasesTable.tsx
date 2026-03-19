@@ -16,6 +16,7 @@ interface CaseRow {
   hasExtrasInTreatment: boolean;
   approvalBlocked: boolean;
   nextStep: string | null;
+  notes: string | null;
 }
 
 export function CasesTable({
@@ -51,6 +52,20 @@ export function CasesTable({
         ) : (
           <span className="text-gray-300 text-xs">—</span>
         ),
+    },
+    {
+      key: 'notes',
+      label: '',
+      render: (row) =>
+        row.notes ? (
+          <span
+            title={row.notes}
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-red text-white text-[10px] font-bold cursor-default"
+            aria-label="יש הערה"
+          >
+            !
+          </span>
+        ) : null,
     },
     {
       key: 'blockers',

@@ -112,6 +112,12 @@ export const MOCK_CASES: Case[] = [
     created_by: PREVIEW_USER_ID,
     created_at: past,
     updated_at: now,
+    notes: null,
+    painter_status: null,
+    parts_ordered: null,
+    parts_arrived: null,
+    qc_assignee: null,
+    estimate_link: null,
   },
   {
     id: '30000000-0000-0000-0000-000000000002',
@@ -137,6 +143,12 @@ export const MOCK_CASES: Case[] = [
     created_by: PREVIEW_USER_ID,
     created_at: past,
     updated_at: now,
+    notes: null,
+    painter_status: null,
+    parts_ordered: null,
+    parts_arrived: null,
+    qc_assignee: null,
+    estimate_link: null,
   },
 ];
 
@@ -265,6 +277,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     body: 'במצב תצוגה מקדימה — הפעולה לא נשמרת',
     read: false,
     created_at: now,
+    case_id: null,
   },
 ];
 

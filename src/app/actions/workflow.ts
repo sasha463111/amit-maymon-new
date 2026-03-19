@@ -271,18 +271,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
 
   const stepKey = activeStep.step_key;
 
-  if (stepKey === 'FIXCAR_PHOTOS' && !caseRow.fixcar_link) {
-    await supabase.from('notifications').insert({
-      user_id: profile!.id,
-      type: 'BLOCKED_ACTION',
-      title: 'פעולה חסומה',
-      body: 'לא ניתן להשלים צילום FixCar ללא קישור',
-    } as never);
-    await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-      reason: 'fixcar_link_missing',
-    });
-    return { error: 'נדרש קישור FixCar' };
-  }
+  // FIXCAR_PHOTOS: קישור אופציונלי — לא חוסם התקדמות
+  // (הוסר חסם ב-013)
 
   if (stepKey === 'ENTER_WORK' && caseRow.parts_status !== 'AVAILABLE') {
     await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'STEP_COMPLETED_WITH_WARNING', user.id, {

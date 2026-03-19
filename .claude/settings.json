@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//opt/homebrew/**)",
+      "Read(//Users/sashadibka/.nvm/versions/**)",
+      "Read(//usr/local/lib/**)",
+      "Read(//usr/**)",
+      "Bash(echo $PATH)",
+      "Read(//private/tmp/node-v20.11.0-darwin-arm64/**)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -fsSL https://nodejs.org/dist/v20.11.0/node-v20.11.0-darwin-arm64.tar.gz -o /tmp/node.tar.gz)",
+      "Bash(tar -xzf /tmp/node.tar.gz -C /tmp/)",
+      "Read(//tmp/node-v20.11.0-darwin-arm64/**)",
+      "Bash(export PATH=\"/tmp/node-v20.11.0-darwin-arm64/bin:$PATH\")",
+      "Bash(/tmp/node-v20.11.0-darwin-arm64/bin/npm install:*)",
+      "Bash(/tmp/node-v20.11.0-darwin-arm64/bin/npx tsc:*)",
+      "Bash(/tmp/node-v20.11.0-darwin-arm64/bin/npm run:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

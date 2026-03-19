@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 
 export async function updateCaseDetails(
   caseId: string,
-  caseUpdates: Record<string, string | number | null>,
+  caseUpdates: Record<string, string | number | boolean | null>,
   carUpdates?: Record<string, string | number | null>
 ) {
   const supabase = await createClient();

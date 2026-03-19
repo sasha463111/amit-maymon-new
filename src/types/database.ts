@@ -42,6 +42,15 @@ export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type ExtraStatus = 'IN_TREATMENT' | 'REJECTED' | 'DONE';
 
+export type PainterStatus = 'IN_WORK' | 'WAITING_PARTS' | 'PARTS_ARRIVED' | 'READY_FOR_RELEASE';
+
+export const PAINTER_STATUS_LABELS: Record<PainterStatus, string> = {
+  IN_WORK: 'בעבודה',
+  WAITING_PARTS: 'ממתין לחלקים',
+  PARTS_ARRIVED: 'הגיעו חלקים',
+  READY_FOR_RELEASE: 'מוכן לשחרור',
+};
+
 export type AuditEntityType =
   | 'CASE'
   | 'WORKFLOW_STEP'
@@ -103,6 +112,13 @@ export interface Case {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Added in migration 013
+  notes: string | null;
+  painter_status: PainterStatus | null;
+  parts_ordered: boolean | null;
+  parts_arrived: boolean | null;
+  qc_assignee: string | null;
+  estimate_link: string | null;
 }
 
 export interface CaseWorkflowRun {
@@ -168,6 +184,7 @@ export type NotificationType =
   | 'EXTRA_CREATED'
   | 'EXTRA_STATUS_CHANGED'
   | 'APPROVAL_NEEDED'
+  | 'PAINTER_READY_FOR_RELEASE'
   | 'OTHER';
 
 export interface Notification {
@@ -178,6 +195,17 @@ export interface Notification {
   body: string | null;
   read: boolean;
   created_at: string;
+  // Added in migration 013
+  case_id: string | null;
+}
+
+export interface SystemMessage {
+  id: string;
+  message: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuditEvent {

@@ -19,16 +19,65 @@ const STEP_ICONS: Record<string, string> = {
   CLOSE_CASE: '🔒',
 };
 
-const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  AVAILABLE: { label: 'זמינים ✅', color: 'text-green-700' },
-  ORDERED: { label: 'הוזמנו ⏳', color: 'text-yellow-700' },
-  NO_PARTS: { label: 'אין חלקים ❌', color: 'text-red-700' },
+const SUB_CLAIM_LABELS: Record<string, string> = {
+  POLICY: 'פוליסה',
+  THIRD_PARTY: "צד ג'",
+  THIRD_PARTY_SETTLEMENT: "הסדר ג'",
+  PRIVATE_REPAIR: 'תיקון פרטי',
+  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
+  SHLOMO_THIRD_PARTY: "מוקד שלמה צד ג'",
 };
 
-const INSURANCE_TYPE_LABELS: Record<string, string> = {
+const CLAIM_TYPE_LABELS: Record<string, string> = {
   PRIVATE: 'פרטי',
-  COMPREHENSIVE: 'מקיף',
-  THIRD_PARTY: 'צד ג׳',
+  ACCIDENT: 'תאונה',
+  FLOOD: 'הצפה',
+};
+
+// Dynamic checklist per sub_claim_type
+const CLOSURE_CHECKLIST: Record<string, string[]> = {
+  POLICY: [
+    'התקבל הסדר',
+    'גביית השתתפות עצמית',
+    'אישור קיזוז מע"מ',
+    'שליחת חשבונית לשמאי',
+    'שליחת טפסי גלגלים',
+    'טפסי פרונט / כיול ראדר',
+  ],
+  THIRD_PARTY: [
+    'גביית ציק מוסך',
+    'גביית ציק שמאי',
+    'שליחת חשבונית לשמאי',
+    'שליחת טפסי גלגלים',
+    'אישור קיזוז מע"מ',
+    'טפסי פרונט / כיול ראדר',
+    'בדיקת ציקים PCS עם מס׳ אישור',
+  ],
+  THIRD_PARTY_SETTLEMENT: [
+    'חתימה על טפסי הסדר ג׳',
+    'שליחת חשבונית לשמאי',
+    'שליחת טפסי גלגלים',
+    'שליחת טפסי פרונט / כיול ראדר',
+    'אישור קיזוז מע"מ',
+  ],
+  SHLOMO_POLICY: [
+    'אישור חשבונית גמר במוקד',
+    'גביית השתתפות עצמית',
+    'שליחת חשבונית לשמאי של שלמה',
+    'חתימה על אישור הסדר',
+    'שליחת טפסי גלגלים',
+    'שליחת טפסי פרונט / כיול ראדר',
+  ],
+  SHLOMO_THIRD_PARTY: [
+    'אישור חשבונית גמר במוקד',
+    'שליחת ציקים לבדיקה במוקד',
+    'שליחת חשבונית לשמאי של שלמה',
+    'שליחת טפסי גלגלים',
+    'שליחת טפסי פרונט / כיול ראדר',
+  ],
+  PRIVATE_REPAIR: [
+    'גביית תשלום על תיקון',
+  ],
 };
 
 type StepState = 'ACTIVE' | 'PENDING' | 'DONE' | 'SKIPPED';
@@ -42,9 +91,11 @@ interface ClosureDetailClientProps {
   carModel: string | null;
   branchName: string;
   openedAt: string | null;
-  partsStatus: string | null;
   insuranceType: string | null;
   claimNumber: string | null;
+  claimType: string | null;
+  subClaimType: string | null;
+  insuranceCompany: string | null;
   steps: StepRow[];
   blockedByExtras: boolean;
   blockedByApprovals: boolean;
@@ -61,9 +112,11 @@ export function ClosureDetailClient({
   carModel,
   branchName,
   openedAt,
-  partsStatus,
   insuranceType,
   claimNumber,
+  claimType,
+  subClaimType,
+  insuranceCompany,
   steps,
   blockedByExtras,
   blockedByApprovals,
@@ -75,10 +128,17 @@ export function ClosureDetailClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // In PREVIEW, start empty and load from mock client (localStorage)
   const [localSteps, setLocalSteps] = useState<StepRow[]>(isPreview ? [] : steps);
   const initRef = useRef<string | null>(null);
   const [completingStepId, setCompletingStepId] = useState<string | null>(null);
+
+  // Dynamic checklist state
+  const checklistItems = subClaimType ? (CLOSURE_CHECKLIST[subClaimType] ?? []) : [];
+  const [checkedItems, setCheckedItems] = useState<boolean[]>(
+    () => checklistItems.map(() => false)
+  );
+
+  const isShlomoInsurance = insuranceCompany === 'שלמה רשת מוסכים';
 
   useEffect(() => {
     if (!isPreview) return;
@@ -102,8 +162,6 @@ export function ClosureDetailClient({
         .order('order_index');
 
       if (stepsData && stepsData.length > 0) {
-        // Normalize: due to mock-client "fix" code, some PENDING steps become ACTIVE.
-        // Re-apply sequential ordering: first non-DONE is ACTIVE, rest are PENDING.
         const raw = (stepsData as StepRow[]).sort((a, b) => a.order_index - b.order_index);
         const normalized = normalizeStepStates(raw);
         setLocalSteps(normalized);
@@ -111,10 +169,9 @@ export function ClosureDetailClient({
     })().catch(console.error);
   }, [isPreview, caseId]);
 
-  // Reload steps after completion to ensure persistence
   useEffect(() => {
     if (!isPreview) return;
-    if (completingStepId !== null) return; // Don't reload while completing
+    if (completingStepId !== null) return;
 
     const reloadSteps = async () => {
       const supabase = (await import('@/lib/supabase/client')).createClient();
@@ -146,7 +203,6 @@ export function ClosureDetailClient({
     return () => clearTimeout(timer);
   }, [isPreview, caseId, completingStepId]);
 
-  // Re-apply sequential step states: first non-DONE = ACTIVE, rest = PENDING
   function normalizeStepStates(raw: StepRow[]): StepRow[] {
     let foundActive = false;
     return raw.map((s) => {
@@ -161,11 +217,9 @@ export function ClosureDetailClient({
 
   const effectiveSteps = localSteps.length > 0 ? localSteps : steps;
   const orderedSteps = [...effectiveSteps].sort((a, b) => a.order_index - b.order_index);
-  // Normalize to ensure sequential state (first non-DONE is ACTIVE)
   const normalizedSteps = normalizeStepStates(orderedSteps);
   const activeStep = normalizedSteps.find((s) => s.state === 'ACTIVE');
-  
-  // In PREVIEW mode, check closure approval from localStorage
+
   const [localClosureApproval, setLocalClosureApproval] = useState<string | null>(closureApprovalStatus ?? null);
   useEffect(() => {
     if (!isPreview) return;
@@ -180,11 +234,8 @@ export function ClosureDetailClient({
       if (data) setLocalClosureApproval((data as { status: string }).status);
     })().catch(console.error);
   }, [isPreview, caseId]);
-  
+
   const effectiveClosureApproval = isPreview ? localClosureApproval : closureApprovalStatus;
-  // CLOSE_CASE is blocked if: extras in treatment OR missing closure approval
-  // Other steps are blocked by blockedByApprovals (estimate/wheels)
-  // Don't show warning if case is already closed
   const allDone = normalizedSteps.length > 0 && normalizedSteps.every((s) => s.state === 'DONE');
   const isCaseClosed = allDone;
   const closeBlocked = activeStep?.step_key === 'CLOSE_CASE'
@@ -192,7 +243,6 @@ export function ClosureDetailClient({
     : (blockedByExtras || blockedByApprovals);
   const doneCount = normalizedSteps.filter((s) => s.state === 'DONE').length;
 
-  const parts = partsStatus ? PARTS_STATUS_LABELS[partsStatus] : null;
   const daysOpen = openedAt
     ? Math.floor((Date.now() - new Date(openedAt).getTime()) / 86400000)
     : null;
@@ -202,13 +252,11 @@ export function ClosureDetailClient({
     const { data: { user } } = await supabase.auth.getUser();
     const now = new Date().toISOString();
 
-    // Mark step DONE in mock store
     await supabase
       .from('case_workflow_steps')
       .update({ state: 'DONE', completed_at: now, completed_by: user?.id ?? null } as never)
       .eq('id', step.id);
 
-    // Find next non-done step to activate
     const sorted = [...normalizedSteps].sort((a, b) => a.order_index - b.order_index);
     const nextStep = sorted.find((s) => s.order_index > step.order_index && s.state !== 'DONE');
     if (nextStep) {
@@ -218,16 +266,14 @@ export function ClosureDetailClient({
         .eq('id', nextStep.id);
     }
 
-    // CLOSURE_PREPARE_CLOSING_FORMS: create CEO approval for case closure
     if (step.step_key === 'CLOSURE_PREPARE_CLOSING_FORMS') {
-      // Check if approval already exists
       const { data: existing } = await supabase
         .from('ceo_approvals')
         .select('id')
         .eq('case_id', caseId)
         .eq('approval_type', 'CASE_CLOSURE')
         .maybeSingle();
-      
+
       if (!existing) {
         await supabase.from('ceo_approvals').insert({
           case_id: caseId,
@@ -237,16 +283,14 @@ export function ClosureDetailClient({
       }
     }
 
-    // CLOSE_CASE: finalize the case (only if approval is granted)
     if (step.step_key === 'CLOSE_CASE') {
-      // Check if CEO approval exists and is approved
       const { data: closureApproval } = await supabase
         .from('ceo_approvals')
         .select('status')
         .eq('case_id', caseId)
         .eq('approval_type', 'CASE_CLOSURE')
         .maybeSingle();
-      
+
       if (closureApproval && (closureApproval as { status: string }).status === 'APPROVED') {
         await supabase
           .from('cases')
@@ -255,7 +299,6 @@ export function ClosureDetailClient({
       }
     }
 
-    // Update local state IMMEDIATELY for instant UI feedback
     setLocalSteps(
       sorted.map((s) => {
         if (s.id === step.id) return { ...s, state: 'DONE' };
@@ -264,8 +307,7 @@ export function ClosureDetailClient({
         return s;
       })
     );
-    
-    // Then reload from mock store to ensure persistence (async, doesn't block UI)
+
     setTimeout(async () => {
       const { data: runs } = await supabase
         .from('case_workflow_runs')
@@ -279,7 +321,7 @@ export function ClosureDetailClient({
           .select('id, step_key, state, order_index')
           .in('run_id', runIds)
           .order('order_index');
-        
+
         if (updatedSteps && updatedSteps.length > 0) {
           const raw = (updatedSteps as StepRow[]).sort((a, b) => a.order_index - b.order_index);
           const normalized = normalizeStepStates(raw);
@@ -311,8 +353,14 @@ export function ClosureDetailClient({
     }
   }
 
+  // Filter steps: hide PROFORMA if not Shlomo insurance (auto-skip it visually)
+  const visibleSteps = normalizedSteps.filter((s) => {
+    if (s.step_key === 'CLOSURE_PROFORMA_IF_NEEDED' && !isShlomoInsurance) return false;
+    return true;
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <Link href="/closure" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
         <span>←</span>
         <span>חזרה לסגירה</span>
@@ -355,24 +403,28 @@ export function ClosureDetailClient({
               </p>
             </div>
           )}
-          {insuranceType && (
-            <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <p className="text-xs text-gray-400 mb-1">סוג ביטוח</p>
-              <p className="text-sm font-semibold text-gray-700">
-                {INSURANCE_TYPE_LABELS[insuranceType] ?? insuranceType}
-              </p>
-            </div>
-          )}
-          {parts && (
-            <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <p className="text-xs text-gray-400 mb-1">סטטוס חלקים</p>
-              <p className={`text-sm font-semibold ${parts.color}`}>{parts.label}</p>
-            </div>
-          )}
           {claimNumber && (
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">מס׳ תביעה</p>
               <p className="text-sm font-semibold text-gray-700">{claimNumber}</p>
+            </div>
+          )}
+          {insuranceCompany && (
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+              <p className="text-xs text-gray-400 mb-1">חברת ביטוח</p>
+              <p className="text-sm font-semibold text-gray-700">{insuranceCompany}</p>
+            </div>
+          )}
+          {subClaimType && (
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-gray-400 mb-1">סוג תביעה</p>
+              <p className="text-sm font-semibold text-blue-700">{SUB_CLAIM_LABELS[subClaimType] ?? subClaimType}</p>
+            </div>
+          )}
+          {!subClaimType && claimType && (
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+              <p className="text-xs text-gray-400 mb-1">סוג תביעה</p>
+              <p className="text-sm font-semibold text-gray-700">{CLAIM_TYPE_LABELS[claimType] ?? claimType}</p>
             </div>
           )}
         </div>
@@ -389,7 +441,41 @@ export function ClosureDetailClient({
         )}
       </div>
 
-      {/* Closure checklist */}
+      {/* Dynamic checklist per claim type */}
+      {checklistItems.length > 0 && (
+        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>✅</span>
+            צ׳קליסט — {SUB_CLAIM_LABELS[subClaimType!] ?? subClaimType}
+          </h2>
+          <ul className="space-y-2">
+            {checklistItems.map((item, i) => (
+              <li key={i} className="flex items-center gap-3">
+                <label className="flex items-center gap-3 cursor-pointer group w-full">
+                  <input
+                    type="checkbox"
+                    checked={checkedItems[i] ?? false}
+                    onChange={() => {
+                      const next = [...checkedItems];
+                      next[i] = !next[i];
+                      setCheckedItems(next);
+                    }}
+                    className="w-5 h-5 rounded border-gray-300 text-brand-red focus:ring-brand-red cursor-pointer flex-shrink-0"
+                  />
+                  <span className={`text-sm transition-all ${checkedItems[i] ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-gray-900'}`}>
+                    {item}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 text-xs text-gray-400">
+            {checkedItems.filter(Boolean).length} / {checklistItems.length} פריטים הושלמו
+          </div>
+        </div>
+      )}
+
+      {/* Closure workflow steps */}
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -397,7 +483,7 @@ export function ClosureDetailClient({
             צ׳קליסט סגירה
           </h2>
           <span className="text-sm text-gray-500 font-medium">
-            {doneCount} / {normalizedSteps.length} הושלמו
+            {doneCount} / {visibleSteps.length} הושלמו
           </span>
         </div>
 
@@ -410,7 +496,7 @@ export function ClosureDetailClient({
         )}
 
         <ul className="space-y-3">
-          {normalizedSteps.map((s, idx) => {
+          {visibleSteps.map((s, idx) => {
             const isDone = s.state === 'DONE';
             const isActive = s.state === 'ACTIVE';
             const icon = STEP_ICONS[s.step_key] ?? '•';
@@ -470,41 +556,55 @@ export function ClosureDetailClient({
 
         {canClose && activeStep && !allDone && (
           <div className="mt-5 border-t pt-5">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                disabled={loading || (activeStep.step_key === 'CLOSE_CASE' && closeBlocked)}
-                onClick={handleCompleteStep}
-                className={`px-6 py-2.5 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
-                  activeStep.step_key === 'CLOSE_CASE'
-                    ? closeBlocked
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : 'bg-red-600 text-white hover:bg-red-700 hover:shadow-md'
-                    : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md'
-                }`}
-              >
-                {loading
-                  ? '⏳ מבצע...'
-                  : activeStep.step_key === 'CLOSE_CASE'
-                    ? closeBlocked
-                      ? '🔒 סגירה חסומה'
-                      : '🔒 סגור תיק'
-                    : '✓ סמן בוצע'}
-              </button>
+            {/* Skip proforma automatically if not Shlomo */}
+            {activeStep.step_key === 'CLOSURE_PROFORMA_IF_NEEDED' && !isShlomoInsurance ? (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={handleCompleteStep}
+                  className="px-6 py-2.5 rounded-xl text-sm font-semibold shadow-sm bg-gray-400 text-white hover:bg-gray-500 disabled:opacity-50 transition-all"
+                >
+                  {loading ? '⏳ מבצע...' : 'דלג על פרופורמה (לא רלוונטי)'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  disabled={loading || (activeStep.step_key === 'CLOSE_CASE' && closeBlocked)}
+                  onClick={handleCompleteStep}
+                  className={`px-6 py-2.5 rounded-xl text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+                    activeStep.step_key === 'CLOSE_CASE'
+                      ? closeBlocked
+                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                        : 'bg-red-600 text-white hover:bg-red-700 hover:shadow-md'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md'
+                  }`}
+                >
+                  {loading
+                    ? '⏳ מבצע...'
+                    : activeStep.step_key === 'CLOSE_CASE'
+                      ? closeBlocked
+                        ? '🔒 סגירה חסומה'
+                        : '🔒 סגור תיק'
+                      : '✓ סמן בוצע'}
+                </button>
 
-              {activeStep.step_key === 'CLOSE_CASE' && closeBlocked && (
-                <p className="text-sm text-amber-700">
-                  {blockedByExtras && 'יש תוספות בטיפול. '}
-                  {effectiveClosureApproval !== 'APPROVED' && 'חסר אישור CEO לסגירת תיק.'}
-                </p>
-              )}
-              {activeStep && activeStep.step_key !== 'CLOSE_CASE' && closeBlocked && (
-                <p className="text-sm text-amber-700">
-                  {blockedByExtras && 'יש תוספות בטיפול. '}
-                  {blockedByApprovals && 'חסר אישור CEO לאומדן/גלגלים.'}
-                </p>
-              )}
-            </div>
+                {activeStep.step_key === 'CLOSE_CASE' && closeBlocked && (
+                  <p className="text-sm text-amber-700">
+                    {blockedByExtras && 'יש תוספות בטיפול. '}
+                    {effectiveClosureApproval !== 'APPROVED' && 'חסר אישור CEO לסגירת תיק.'}
+                  </p>
+                )}
+                {activeStep && activeStep.step_key !== 'CLOSE_CASE' && closeBlocked && (
+                  <p className="text-sm text-amber-700">
+                    {blockedByExtras && 'יש תוספות בטיפול. '}
+                    {blockedByApprovals && 'חסר אישור CEO לאומדן/גלגלים.'}
+                  </p>
+                )}
+              </div>
+            )}
             {error && (
               <p className="text-sm text-red-600 mt-3 flex items-center gap-1">
                 <span>⚠️</span> {error}

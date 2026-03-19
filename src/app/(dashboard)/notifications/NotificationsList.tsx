@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { markRead, markAllRead } from '@/app/actions/notifications';
 
 interface NotificationRow {
@@ -9,6 +10,7 @@ interface NotificationRow {
   body: string | null;
   read: boolean;
   created_at: string;
+  case_id: string | null;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -17,6 +19,13 @@ const TYPE_ICON: Record<string, string> = {
   WORKFLOW: '📋',
   CASE_CLOSED: '🏁',
   PARTS_UPDATE: '📦',
+  BLOCKED_ACTION: '⚠️',
+  CEO_REJECTED: '❌',
+  EXTRA_CREATED: '➕',
+  EXTRA_STATUS_CHANGED: '🔄',
+  APPROVAL_NEEDED: '📋',
+  PAINTER_READY_FOR_RELEASE: '✅',
+  OTHER: '🔔',
 };
 
 function getTypeIcon(type: string | null): string {
@@ -31,11 +40,13 @@ function formatDate(dateStr: string): string {
   const diffHour = Math.floor(diffMs / 3600000);
   const diffDay = Math.floor(diffMs / 86400000);
 
+  const timeStr = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
   if (diffMin < 1) return 'עכשיו';
-  if (diffMin < 60) return `לפני ${diffMin} דקות`;
-  if (diffHour < 24) return `לפני ${diffHour} שעות`;
-  if (diffDay < 7) return `לפני ${diffDay} ימים`;
-  return date.toLocaleDateString('he-IL');
+  if (diffMin < 60) return `לפני ${diffMin} דקות — ${timeStr}`;
+  if (diffHour < 24) return `לפני ${diffHour} שעות — ${timeStr}`;
+  if (diffDay < 7) return `${date.toLocaleDateString('he-IL')} ${timeStr}`;
+  return `${date.toLocaleDateString('he-IL')} ${timeStr}`;
 }
 
 export function NotificationsList({
@@ -45,6 +56,8 @@ export function NotificationsList({
   notifications: NotificationRow[];
   unreadCount: number;
 }) {
+  const router = useRouter();
+
   if (notifications.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -55,6 +68,11 @@ export function NotificationsList({
     );
   }
 
+  async function handleClick(n: NotificationRow) {
+    if (!n.read) await markRead(n.id);
+    if (n.case_id) router.push(`/cases/${n.case_id}`);
+  }
+
   return (
     <div className="space-y-2">
       {unreadCount > 0 && (
@@ -62,7 +80,7 @@ export function NotificationsList({
           <button
             type="button"
             onClick={() => markAllRead()}
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 transition-colors"
+            className="text-sm text-brand-red hover:text-brand-red-dark font-medium flex items-center gap-1 transition-colors"
           >
             ✓ סמן הכל כנקרא
           </button>
@@ -71,8 +89,11 @@ export function NotificationsList({
       {notifications.map((n) => (
         <div
           key={n.id}
+          onClick={() => void handleClick(n)}
           className={`bg-white rounded-xl border shadow-sm p-4 flex gap-3 transition-all hover:shadow-md ${
-            !n.read ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200'
+            n.case_id ? 'cursor-pointer hover:border-brand-red/30' : ''
+          } ${
+            !n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200'
           }`}
         >
           <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
@@ -87,16 +108,21 @@ export function NotificationsList({
             {n.body && (
               <p className="text-sm text-gray-500 mt-0.5 leading-snug">{n.body}</p>
             )}
-            <p className="text-xs text-gray-400 mt-1.5">{formatDate(n.created_at)}</p>
+            <div className="flex items-center gap-2 mt-1.5">
+              <p className="text-xs text-gray-400">{formatDate(n.created_at)}</p>
+              {n.case_id && (
+                <span className="text-xs text-brand-red font-medium">← לחץ לפתיחת תיק</span>
+              )}
+            </div>
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
             {!n.read && (
               <>
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                <span className="w-2.5 h-2.5 rounded-full bg-brand-red" />
                 <button
                   type="button"
-                  onClick={() => markRead(n.id)}
-                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors whitespace-nowrap"
+                  onClick={(e) => { e.stopPropagation(); void markRead(n.id); }}
+                  className="text-xs text-brand-red hover:text-brand-red-dark font-medium transition-colors whitespace-nowrap"
                 >
                   סמן נקרא
                 </button>

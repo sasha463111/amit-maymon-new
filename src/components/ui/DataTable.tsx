@@ -72,7 +72,7 @@ export function DataTable<T extends object>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                  className="px-5 py-3.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"
                 >
                   <button
                     type="button"
@@ -117,7 +117,7 @@ export function DataTable<T extends object>({
                   }
                 >
                   {columns.map((col) => (
-                    <td key={col.key} className="px-5 py-3.5 text-sm text-gray-700">
+                    <td key={col.key} className="px-5 py-4 text-sm text-gray-700">
                       {col.render
                         ? col.render(row as T)
                         : String(rowRecord(row)[col.key] ?? '')}

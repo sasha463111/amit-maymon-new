@@ -11,7 +11,7 @@ export default async function NotificationsPage() {
 
   const { data: notificationsData } = await supabase
     .from('notifications')
-    .select('id, type, title, body, read, created_at')
+    .select('id, type, title, body, read, created_at, case_id')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -23,6 +23,7 @@ export default async function NotificationsPage() {
     body: string | null;
     read: boolean;
     created_at: string;
+    case_id: string | null;
   }[];
   const unreadCount = rows.filter((n) => !n.read).length;
 

@@ -29,7 +29,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('id, case_key, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, cars(license_plate, make, model), branches(name)')
+    .select('id, case_key, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, cars(license_plate, make, model), branches(name)')
     .eq('id', id)
     .single();
 
@@ -122,6 +122,9 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     parts_status: string | null;
     insurance_type: string | null;
     claim_number: string | null;
+    claim_type: string | null;
+    sub_claim_type: string | null;
+    insurance_company: string | null;
   };
 
   return (
@@ -133,9 +136,11 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
       carModel={car?.model ?? null}
       branchName={branch?.name ?? '—'}
       openedAt={row.opened_at}
-      partsStatus={row.parts_status}
       insuranceType={row.insurance_type}
       claimNumber={row.claim_number}
+      claimType={row.claim_type}
+      subClaimType={row.sub_claim_type}
+      insuranceCompany={row.insurance_company}
       steps={steps}
       blockedByExtras={blockedByExtras}
       blockedByApprovals={blockedByApprovals}

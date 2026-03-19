@@ -7,8 +7,8 @@ import { completeActiveStep, returnToEstimate, deleteCase } from '@/app/actions/
 import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
-import type { PartsStatus } from '@/types/database';
-import { PARTS_STATUS_LABELS } from '@/types/database';
+import type { PartsStatus, PainterStatus } from '@/types/database';
+import { PARTS_STATUS_LABELS, PAINTER_STATUS_LABELS } from '@/types/database';
 
 const DEFAULT_STEP_LABELS: Record<string, string> = {
   OPEN_CASE: 'פתיחת תיק',
@@ -20,7 +20,7 @@ const DEFAULT_STEP_LABELS: Record<string, string> = {
   WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
   ENTER_WORK: 'כניסה לעבודה',
   ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
-  PARTS_DISCOUNTS: 'הנחות חלקים',
+  PARTS_DISCOUNTS: 'הנחות חלקים ועבודות',
   QUALITY_CONTROL: 'בקרת איכות',
   WASH: 'שטיפה',
   SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
@@ -77,6 +77,12 @@ interface CaseDetailClientProps {
   role: string | null;
   userNames: Record<string, string>;
   stepTemplates: StepTemplate[];
+  notes: string | null;
+  partsOrdered: boolean | null;
+  partsArrived: boolean | null;
+  qcAssignee: string | null;
+  estimateLink: string | null;
+  painterStatus: string | null;
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -154,6 +160,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     role,
     userNames,
     stepTemplates,
+    notes: initialNotes,
+    partsOrdered: initialPartsOrdered,
+    partsArrived: initialPartsArrived,
+    qcAssignee: initialQcAssignee,
+    estimateLink: initialEstimateLink,
+    painterStatus: initialPainterStatus,
   } = props;
 
   const router = useRouter();
@@ -245,6 +257,56 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       setFieldSaveError(res.error);
       setTimeout(() => setFieldSaveError(null), 5000);
     }
+  }
+
+  // New fields state (migration 013)
+  const [notes, setNotes] = useState(initialNotes ?? '');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [partsOrdered, setPartsOrdered] = useState<boolean | null>(initialPartsOrdered ?? null);
+  const [partsArrived, setPartsArrived] = useState<boolean | null>(initialPartsArrived ?? null);
+  const [qcAssignee, setQcAssignee] = useState(initialQcAssignee ?? '');
+  const [estimateLink, setEstimateLink] = useState(initialEstimateLink ?? '');
+  const [estimateLinkDirty, setEstimateLinkDirty] = useState(false);
+  const [painterStatus, setPainterStatus] = useState<PainterStatus | ''>(
+    (initialPainterStatus as PainterStatus | null) ?? ''
+  );
+
+  async function saveNotes() {
+    if (!notesDirty) return;
+    setNotesSaving(true);
+    setNotesDirty(false);
+    await updateCaseDetails(caseId, { notes: notes || null });
+    setNotesSaving(false);
+  }
+
+  async function saveEstimateLink() {
+    if (!estimateLinkDirty) return;
+    setEstimateLinkDirty(false);
+    await updateCaseDetails(caseId, { estimate_link: estimateLink || null });
+  }
+
+  async function togglePartsOrdered() {
+    const next = !partsOrdered;
+    setPartsOrdered(next);
+    await updateCaseDetails(caseId, { parts_ordered: next });
+  }
+
+  async function togglePartsArrived() {
+    const next = !partsArrived;
+    setPartsArrived(next);
+    await updateCaseDetails(caseId, { parts_arrived: next });
+  }
+
+  async function saveQcAssignee(val: string) {
+    setQcAssignee(val);
+    await updateCaseDetails(caseId, { qc_assignee: val || null });
+  }
+
+  async function savePainterStatus(val: PainterStatus | '') {
+    setPainterStatus(val);
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    await supabase.from('cases').update({ painter_status: val || null } as never).eq('id', caseId);
   }
 
   const [partsValue, setPartsValue] = useState<PartsStatus>(partsStatus);
@@ -713,6 +775,50 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
             )}
           </div>
         )}
+
+        {/* ── סטטוס פחח ── */}
+        {(canEdit || role === 'PAINTER') && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">סטטוס פחח</label>
+            <select
+              value={painterStatus}
+              onChange={(e) => void savePainterStatus(e.target.value as PainterStatus | '')}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand-red outline-none"
+            >
+              <option value="">— לא הוגדר —</option>
+              {(Object.entries(PAINTER_STATUS_LABELS) as [PainterStatus, string][]).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+            {painterStatus === 'READY_FOR_RELEASE' && (
+              <span className="mr-3 text-sm font-medium text-green-700">✓ מוכן לשחרור</span>
+            )}
+          </div>
+        )}
+
+        {/* ── הערות ── */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            הערות
+            {notesSaving && <span className="mr-2 text-xs font-normal text-gray-400">שומר...</span>}
+            {notes && !notesDirty && !notesSaving && (
+              <span className="mr-2 text-xs font-normal text-gray-400">✓</span>
+            )}
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
+            onBlur={() => void saveNotes()}
+            rows={3}
+            placeholder={canEditDetails ? 'הוסף הערה...' : 'אין הערות'}
+            readOnly={!canEditDetails}
+            className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none outline-none transition-all ${
+              canEditDetails
+                ? 'focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 bg-gray-50 focus:bg-white'
+                : 'bg-gray-50 text-gray-600 cursor-default'
+            }`}
+          />
+        </div>
       </div>
 
       {/* ── צ'קליסט עבודה ── */}
@@ -834,6 +940,75 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         <span>⚠️</span>
                         <span>{warningMessage}</span>
                       </p>
+                    </div>
+                  )}
+
+                  {/* ENTER_WORK sub-status */}
+                  {s.step_key === 'ENTER_WORK' && canEdit && (
+                    <div className="mr-11 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                      <p className="text-xs font-semibold text-blue-700 mb-1">סטטוס חלקים</p>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={partsOrdered === true}
+                          onChange={() => void togglePartsOrdered()}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                        />
+                        הוזמן חלקים
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={partsArrived === true}
+                          onChange={() => void togglePartsArrived()}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                        />
+                        הגיע חלקים
+                      </label>
+                    </div>
+                  )}
+
+                  {/* PREP_ESTIMATE — estimate link/upload */}
+                  {s.step_key === 'PREP_ESTIMATE' && canEdit && (
+                    <div className="mr-11 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-xs font-semibold text-gray-600 mb-2">קישור / קובץ אומדן (אופציונלי)</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={estimateLink}
+                          onChange={(e) => { setEstimateLink(e.target.value); setEstimateLinkDirty(true); }}
+                          onBlur={() => void saveEstimateLink()}
+                          placeholder="https://..."
+                          dir="ltr"
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none"
+                        />
+                        {estimateLink && (
+                          <a href={estimateLink} target="_blank" rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors">
+                            פתח
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QUALITY_CONTROL — assignee */}
+                  {s.step_key === 'QUALITY_CONTROL' && canEdit && (
+                    <div className="mr-11 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-xs font-semibold text-gray-600 mb-2">מבצע בקרת איכות</p>
+                      <select
+                        value={qcAssignee}
+                        onChange={(e) => void saveQcAssignee(e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-brand-red outline-none"
+                      >
+                        <option value="">— בחר —</option>
+                        <option value="נסיה">נסיה</option>
+                        <option value="ערן">ערן</option>
+                        <option value="עמית">עמית</option>
+                      </select>
+                      {qcAssignee && (
+                        <span className="mr-3 text-sm text-gray-600">✓ {qcAssignee}</span>
+                      )}
                     </div>
                   )}
 

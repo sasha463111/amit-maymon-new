@@ -4,12 +4,28 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
 import { createClient } from '@/lib/supabase/client';
-import type { InsuranceType, ClaimType, SubClaimType } from '@/types/database';
+import { Plus, X } from 'lucide-react';
+import type { ClaimType, SubClaimType } from '@/types/database';
 
 interface Branch {
   id: string;
   name: string;
 }
+
+const INSURANCE_COMPANIES = [
+  'מנורה מבטחים',
+  'הראל ביטוח',
+  'כלל ביטוח',
+  'הפניקס',
+  'איילון',
+  'מגדל ביטוח',
+  'שלמה רשת מוסכים',
+  'ביטוח ישיר',
+  'AIG',
+  'אנקור',
+  'הכשרה ביטוח',
+  'אחר',
+];
 
 export function CreateCaseButton({
   branchId,
@@ -33,12 +49,16 @@ export function CreateCaseButton({
     appraiser_name: '',
     event_date: '',
     claim_number: '',
-    insurance_type: '' as InsuranceType | '',
     claim_type: '' as ClaimType | '',
     sub_claim_type: '' as SubClaimType | '',
     branch_id: branchId ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
+
+  // Calculate vehicle age from year
+  const vehicleAge = form.vehicle_year
+    ? new Date().getFullYear() - parseInt(form.vehicle_year)
+    : null;
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -57,14 +77,19 @@ export function CreateCaseButton({
     }
   }
 
+  function handleClose() {
+    setOpen(false);
+    setError(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    e.stopPropagation();
     setError(null);
     setLoading(true);
     const res = await createCase({
       plate_number: form.plate_number.trim(),
       claim_number: form.claim_number.trim() || null,
-      insurance_type: (form.insurance_type as InsuranceType) || null,
       claim_type: (form.claim_type as ClaimType) || null,
       sub_claim_type: (form.sub_claim_type as SubClaimType) || null,
       branch_id: form.branch_id,
@@ -94,6 +119,7 @@ export function CreateCaseButton({
     }
 
     setOpen(false);
+    setError(null);
     setForm({
       plate_number: '',
       vehicle_type: '',
@@ -104,7 +130,6 @@ export function CreateCaseButton({
       appraiser_name: '',
       event_date: '',
       claim_number: '',
-      insurance_type: '',
       claim_type: '',
       sub_claim_type: '',
       branch_id: branchId ?? '',
@@ -114,164 +139,182 @@ export function CreateCaseButton({
     router.refresh();
   }
 
+  const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white';
+  const labelCls = 'block text-sm font-medium text-gray-700 mb-1.5';
+
   return (
     <>
       <button
         type="button"
         onClick={handleOpen}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+        className="flex items-center gap-2 px-4 py-2.5 bg-brand-red hover:bg-brand-red-dark text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
       >
+        <Plus size={16} />
         פתיחת תיק
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
-          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full p-6 overflow-y-auto max-h-[90vh]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold">פתיחת תיק חדש</h2>
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          dir="rtl"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-y-auto max-h-[92vh]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-800">פתיחת תיק חדש</h2>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                onClick={handleClose}
+                className="text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* ── פרטי רכב ── */}
-              <div className="border-t pt-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">פרטי רכב</p>
-                <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי רכב</p>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">מספר רישוי *</label>
+                    <label className={labelCls}>מספר רישוי *</label>
                     <input
                       type="text"
                       required
                       value={form.plate_number}
                       onChange={(e) => set('plate_number', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       dir="ltr"
                       placeholder="12-345-67"
+                      autoComplete="off"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">סוג רכב</label>
+                    <label className={labelCls}>סוג רכב</label>
                     <input
                       type="text"
                       value={form.vehicle_type}
                       onChange={(e) => set('vehicle_type', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       placeholder="יונדאי i20"
+                      autoComplete="off"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">שנת הרכב</label>
+                    <label className={labelCls}>
+                      שנת הרכב
+                      {vehicleAge !== null && (
+                        <span className={`mr-2 text-xs font-normal px-2 py-0.5 rounded-full ${
+                          vehicleAge > 2 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          גיל: {vehicleAge} שנים
+                          {vehicleAge > 2 ? ' — נדרש בדיקת גלגלים' : ''}
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min={1990}
                       max={new Date().getFullYear() + 1}
                       value={form.vehicle_year}
                       onChange={(e) => set('vehicle_year', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       dir="ltr"
                       placeholder="2022"
+                      autoComplete="off"
                     />
                   </div>
                 </div>
               </div>
 
               {/* ── פרטי לקוח ── */}
-              <div className="border-t pt-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">פרטי לקוח</p>
-                <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי לקוח</p>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">שם לקוח</label>
+                    <label className={labelCls}>שם לקוח</label>
                     <input
                       type="text"
                       value={form.customer_name}
                       onChange={(e) => set('customer_name', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       placeholder="ישראל ישראלי"
+                      autoComplete="off"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">טלפון</label>
+                    <label className={labelCls}>טלפון</label>
                     <input
                       type="tel"
                       value={form.phone}
                       onChange={(e) => set('phone', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       dir="ltr"
                       placeholder="050-1234567"
+                      autoComplete="off"
                     />
                   </div>
                 </div>
               </div>
 
               {/* ── פרטי ביטוח ── */}
-              <div className="border-t pt-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">פרטי ביטוח ותביעה</p>
-                <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי ביטוח ותביעה</p>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1">חברת ביטוח</label>
-                    <input
-                      type="text"
+                    <label className={labelCls}>חברת ביטוח</label>
+                    <select
                       value={form.insurance_company}
                       onChange={(e) => set('insurance_company', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
-                      placeholder="מנורה / הראל / כלל..."
-                    />
+                      className={inputCls}
+                    >
+                      <option value="">— בחר חברה —</option>
+                      {INSURANCE_COMPANIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">שמאי</label>
+                    <label className={labelCls}>שמאי</label>
                     <input
                       type="text"
                       value={form.appraiser_name}
                       onChange={(e) => set('appraiser_name', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       placeholder="שם השמאי"
+                      autoComplete="off"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">תאריך אירוע</label>
+                    <label className={labelCls}>תאריך אירוע</label>
                     <input
                       type="date"
                       value={form.event_date}
                       onChange={(e) => set('event_date', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">מספר תביעה</label>
+                    <label className={labelCls}>מספר תביעה</label>
                     <input
                       type="text"
                       value={form.claim_number}
                       onChange={(e) => set('claim_number', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                       dir="ltr"
+                      autoComplete="off"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">סוג ביטוח</label>
-                    <select
-                      value={form.insurance_type}
-                      onChange={(e) => set('insurance_type', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
-                    >
-                      <option value="">—</option>
-                      <option value="COMPREHENSIVE">מקיף</option>
-                      <option value="THIRD_PARTY">צד ג׳</option>
-                      <option value="PRIVATE">פרטי</option>
-                      <option value="OTHER">אחר</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">סוג תביעה</label>
+                    <label className={labelCls}>סוג תביעה</label>
                     <select
                       value={form.claim_type}
                       onChange={(e) => set('claim_type', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                     >
                       <option value="">—</option>
                       <option value="PRIVATE">פרטי</option>
@@ -279,12 +322,12 @@ export function CreateCaseButton({
                       <option value="FLOOD">הצפה</option>
                     </select>
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium mb-1">תת סוג תביעה</label>
+                  <div>
+                    <label className={labelCls}>תת סוג תביעה</label>
                     <select
                       value={form.sub_claim_type}
                       onChange={(e) => set('sub_claim_type', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                     >
                       <option value="">—</option>
                       <option value="POLICY">פוליסה</option>
@@ -300,58 +343,70 @@ export function CreateCaseButton({
 
               {/* ── סניף (CEO בלבד) ── */}
               {isCeo && (
-                <div className="border-t pt-3">
-                  <label className="block text-sm font-medium mb-1">סניף</label>
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">סניף</p>
                   {branches.length > 0 ? (
                     <select
                       value={form.branch_id}
                       onChange={(e) => set('branch_id', e.target.value)}
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={inputCls}
                     >
                       {branches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
+                        <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
                     </select>
                   ) : (
-                    <div className="w-full border rounded px-3 py-2 text-sm text-gray-400">טוען סניפים...</div>
+                    <div className={`${inputCls} text-gray-400`}>טוען סניפים...</div>
                   )}
                 </div>
               )}
 
               {/* ── קבצים ── */}
-              <div className="border-t pt-3">
-                <label className="block text-sm font-medium mb-1">קבצים מצורפים (אופציונלי)</label>
+              <div>
+                <label className={labelCls}>קבצים מצורפים (אופציונלי)</label>
                 <input
                   type="file"
                   multiple
                   onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                  className="w-full border rounded px-3 py-2 text-sm"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-gray-100 file:text-gray-700 file:text-sm"
                 />
                 {files.length > 0 && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    {files.length} קבצים נבחרו: {files.map((f) => f.name).join(', ')}
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    {files.length} קבצים: {files.map((f) => f.name).join(', ')}
                   </p>
                 )}
               </div>
 
-              {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded">⚠️ {error}</p>}
+              {error && (
+                <div className="text-sm text-red-700 bg-red-50 px-4 py-3 rounded-lg border border-red-100 flex items-center gap-2">
+                  <X size={14} className="flex-shrink-0" />
+                  {error}
+                </div>
+              )}
 
-              <div className="flex gap-2 pt-2 border-t">
+              {/* ── כפתורים ── */}
+              <div className="flex gap-3 pt-2 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
-                  className="px-4 py-2 border rounded text-sm"
+                  onClick={handleClose}
+                  className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   ביטול
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+                  className="flex-1 px-5 py-2.5 bg-brand-red hover:bg-brand-red-dark text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors shadow-sm"
                 >
-                  {loading ? 'יוצר...' : 'צור תיק'}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      יוצר תיק...
+                    </span>
+                  ) : 'צור תיק'}
                 </button>
               </div>
             </form>
