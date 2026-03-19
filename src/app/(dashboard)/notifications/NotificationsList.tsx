@@ -11,6 +11,7 @@ interface NotificationRow {
   read: boolean;
   created_at: string;
   case_id: string | null;
+  license_plate: string | null;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -49,6 +50,57 @@ function formatDate(dateStr: string): string {
   return `${date.toLocaleDateString('he-IL')} ${timeStr}`;
 }
 
+function NotificationItem({
+  n,
+  onNavigate,
+}: {
+  n: NotificationRow;
+  onNavigate: (n: NotificationRow) => void;
+}) {
+  return (
+    <div
+      onClick={() => onNavigate(n)}
+      className={`rounded-xl border shadow-sm p-4 flex gap-3 transition-all hover:shadow-md ${
+        n.case_id ? 'cursor-pointer hover:border-brand-red/30' : ''
+      } ${!n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'}`}
+    >
+      <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
+      <div className="flex-1 min-w-0">
+        <p
+          className={`text-sm leading-snug ${
+            !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
+          }`}
+        >
+          {n.title}
+        </p>
+        {n.body && (
+          <p className="text-sm text-gray-500 mt-0.5 leading-snug">{n.body}</p>
+        )}
+        <div className="flex items-center gap-2 mt-1.5">
+          <p className="text-xs text-gray-400">{formatDate(n.created_at)}</p>
+          {n.case_id && (
+            <span className="text-xs text-brand-red font-medium">← לחץ לפתיחת תיק</span>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-2 shrink-0">
+        {!n.read && (
+          <>
+            <span className="w-2.5 h-2.5 rounded-full bg-brand-red" />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); void markRead(n.id); }}
+              className="text-xs text-brand-red hover:text-brand-red-dark font-medium transition-colors whitespace-nowrap"
+            >
+              סמן נקרא
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function NotificationsList({
   notifications,
   unreadCount,
@@ -73,10 +125,32 @@ export function NotificationsList({
     if (n.case_id) router.push(`/cases/${n.case_id}`);
   }
 
+  // Group by case_id — notifications without a case go last under "כללי"
+  const groups = new Map<string, { plate: string | null; items: NotificationRow[] }>();
+  const ungrouped: NotificationRow[] = [];
+
+  for (const n of notifications) {
+    if (n.case_id) {
+      if (!groups.has(n.case_id)) {
+        groups.set(n.case_id, { plate: n.license_plate, items: [] });
+      }
+      groups.get(n.case_id)!.items.push(n);
+    } else {
+      ungrouped.push(n);
+    }
+  }
+
+  // Sort groups by most recent notification
+  const sortedGroups = Array.from(groups.entries()).sort(([, a], [, b]) => {
+    const latestA = a.items[0]?.created_at ?? '';
+    const latestB = b.items[0]?.created_at ?? '';
+    return latestB.localeCompare(latestA);
+  });
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-4">
       {unreadCount > 0 && (
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={() => markAllRead()}
@@ -86,51 +160,58 @@ export function NotificationsList({
           </button>
         </div>
       )}
-      {notifications.map((n) => (
-        <div
-          key={n.id}
-          onClick={() => void handleClick(n)}
-          className={`bg-white rounded-xl border shadow-sm p-4 flex gap-3 transition-all hover:shadow-md ${
-            n.case_id ? 'cursor-pointer hover:border-brand-red/30' : ''
-          } ${
-            !n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200'
-          }`}
-        >
-          <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
-          <div className="flex-1 min-w-0">
-            <p
-              className={`text-sm leading-snug ${
-                !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
+
+      {/* Groups per vehicle */}
+      {sortedGroups.map(([caseId, group]) => {
+        const hasUnread = group.items.some((n) => !n.read);
+        return (
+          <div key={caseId} className="border border-gray-200 rounded-xl overflow-hidden">
+            {/* Group header */}
+            <div
+              className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${
+                hasUnread ? 'bg-red-50/30 border-b border-brand-red/10' : 'bg-gray-50 border-b border-gray-100'
               }`}
+              onClick={() => router.push(`/cases/${caseId}`)}
             >
-              {n.title}
-            </p>
-            {n.body && (
-              <p className="text-sm text-gray-500 mt-0.5 leading-snug">{n.body}</p>
-            )}
-            <div className="flex items-center gap-2 mt-1.5">
-              <p className="text-xs text-gray-400">{formatDate(n.created_at)}</p>
-              {n.case_id && (
-                <span className="text-xs text-brand-red font-medium">← לחץ לפתיחת תיק</span>
+              <span className="text-lg">🚗</span>
+              <span className="font-bold text-gray-800 text-sm">
+                {group.plate ?? 'רכב לא ידוע'}
+              </span>
+              <span className="mr-auto text-xs text-gray-400">
+                {group.items.length} התראות
+              </span>
+              {hasUnread && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-brand-red text-white text-[10px] font-bold">
+                  {group.items.filter((n) => !n.read).length} חדשות
+                </span>
               )}
             </div>
+
+            {/* Notifications in this group */}
+            <div className="divide-y divide-gray-100">
+              {group.items.map((n) => (
+                <NotificationItem key={n.id} n={n} onNavigate={handleClick} />
+              ))}
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            {!n.read && (
-              <>
-                <span className="w-2.5 h-2.5 rounded-full bg-brand-red" />
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); void markRead(n.id); }}
-                  className="text-xs text-brand-red hover:text-brand-red-dark font-medium transition-colors whitespace-nowrap"
-                >
-                  סמן נקרא
-                </button>
-              </>
-            )}
+        );
+      })}
+
+      {/* Ungrouped notifications */}
+      {ungrouped.length > 0 && (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+            <span className="text-lg">🔔</span>
+            <span className="font-bold text-gray-600 text-sm">כללי</span>
+            <span className="mr-auto text-xs text-gray-400">{ungrouped.length} התראות</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {ungrouped.map((n) => (
+              <NotificationItem key={n.id} n={n} onNavigate={handleClick} />
+            ))}
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }

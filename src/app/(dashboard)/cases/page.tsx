@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { PartsStatus } from '@/types/database';
-import { CasesTable } from './CasesTable';
+import { CasesViewWrapper } from './CasesViewWrapper';
 import { CreateCaseButton } from './CreateCaseButton';
 import { SystemMessageBanner } from './SystemMessageBanner';
 import { LayoutGrid, Wrench, Package, Plane, CheckCircle } from 'lucide-react';
@@ -194,6 +194,7 @@ async function CasesDataSection({
   const ENTER_WORK_ORDER_INDEX = 6;
 
   const caseIdToNextStep = new Map<string, string>();
+  const caseIdToNextStepKey = new Map<string, string>();
   const caseIdToActiveStepIndex = new Map<string, number>();
 
   if (stepsData && runIds.length > 0) {
@@ -216,6 +217,7 @@ async function CasesDataSection({
         const stepKey = (activeStep as { step_key: string }).step_key;
         const stepOrderIndex = (activeStep as { order_index: number }).order_index;
         caseIdToNextStep.set(caseId, STEP_LABELS[stepKey] || stepKey);
+        caseIdToNextStepKey.set(caseId, stepKey);
         caseIdToActiveStepIndex.set(caseId, stepOrderIndex);
       }
     }
@@ -244,6 +246,7 @@ async function CasesDataSection({
     }
     return {
       id: row.id,
+      case_key: row.case_key ?? null,
       plate,
       claim: row.claim_number ?? '—',
       opened_at: row.opened_at,
@@ -251,6 +254,7 @@ async function CasesDataSection({
       parts_status: row.parts_status as PartsStatus,
       general_status: row.general_status,
       nextStep: caseIdToNextStep.get(row.id) || null,
+      activeStepKey: caseIdToNextStepKey.get(row.id) || null,
       notes: row.notes ?? null,
       painter_status: row.painter_status ?? null,
       branch_id: row.branch_id,
@@ -300,16 +304,14 @@ async function CasesDataSection({
         ))}
       </div>
 
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
-        <CasesTable
-          cases={casesWithMeta.map((c) => ({
-            ...c,
-            hasExtrasInTreatment: caseIdsWithExtras.has(c.id),
-            approvalBlocked: caseIdsApprovalBlocked.has(c.id),
-          }))}
-          role={role}
-        />
-      </div>
+      <CasesViewWrapper
+        cases={casesWithMeta.map((c) => ({
+          ...c,
+          hasExtrasInTreatment: caseIdsWithExtras.has(c.id),
+          approvalBlocked: caseIdsApprovalBlocked.has(c.id),
+        }))}
+        role={role}
+      />
     </>
   );
 }

@@ -25,6 +25,34 @@ export default async function NotificationsPage() {
     created_at: string;
     case_id: string | null;
   }[];
+
+  // Fetch license plates for all case_ids in parallel
+  const seenCaseIds = new Set<string>();
+  const caseIds: string[] = [];
+  for (const n of rows) {
+    if (n.case_id && !seenCaseIds.has(n.case_id)) {
+      seenCaseIds.add(n.case_id);
+      caseIds.push(n.case_id);
+    }
+  }
+  const plateMap = new Map<string, string>();
+
+  if (caseIds.length > 0) {
+    const { data: caseRows } = await supabase
+      .from('cases')
+      .select('id, cars(license_plate)')
+      .in('id', caseIds);
+    for (const c of (caseRows ?? []) as { id: string; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }[]) {
+      const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+      if (car?.license_plate) plateMap.set(c.id, car.license_plate);
+    }
+  }
+
+  const notificationsWithPlate = rows.map((n) => ({
+    ...n,
+    license_plate: n.case_id ? (plateMap.get(n.case_id) ?? null) : null,
+  }));
+
   const unreadCount = rows.filter((n) => !n.read).length;
 
   return (
@@ -51,7 +79,7 @@ export default async function NotificationsPage() {
           )}
         </div>
       </div>
-      <NotificationsList notifications={rows} unreadCount={unreadCount} />
+      <NotificationsList notifications={notificationsWithPlate} unreadCount={unreadCount} />
     </div>
   );
 }

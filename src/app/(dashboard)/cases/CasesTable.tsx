@@ -7,6 +7,7 @@ import type { PartsStatus } from '@/types/database';
 
 interface CaseRow {
   id: string;
+  case_key?: string | null;
   plate: string;
   claim: string;
   opened_at: string | null;
@@ -16,7 +17,9 @@ interface CaseRow {
   hasExtrasInTreatment: boolean;
   approvalBlocked: boolean;
   nextStep: string | null;
+  activeStepKey?: string | null;
   notes: string | null;
+  painter_status?: string | null;
 }
 
 export function CasesTable({
