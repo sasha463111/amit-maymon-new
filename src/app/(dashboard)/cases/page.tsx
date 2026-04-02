@@ -120,7 +120,7 @@ async function CasesDataSection({
       notes,
       painter_status,
       customer_name,
-      cars!inner(license_plate, first_registration_date),
+      cars!inner(license_plate, first_registration_date, year),
       branch_id
     `
     )
@@ -236,7 +236,7 @@ async function CasesDataSection({
       painter_status: string | null;
       customer_name: string | null;
       branch_id: string;
-      cars: { license_plate: string | null; first_registration_date: string | null } | null;
+      cars: { license_plate: string | null; first_registration_date: string | null; year: number | null } | null;
     };
     const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
     const plate = car?.license_plate ?? '—';
@@ -245,6 +245,9 @@ async function CasesDataSection({
     if (firstReg) {
       const years = (Date.now() - new Date(firstReg).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
       age = years < 1 ? '<1' : Math.floor(years).toString();
+    } else if (car?.year) {
+      const years = new Date().getFullYear() - car.year;
+      age = years < 1 ? '<1' : String(years);
     }
     return {
       id: row.id,

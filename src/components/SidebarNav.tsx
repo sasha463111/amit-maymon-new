@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus } from 'lucide-react';
+import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus, Users } from 'lucide-react';
 
 const SIDEBAR_ICONS: Record<string, React.ElementType> = {
   '/cases': FolderOpen,
@@ -11,6 +11,7 @@ const SIDEBAR_ICONS: Record<string, React.ElementType> = {
   '/extras': Paintbrush,
   '/extras/new': Plus,
   '/extras/mine': Paintbrush,
+  '/painters': Users,
   '/notifications': Bell,
   '/settings': Settings,
 };

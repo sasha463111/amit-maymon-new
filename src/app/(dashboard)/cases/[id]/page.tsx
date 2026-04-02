@@ -245,9 +245,14 @@ async function CaseDetailData({
   const plate = car?.license_plate ?? '—';
   const firstReg = car?.first_registration_date ?? null;
   let age = '—';
+  let carAgeYears: number | null = null;
   if (firstReg) {
     const years = (Date.now() - new Date(firstReg).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+    carAgeYears = years;
     age = years < 1 ? '<1' : Math.floor(years).toString();
+  } else if (car?.year) {
+    carAgeYears = new Date().getFullYear() - car.year;
+    age = carAgeYears < 1 ? '<1' : String(carAgeYears);
   }
 
   return (
@@ -291,6 +296,7 @@ async function CaseDetailData({
       estimateLink={caseRow.estimate_link ?? null}
       painterStatus={caseRow.painter_status ?? null}
       appraiserStatus={caseRow.appraiser_status ?? null}
+      carAgeYears={carAgeYears}
     />
   );
 }

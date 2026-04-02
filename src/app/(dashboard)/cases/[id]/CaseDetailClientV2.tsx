@@ -84,6 +84,7 @@ interface CaseDetailClientProps {
   estimateLink: string | null;
   painterStatus: string | null;
   appraiserStatus: string | null;
+  carAgeYears: number | null;
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -168,6 +169,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     estimateLink: initialEstimateLink,
     painterStatus: initialPainterStatus,
     appraiserStatus: initialAppraiserStatus,
+    carAgeYears,
   } = props;
 
   const router = useRouter();
@@ -411,10 +413,14 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     loadSteps().catch(console.error);
   }, [caseId, steps]);
 
-  const orderedSteps = useMemo(
-    () => [...effectiveSteps].sort((a, b) => a.order_index - b.order_index),
-    [effectiveSteps]
-  );
+  const orderedSteps = useMemo(() => {
+    const sorted = [...effectiveSteps].sort((a, b) => a.order_index - b.order_index);
+    // Hide WHEELS_CHECK entirely for cars under 2 years old
+    if (carAgeYears !== null && carAgeYears < 2) {
+      return sorted.filter((s) => s.step_key !== 'WHEELS_CHECK');
+    }
+    return sorted;
+  }, [effectiveSteps, carAgeYears]);
 
   // Build timeline from audit events
   const timeline = useMemo(() => {
@@ -1037,36 +1043,32 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                   {/* FIXCAR link display */}
                   {isDone && hasLink && s.step_key === 'FIXCAR_PHOTOS' && (
                     <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-600">קישור FixCar:</span>
-                        <a
-                          href={savedLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-700 underline truncate flex-1"
-                          dir="ltr"
-                        >
-                          {savedLink}
-                        </a>
-                      </div>
+                      <p className="text-xs font-medium text-gray-600 mb-1">קישור FixCar:</p>
+                      <a
+                        href={savedLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-700 underline break-all block"
+                        dir="ltr"
+                      >
+                        {savedLink}
+                      </a>
                     </div>
                   )}
 
                   {/* WHEELS CHECK link/file display after done */}
                   {isDone && hasWheelsLink && s.step_key === 'WHEELS_CHECK' && (
                     <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-600">קישור טפסי גלגלים:</span>
-                        <a
-                          href={wheelsCheckLink!}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-700 underline truncate flex-1"
-                          dir="ltr"
-                        >
-                          {wheelsCheckLink}
-                        </a>
-                      </div>
+                      <p className="text-xs font-medium text-gray-600 mb-1">קישור טפסי גלגלים:</p>
+                      <a
+                        href={wheelsCheckLink!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-700 underline break-all block"
+                        dir="ltr"
+                      >
+                        {wheelsCheckLink}
+                      </a>
                     </div>
                   )}
 
