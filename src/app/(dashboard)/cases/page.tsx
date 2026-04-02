@@ -119,6 +119,7 @@ async function CasesDataSection({
       closed_at,
       notes,
       painter_status,
+      customer_name,
       cars!inner(license_plate, first_registration_date),
       branch_id
     `
@@ -233,6 +234,7 @@ async function CasesDataSection({
       general_status: string;
       notes: string | null;
       painter_status: string | null;
+      customer_name: string | null;
       branch_id: string;
       cars: { license_plate: string | null; first_registration_date: string | null } | null;
     };
@@ -257,6 +259,7 @@ async function CasesDataSection({
       activeStepKey: caseIdToNextStepKey.get(row.id) || null,
       notes: row.notes ?? null,
       painter_status: row.painter_status ?? null,
+      customer_name: row.customer_name ?? null,
       branch_id: row.branch_id,
     };
   });

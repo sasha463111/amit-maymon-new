@@ -9,8 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.55",
+    "@google/stitch-sdk": "^0.0.3",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
+    "ai": "^6.0.143",
     "lucide-react": "^0.577.0",
     "next": "14.2.18",
     "react": "^18.3.1",

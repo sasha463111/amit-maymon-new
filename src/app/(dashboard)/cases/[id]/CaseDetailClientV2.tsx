@@ -83,6 +83,7 @@ interface CaseDetailClientProps {
   qcAssignee: string | null;
   estimateLink: string | null;
   painterStatus: string | null;
+  appraiserStatus: string | null;
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -166,6 +167,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     qcAssignee: initialQcAssignee,
     estimateLink: initialEstimateLink,
     painterStatus: initialPainterStatus,
+    appraiserStatus: initialAppraiserStatus,
   } = props;
 
   const router = useRouter();
@@ -279,6 +281,13 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [painterStatus, setPainterStatus] = useState<PainterStatus | ''>(
     (initialPainterStatus as PainterStatus | null) ?? ''
   );
+  const [appraiserStatus, setAppraiserStatus] = useState<string>(initialAppraiserStatus ?? '');
+
+  async function saveAppraiserStatus(val: string) {
+    setAppraiserStatus(val);
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    await supabase.from('cases').update({ appraiser_status: val || null } as never).eq('id', caseId);
+  }
 
   async function saveNotes() {
     if (!notesDirty) return;
@@ -323,7 +332,25 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [localApprovals] = useState<ApprovalRow[]>(approvals);
   const effectiveApprovals = localApprovals;
 
+  // Track all in-flight completions to avoid stale reload races
+  const pendingCompletesRef = useRef(0);
+  const reloadVersionRef = useRef(0);
+
+  // Set of step IDs currently being completed (ref = no re-render on change)
+  const completingStepIdsRef = useRef<Set<string>>(new Set());
   const [completingStepId, setCompletingStepId] = useState<string | null>(null);
+
+  function markStepInFlight(id: string) {
+    completingStepIdsRef.current.add(id);
+    setCompletingStepId(id);
+  }
+  function unmarkStepInFlight(id: string) {
+    completingStepIdsRef.current.delete(id);
+    setCompletingStepId(completingStepIdsRef.current.size > 0 ? Array.from(completingStepIdsRef.current)[0] : null);
+  }
+  function isStepInFlight(id: string) {
+    return completingStepIdsRef.current.has(id);
+  }
   const [stepError, setStepError] = useState<string | null>(null);
 
   // FIXCAR link popup state
@@ -471,6 +498,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   }
 
   async function reloadStepsFromDB() {
+    // Versioned reload — ignore result if a newer reload has started
+    const myVersion = ++reloadVersionRef.current;
     const supabase = (await import('@/lib/supabase/client')).createClient();
     const { data: runs } = await supabase
       .from('case_workflow_runs')
@@ -484,19 +513,26 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       .select('id, step_key, state, order_index, completed_at, completed_by')
       .in('run_id', runIds)
       .order('order_index');
-    if (data) setLocalSteps(data as StepRow[]);
+    // Only apply if this is still the latest reload
+    if (data && myVersion === reloadVersionRef.current) {
+      setLocalSteps(data as StepRow[]);
+    }
   }
 
   async function performComplete(step: StepRow, link?: string) {
-    // Optimistic update: mark step as DONE immediately before server call
+    if (isStepInFlight(step.id)) return; // prevent double-click on same step
+
+    // Optimistic update: mark step as DONE immediately
     const now = new Date().toISOString();
     setLocalSteps((prev) =>
       prev.map((s) =>
         s.id === step.id ? { ...s, state: 'DONE' as const, completed_at: now, completed_by: null } : s
       )
     );
-    setCompletingStepId(step.id);
+    markStepInFlight(step.id);
+    pendingCompletesRef.current++;
     setStepError(null);
+
     try {
       const res = await completeActiveStep(caseId, step.id);
       if (res?.error) {
@@ -508,14 +544,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         );
         setStepError(res.error);
       } else {
-        // If FIXCAR link provided, save it
+        // Save FIXCAR link if provided
         if (step.step_key === 'FIXCAR_PHOTOS' && link) {
           const supabase = (await import('@/lib/supabase/client')).createClient();
           await supabase.from('cases').update({ fixcar_link: link } as never).eq('id', caseId);
           setFixcarValue(link);
         }
-        // Reload from DB to get accurate server state (next step activated, etc.)
-        await reloadStepsFromDB();
       }
     } catch (e) {
       console.error('[CaseDetailClientV2] complete failed:', e);
@@ -527,7 +561,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       );
       setStepError('שגיאה בהשלמת השלב');
     } finally {
-      setCompletingStepId(null);
+      unmarkStepInFlight(step.id);
+      pendingCompletesRef.current--;
+      // Only reload from DB once ALL pending completions are done — prevents stale reload races
+      if (pendingCompletesRef.current === 0) {
+        await reloadStepsFromDB();
+      }
     }
   }
 
@@ -898,7 +937,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     {canEdit && !isDone && !isSkipped && (
                       <button
                         type="button"
-                        disabled={completingStepId === s.id || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
+                        disabled={isStepInFlight(s.id) || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
                         onClick={() => void handleComplete(s)}
                         className={`px-3 py-1 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                           isBlocked
@@ -947,6 +986,33 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     </div>
                   )}
 
+
+                  {/* WAIT_APPRAISER_APPROVAL — sub-status */}
+                  {s.step_key === 'WAIT_APPRAISER_APPROVAL' && (isActive || isDone) && canEdit && (
+                    <div className="mr-11 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-xs font-semibold text-blue-700 mb-2">סטטוס אישור שמאי</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          { value: 'APPROVED', label: 'מאושר', color: 'bg-green-100 border-green-400 text-green-800' },
+                          { value: 'NOT_APPROVED', label: 'לא מאושר', color: 'bg-red-100 border-red-400 text-red-800' },
+                          { value: 'WAITING_SETTLEMENT', label: 'ממתין להסדר', color: 'bg-yellow-100 border-yellow-400 text-yellow-800' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => void saveAppraiserStatus(appraiserStatus === opt.value ? '' : opt.value)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                              appraiserStatus === opt.value
+                                ? opt.color + ' ring-2 ring-offset-1 ring-current'
+                                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* QUALITY_CONTROL — assignee */}
                   {s.step_key === 'QUALITY_CONTROL' && canEdit && (
@@ -1028,7 +1094,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         />
                         <button
                           type="button"
-                          disabled={completingStepId === s.id}
+                          disabled={isStepInFlight(s.id)}
                           onClick={() => void handleSaveLinkAndComplete(s)}
                           className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
                         >

@@ -10,6 +10,7 @@ interface CaseRow {
   case_key?: string | null;
   plate: string;
   claim: string;
+  customer_name?: string | null;
   opened_at: string | null;
   age: string;
   parts_status: PartsStatus;
@@ -33,6 +34,13 @@ export function CasesTable({
   const columns: Column<CaseRow>[] = [
     { key: 'plate', label: 'מספר רישוי' },
     { key: 'claim', label: 'תביעה' },
+    {
+      key: 'customer_name',
+      label: 'לקוח',
+      render: (row) => (
+        <span className="text-sm text-gray-700 font-medium">{row.customer_name ?? '—'}</span>
+      ),
+    },
     {
       key: 'opened_at',
       label: 'נפתח',
