@@ -30,17 +30,17 @@ export function SidebarNav({ links }: { links: { label: string; href: string }[]
           <Link
             key={href}
             href={href}
-            className={`px-3 py-3 rounded-lg text-base font-medium transition-all flex items-center gap-3 group border-r-[3px] ${
+            className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 border-r-4 ${
               isActive
-                ? 'bg-red-50 text-brand-red border-brand-red'
-                : 'text-gray-500 border-transparent hover:bg-gray-50 hover:text-gray-800'
+                ? 'bg-red-600/10 text-red-500 border-red-500'
+                : 'text-gray-400 border-transparent hover:bg-gray-800 hover:text-white'
             }`}
           >
             {Icon && (
               <Icon
-                size={18}
+                size={17}
                 className={`flex-shrink-0 transition-colors ${
-                  isActive ? 'text-brand-red' : 'text-gray-400 group-hover:text-gray-600'
+                  isActive ? 'text-red-500' : 'text-gray-500 group-hover:text-white'
                 }`}
               />
             )}

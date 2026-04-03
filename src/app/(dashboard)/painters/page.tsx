@@ -15,6 +15,20 @@ const PAINTER_STATUS_COLORS: Record<string, string> = {
   READY_FOR_RELEASE: 'bg-green-100 text-green-800',
 };
 
+const PAINTER_STATUS_BG: Record<string, string> = {
+  IN_WORK: 'bg-blue-100',
+  WAITING_PARTS: 'bg-yellow-100',
+  PARTS_ARRIVED: 'bg-purple-100',
+  READY_FOR_RELEASE: 'bg-green-100',
+};
+
+const PAINTER_STATUS_TEXT: Record<string, string> = {
+  IN_WORK: 'text-blue-700',
+  WAITING_PARTS: 'text-yellow-700',
+  PARTS_ARRIVED: 'text-purple-700',
+  READY_FOR_RELEASE: 'text-green-700',
+};
+
 export default async function PaintersPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -76,24 +90,35 @@ export default async function PaintersPage() {
   const statusOrder = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', ''];
 
   return (
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">לוח פחחים</h1>
-        <span className="text-sm text-gray-400">{rows.length} תיקים פעילים</span>
+    <div className="space-y-6" dir="rtl">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-on-surface">לוח פחחים</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{rows.length} תיקים פעילים</p>
+        </div>
       </div>
 
       {/* Summary badges */}
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {Object.entries(PAINTER_STATUS_LABELS).map(([key, label]) => {
           const count = groups[key]?.length ?? 0;
           return (
-            <div key={key} className={`px-4 py-2 rounded-xl text-sm font-semibold ${PAINTER_STATUS_COLORS[key] ?? 'bg-gray-100 text-gray-600'}`}>
-              {label}: {count}
+            <div key={key} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                <p className={`text-2xl font-bold ${PAINTER_STATUS_TEXT[key] ?? 'text-gray-700'}`}>{count}</p>
+              </div>
+              <div className={`w-10 h-10 rounded-full ${PAINTER_STATUS_BG[key] ?? 'bg-gray-100'} flex items-center justify-center`}>
+                <span className={`text-lg font-black ${PAINTER_STATUS_TEXT[key] ?? 'text-gray-500'}`}>{count}</span>
+              </div>
             </div>
           );
         })}
-        <div className="px-4 py-2 rounded-xl text-sm font-semibold bg-gray-100 text-gray-600">
-          ללא סטטוס: {groups['']?.length ?? 0}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500 mb-1">ללא סטטוס</p>
+            <p className="text-2xl font-bold text-gray-500">{groups['']?.length ?? 0}</p>
+          </div>
         </div>
       </div>
 
@@ -105,12 +130,12 @@ export default async function PaintersPage() {
         const colorCls = statusKey ? PAINTER_STATUS_COLORS[statusKey] : 'bg-gray-100 text-gray-600';
 
         return (
-          <div key={statusKey} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className={`px-5 py-3 flex items-center gap-3 border-b border-gray-100 ${colorCls} bg-opacity-40`}>
-              <span className="font-bold text-base">{label}</span>
-              <span className="text-sm opacity-70">{groupRows.length} תיקים</span>
+          <div key={statusKey} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className={`px-5 py-3 flex items-center gap-3 border-b border-gray-100`}>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${colorCls}`}>{label}</span>
+              <span className="text-sm text-gray-400">{groupRows.length} תיקים</span>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-50">
               {groupRows.map((row) => {
                 const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
                 const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
@@ -118,14 +143,14 @@ export default async function PaintersPage() {
                   <a
                     key={row.id}
                     href={`/cases/${row.id}`}
-                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                   >
                     {/* Plate */}
-                    <span className="font-bold text-gray-900 text-sm w-24 shrink-0" dir="ltr">
+                    <span className="font-bold text-primary-container text-sm w-24 shrink-0" dir="ltr">
                       {car?.license_plate ?? '—'}
                     </span>
                     {/* Make / Model / Year */}
-                    <span className="text-sm text-gray-600 flex-1">
+                    <span className="text-sm text-gray-600 flex-1 font-medium">
                       {[car?.make, car?.model, car?.year].filter(Boolean).join(' ')}
                     </span>
                     {/* Customer */}

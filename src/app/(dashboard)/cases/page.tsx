@@ -37,57 +37,48 @@ type StatBlock = {
   readyForRelease: number;
 };
 
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  iconBg,
+  iconColor,
+  valueColor,
+  highlight,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  iconBg: string;
+  iconColor: string;
+  valueColor?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={`rounded-xl border shadow-sm p-5 flex items-center justify-between ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
+      <div>
+        <p className="text-gray-500 text-xs font-medium mb-1">{label}</p>
+        <p className={`text-3xl font-bold leading-none ${valueColor ?? 'text-on-surface'}`}>{value}</p>
+      </div>
+      <div className={`w-12 h-12 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+        <Icon size={20} className={iconColor} />
+      </div>
+    </div>
+  );
+}
+
 function StatRow({ stat, highlight }: { stat: StatBlock; highlight?: boolean }) {
   return (
-    <div className={`grid grid-cols-5 gap-3 ${highlight ? '' : 'opacity-80'}`}>
-      {/* Branch label cell */}
-      <div className={`col-span-5 -mb-1 text-xs font-semibold ${highlight ? 'text-gray-700' : 'text-gray-500'}`}>
+    <div className={`space-y-2 ${highlight ? '' : 'opacity-80'}`}>
+      <div className={`text-xs font-semibold ${highlight ? 'text-gray-700' : 'text-gray-500'}`}>
         {stat.label}
       </div>
-      <div className={`rounded-xl border shadow-sm p-4 flex items-center gap-3 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-        <div className="bg-slate-100 rounded-lg p-2 flex-shrink-0">
-          <LayoutGrid size={16} className="text-slate-600" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-800 leading-none">{stat.total}</p>
-          <p className="text-xs text-gray-500 mt-0.5">סה&quot;כ פתוחים</p>
-        </div>
-      </div>
-      <div className={`rounded-xl border shadow-sm p-4 flex items-center gap-3 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-        <div className="bg-emerald-50 rounded-lg p-2 flex-shrink-0">
-          <Wrench size={16} className="text-emerald-600" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-800 leading-none">{stat.inWork}</p>
-          <p className="text-xs text-gray-500 mt-0.5">בעבודה</p>
-        </div>
-      </div>
-      <div className={`rounded-xl border shadow-sm p-4 flex items-center gap-3 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-        <div className="bg-amber-50 rounded-lg p-2 flex-shrink-0">
-          <Package size={16} className="text-amber-600" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-800 leading-none">{stat.waitingParts}</p>
-          <p className="text-xs text-gray-500 mt-0.5">ממתינים לחלקים</p>
-        </div>
-      </div>
-      <div className={`rounded-xl border shadow-sm p-4 flex items-center gap-3 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-        <div className="bg-sky-50 rounded-lg p-2 flex-shrink-0">
-          <Plane size={16} className="text-sky-600" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-800 leading-none">{stat.airmail}</p>
-          <p className="text-xs text-gray-500 mt-0.5">דואר אוויר</p>
-        </div>
-      </div>
-      <div className={`rounded-xl border shadow-sm p-4 flex items-center gap-3 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-        <div className="bg-green-50 rounded-lg p-2 flex-shrink-0">
-          <CheckCircle size={16} className="text-green-600" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-800 leading-none">{stat.readyForRelease}</p>
-          <p className="text-xs text-gray-500 mt-0.5">מוכן לשחרור</p>
-        </div>
+      <div className="grid grid-cols-5 gap-3">
+        <StatCard icon={LayoutGrid} label='סה"כ פתוחים' value={stat.total} iconBg="bg-slate-100" iconColor="text-slate-600" highlight={highlight} />
+        <StatCard icon={Wrench} label="בעבודה" value={stat.inWork} iconBg="bg-emerald-100" iconColor="text-emerald-600" valueColor="text-emerald-600" highlight={highlight} />
+        <StatCard icon={Package} label="ממתינים לחלקים" value={stat.waitingParts} iconBg="bg-amber-100" iconColor="text-amber-600" valueColor="text-amber-600" highlight={highlight} />
+        <StatCard icon={Plane} label="דואר אוויר" value={stat.airmail} iconBg="bg-sky-100" iconColor="text-sky-600" valueColor="text-sky-600" highlight={highlight} />
+        <StatCard icon={CheckCircle} label="מוכן לשחרור" value={stat.readyForRelease} iconBg="bg-green-100" iconColor="text-green-600" valueColor="text-green-600" highlight={highlight} />
       </div>
     </div>
   );

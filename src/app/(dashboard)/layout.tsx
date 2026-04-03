@@ -5,7 +5,6 @@ import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBadge } from '@/components/NotificationsBadge';
 import { SidebarNav } from '@/components/SidebarNav';
-import { Logo } from '@/components/Logo';
 import { Bell, LogOut } from 'lucide-react';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
@@ -88,42 +87,60 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-surface">
       {isPreview && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-sm text-amber-900">
           מצב תצוגה מקדימה — ללא התחברות וללא מסד נתונים. הנתונים להמחשה בלבד.
         </div>
       )}
       {isPreview && <PreviewRoleSwitcher />}
-      <header className="bg-brand-dark border-b border-brand-red/60 text-white px-6 h-16 flex items-center shadow-md">
+
+      {/* Header */}
+      <header className="bg-white border-b border-gray-100 px-6 h-16 flex items-center shadow-sm sticky top-0 z-40">
         <div className="flex items-center justify-between w-full">
-          <Logo variant="header" />
           {/* Right side: role badge + name + bell + logout */}
           <div className="flex items-center gap-2 text-sm">
-            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-lg">
-              <span className="text-white/50 text-xs">{roleLabel}</span>
-              <span className="text-white/20 text-xs">·</span>
-              <span className="font-medium text-white">{profile?.full_name ?? user.email}</span>
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">
+              <span className="text-gray-400 text-xs">{roleLabel}</span>
+              <span className="text-gray-300 text-xs">·</span>
+              <span className="font-semibold text-gray-800 text-sm">{profile?.full_name ?? user.email}</span>
+              {branchName !== '—' && (
+                <>
+                  <span className="text-gray-300 text-xs">·</span>
+                  <span className="text-gray-500 text-xs">{branchName}</span>
+                </>
+              )}
             </div>
             <Link
               href="/notifications"
-              className="relative bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors"
+              className="relative bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors"
               title="התראות"
             >
-              <Bell size={17} className="text-white/80" />
+              <Bell size={17} className="text-gray-500" />
               <NotificationsBadge userId={user.id} />
             </Link>
-            <a href="/logout" className="bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors flex items-center" title="התנתק">
-              <LogOut size={16} className="text-white/80" />
+            <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center" title="התנתק">
+              <LogOut size={16} className="text-gray-500" />
             </a>
+          </div>
+
+          {/* Left side: Logo/branding */}
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-black text-primary-container tracking-tight">תהילה</span>
+            <span className="text-xs text-gray-400 font-medium">ניהול מוסך</span>
           </div>
         </div>
       </header>
+
       <div className="flex flex-1">
-        <aside className="w-56 border-l border-gray-200 bg-white pt-4 px-2 pb-4 flex flex-col gap-1 shadow-sm">
-          <SidebarNav links={links} />
+        {/* Sidebar — dark theme */}
+        <aside className="w-56 bg-gray-900 flex flex-col shadow-xl flex-shrink-0">
+          <nav className="flex-1 px-3 py-4">
+            <SidebarNav links={links} />
+          </nav>
         </aside>
-        <main className="flex-1 p-6 bg-gray-50 min-h-screen">{children}</main>
+
+        <main className="flex-1 p-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
       </div>
     </div>
   );
