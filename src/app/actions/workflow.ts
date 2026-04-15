@@ -424,6 +424,86 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .from('cases')
       .update({ treatment_finished_at: now } as never)
       .eq('id', caseId);
+
+    // Fetch case info for notifications
+    const { data: caseForNotif } = await supabase
+      .from('cases')
+      .select('case_key, branch_id, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const caseNotif = caseForNotif as { case_key: string | null; branch_id: string; cars: { license_plate: string | null } | null } | null;
+    const plateLabel = (Array.isArray(caseNotif?.cars) ? caseNotif?.cars[0]?.license_plate : caseNotif?.cars?.license_plate) ?? caseNotif?.case_key ?? 'תיק';
+
+    // Notify all OFFICE users of the same branch
+    const { data: officeUsers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'OFFICE')
+      .eq('branch_id', caseNotif?.branch_id ?? '');
+    for (const ou of (officeUsers ?? []) as { id: string }[]) {
+      await supabase.from('notifications').insert({
+        user_id: ou.id,
+        case_id: caseId,
+        type: 'READY_FOR_OFFICE',
+        title: 'תיק מוכן לסגירה',
+        body: `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`,
+      } as never);
+    }
+
+    // Auto-start CLOSURE workflow if not already exists
+    const { data: existingClosure } = await supabase
+      .from('case_workflow_runs')
+      .select('id')
+      .eq('case_id', caseId)
+      .eq('workflow_type', 'CLOSURE')
+      .maybeSingle();
+
+    if (!existingClosure) {
+      const { data: newRunData } = await supabase
+        .from('case_workflow_runs')
+        .insert({ case_id: caseId, workflow_type: 'CLOSURE', status: 'ACTIVE' } as never)
+        .select('id')
+        .single();
+      const newRun = newRunData as { id: string } | null;
+
+      if (newRun) {
+        const closureSteps = [
+          { step_key: 'CLOSURE_VERIFY_DETAILS_DOCS', order_index: 0, state: 'ACTIVE' },
+          { step_key: 'CLOSURE_PROFORMA_IF_NEEDED', order_index: 1, state: 'PENDING' },
+          { step_key: 'CLOSURE_PREPARE_CLOSING_FORMS', order_index: 2, state: 'PENDING' },
+          { step_key: 'CLOSE_CASE', order_index: 3, state: 'PENDING' },
+        ];
+        await supabase.from('case_workflow_steps').insert(
+          closureSteps.map((s) => ({ ...s, run_id: newRun.id, activated_at: s.state === 'ACTIVE' ? now : null })) as never
+        );
+      }
+    }
+  }
+
+  // WASH step: notify SERVICE_MANAGER + SERVICE_ADVISOR (bodywork advisors) to start QC process
+  if (stepKey === 'WASH') {
+    const { data: washCaseData } = await supabase
+      .from('cases')
+      .select('case_key, branch_id, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const washCase = washCaseData as { case_key: string | null; branch_id: string; cars: { license_plate: string | null } | null } | null;
+    const washPlate = (Array.isArray(washCase?.cars) ? washCase?.cars[0]?.license_plate : washCase?.cars?.license_plate) ?? washCase?.case_key ?? 'תיק';
+
+    const { data: advisors } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('branch_id', washCase?.branch_id ?? '')
+      .eq('is_bodywork_advisor', true);
+    for (const adv of (advisors ?? []) as { id: string }[]) {
+      await supabase.from('notifications').insert({
+        user_id: adv.id,
+        case_id: caseId,
+        type: 'WASH_STARTED',
+        title: 'רכב נשלח לשטיפה',
+        body: `רכב ${washPlate} נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`,
+      } as never);
+    }
   }
 
   if (stepKey === 'CLOSURE_PREPARE_CLOSING_FORMS' && isClosure) {
@@ -543,30 +623,38 @@ export async function deleteCase(caseId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  const profile = profileData as { role: string } | null;
+  const { data: profileData } = await supabase.from('profiles').select('id, role').eq('id', user.id).single();
+  const profile = profileData as { id: string; role: string } | null;
   if (profile?.role !== 'CEO') return { error: 'רק CEO יכול למחוק תיקים' };
 
-  // Delete related data in dependency order
-  await supabase.from('audit_events').delete().eq('entity_id', caseId).eq('entity_type', 'CASE');
+  // Soft delete — mark deleted_at and deleted_by
+  await supabase
+    .from('cases')
+    .update({ deleted_at: new Date().toISOString(), deleted_by: profile.id } as never)
+    .eq('id', caseId);
 
-  const { data: runsData } = await supabase.from('case_workflow_runs').select('id').eq('case_id', caseId);
-  const runIds = (runsData as { id: string }[] | null)?.map((r) => r.id) ?? [];
-  if (runIds.length > 0) {
-    await supabase.from('audit_events').delete().eq('entity_type', 'WORKFLOW_STEP').in('entity_id',
-      (await supabase.from('case_workflow_steps').select('id').in('run_id', runIds))
-        .data?.map((s: { id: string }) => s.id) ?? []
-    );
-    await supabase.from('case_workflow_steps').delete().in('run_id', runIds);
-    await supabase.from('case_workflow_runs').delete().eq('case_id', caseId);
-  }
+  await writeAudit(supabase, 'CASE', caseId, 'CASE_DELETED', user.id);
+  revalidatePath('/cases');
+  return { ok: true, error: null };
+}
 
-  await supabase.from('ceo_approvals').delete().eq('case_id', caseId);
-  await supabase.from('bodywork_extras').delete().eq('case_id', caseId);
-  await supabase.from('case_documents').delete().eq('case_id', caseId);
-  await supabase.from('notifications').delete().eq('case_id', caseId);
-  await supabase.from('cases').delete().eq('id', caseId);
+export async function restoreCase(caseId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
 
+  const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const profile = profileData as { role: string } | null;
+  if (profile?.role !== 'CEO') return { error: 'רק CEO יכול לשחזר תיקים' };
+
+  await supabase
+    .from('cases')
+    .update({ deleted_at: null, deleted_by: null } as never)
+    .eq('id', caseId);
+
+  await writeAudit(supabase, 'CASE', caseId, 'CASE_RESTORED', user.id);
   revalidatePath('/cases');
   return { ok: true, error: null };
 }

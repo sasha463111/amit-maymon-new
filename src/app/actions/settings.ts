@@ -137,3 +137,47 @@ export async function removeWorkflowStep(id: string): Promise<{ ok?: boolean; er
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+// =====================================================
+// Bodywork Advisors
+// =====================================================
+
+export type BodyworkAdvisor = {
+  id: string;
+  full_name: string;
+  role: string;
+  branch_id: string | null;
+  is_bodywork_advisor: boolean;
+};
+
+export async function getBodyworkAdvisors(): Promise<{ data: BodyworkAdvisor[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { data: [], error: 'לא מחובר' };
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, role, branch_id, is_bodywork_advisor')
+    .in('role', ['SERVICE_MANAGER', 'SERVICE_ADVISOR'])
+    .eq('is_active', true)
+    .order('full_name');
+
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as BodyworkAdvisor[], error: null };
+}
+
+export async function toggleBodyworkAdvisor(
+  profileId: string,
+  isAdvisor: boolean
+): Promise<{ ok?: boolean; error?: string }> {
+  const { error: authError, supabase } = await requireCeo();
+  if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_bodywork_advisor: isAdvisor } as never)
+    .eq('id', profileId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}

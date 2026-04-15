@@ -115,6 +115,7 @@ async function CasesDataSection({
       branch_id
     `
     )
+    .is('deleted_at', null)
     .order('opened_at', { ascending: false });
 
   if (role !== 'CEO' && branchId) {

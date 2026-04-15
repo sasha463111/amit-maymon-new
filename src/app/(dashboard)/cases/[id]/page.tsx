@@ -240,6 +240,15 @@ async function CaseDetailData({
     }
   }
 
+  // Load bodywork advisors for QC step
+  const { data: advisorsData } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .eq('is_bodywork_advisor', true)
+    .eq('is_active', true)
+    .order('full_name');
+  const bodyworkAdvisors = (advisorsData ?? []) as { id: string; full_name: string }[];
+
   const car = Array.isArray(caseRow.cars) ? caseRow.cars[0] : caseRow.cars;
   const branch = Array.isArray(caseRow.branches) ? caseRow.branches[0] : caseRow.branches;
   const plate = car?.license_plate ?? '—';
@@ -297,6 +306,7 @@ async function CaseDetailData({
       painterStatus={caseRow.painter_status ?? null}
       appraiserStatus={caseRow.appraiser_status ?? null}
       carAgeYears={carAgeYears}
+      bodyworkAdvisors={bodyworkAdvisors}
     />
   );
 }

@@ -1,14 +1,15 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { getRolePermissions, getWorkflowStepTemplates } from '@/app/actions/settings';
+import { getRolePermissions, getWorkflowStepTemplates, getBodyworkAdvisors } from '@/app/actions/settings';
 import { PermissionsTab } from './PermissionsTab';
 import { ChecklistTab } from './ChecklistTab';
+import { BodyworkAdvisorsTab } from './BodyworkAdvisorsTab';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: { tab?: string };
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -25,16 +26,19 @@ export default async function SettingsPage({
   const profile = profileData as { role: string } | null;
   if (profile?.role !== 'CEO') redirect('/cases');
 
-  const [permissionsResult, stepsResult] = await Promise.all([
+  const resolvedParams = await searchParams;
+  const { tab = 'permissions' } = resolvedParams;
+  const activeTab = tab === 'checklist' ? 'checklist' : tab === 'advisors' ? 'advisors' : 'permissions';
+
+  const [permissionsResult, stepsResult, advisorsResult] = await Promise.all([
     getRolePermissions(),
     getWorkflowStepTemplates(),
+    getBodyworkAdvisors(),
   ]);
 
   const permissions = (permissionsResult.data ?? []) as RolePermission[];
   const steps = (stepsResult.data ?? []) as WorkflowStepTemplate[];
-
-  const { tab = 'permissions' } = searchParams;
-  const activeTab = tab === 'checklist' ? 'checklist' : 'permissions';
+  const advisors = advisorsResult.data ?? [];
 
   return (
     <div dir="rtl">
@@ -42,7 +46,7 @@ export default async function SettingsPage({
         <span className="text-4xl">⚙️</span>
         <div>
           <h1 className="text-3xl font-bold text-gray-800">הגדרות מערכת</h1>
-          <p className="text-gray-500 text-sm mt-1">ניהול הרשאות וצ&apos;קליסט</p>
+          <p className="text-gray-500 text-sm mt-1">ניהול הרשאות, צ&apos;קליסט ויועצי פחחות</p>
         </div>
       </div>
 
@@ -74,13 +78,25 @@ export default async function SettingsPage({
         >
           ✅ צ&apos;קליסט
         </a>
+        <a
+          href="/settings?tab=advisors"
+          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'advisors'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          🔧 יועצי פחחות
+        </a>
       </div>
 
       <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
         {activeTab === 'permissions' ? (
           <PermissionsTab initialPermissions={permissions} />
-        ) : (
+        ) : activeTab === 'checklist' ? (
           <ChecklistTab initialSteps={steps} />
+        ) : (
+          <BodyworkAdvisorsTab initialAdvisors={advisors} />
         )}
       </div>
     </div>

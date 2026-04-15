@@ -40,9 +40,11 @@ export default async function PaintersPage() {
     .eq('id', user.id)
     .single();
 
-  if ((profile as { role: string } | null)?.role !== 'CEO') redirect('/cases');
+  const profileRole = (profile as { role: string } | null)?.role;
+  // PAINTER sees only their branch cases; CEO sees all
+  if (profileRole !== 'CEO' && profileRole !== 'PAINTER' && profileRole !== 'SERVICE_MANAGER') redirect('/cases');
 
-  // Fetch all open cases with painter-relevant fields
+  // Fetch all open cases with painter-relevant fields (exclude soft-deleted)
   const { data: cases } = await supabase
     .from('cases')
     .select(`
@@ -56,6 +58,7 @@ export default async function PaintersPage() {
       branches(name)
     `)
     .is('closed_at', null)
+    .is('deleted_at', null)
     .order('opened_at', { ascending: false });
 
   const rows = (cases ?? []) as {
@@ -142,7 +145,7 @@ export default async function PaintersPage() {
                 return (
                   <a
                     key={row.id}
-                    href={`/cases/${row.id}`}
+                    href={`/painters/${row.id}`}
                     className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
                   >
                     {/* Plate */}

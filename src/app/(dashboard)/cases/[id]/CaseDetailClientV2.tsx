@@ -85,6 +85,7 @@ interface CaseDetailClientProps {
   painterStatus: string | null;
   appraiserStatus: string | null;
   carAgeYears: number | null;
+  bodyworkAdvisors: { id: string; full_name: string }[];
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -170,6 +171,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     painterStatus: initialPainterStatus,
     appraiserStatus: initialAppraiserStatus,
     carAgeYears,
+    bodyworkAdvisors,
   } = props;
 
   const router = useRouter();
@@ -365,6 +367,15 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [wheelsLinkValue, setWheelsLinkValue] = useState(wheelsCheckLink ?? '');
   const [wheelsFile, setWheelsFile] = useState<File | null>(null);
   const [wheelsUploading, setWheelsUploading] = useState(false);
+
+  // PREP_ESTIMATE file upload panel state
+  const [estimatePanelStepId, setEstimatePanelStepId] = useState<string | null>(null);
+  const [estimateFile, setEstimateFile] = useState<File | null>(null);
+  const [estimateUploading, setEstimateUploading] = useState(false);
+
+  // QUALITY_CONTROL: select bodywork advisor popup
+  const [qcPopupStepId, setQcPopupStepId] = useState<string | null>(null);
+  const [qcSelectedAdvisor, setQcSelectedAdvisor] = useState('');
 
   const [returning, setReturning] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -593,6 +604,16 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       return;
     }
 
+    if (step.step_key === 'PREP_ESTIMATE') {
+      setEstimatePanelStepId(step.id);
+      return;
+    }
+
+    if (step.step_key === 'QUALITY_CONTROL' && bodyworkAdvisors.length > 0) {
+      setQcPopupStepId(step.id);
+      return;
+    }
+
     if (step.step_key === 'READY_FOR_OFFICE') {
       if (extras.some((e) => e.status === 'IN_TREATMENT')) {
         setStepError('לא ניתן להשלים - יש תוספות פחחות בטיפול');
@@ -656,6 +677,49 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       await performComplete(step);
     } finally {
       setWheelsUploading(false);
+    }
+  }
+
+  async function handleQcConfirm(step: StepRow) {
+    if (!qcSelectedAdvisor) { setStepError('נדרש לבחור יועץ פחח'); return; }
+    setStepError(null);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      await supabase.from('cases').update({ qc_assignee: qcSelectedAdvisor } as never).eq('id', caseId);
+      setQcPopupStepId(null);
+      setQcSelectedAdvisor('');
+      await performComplete(step);
+    } catch {
+      setStepError('שגיאה בשמירת יועץ בקרת האיכות');
+    }
+  }
+
+  async function handleEstimateConfirm(step: StepRow) {
+    setStepError(null);
+    setEstimateUploading(true);
+    try {
+      if (estimateFile) {
+        const { uploadCaseDocument: uploadDoc } = await import('@/app/actions/documents');
+        const formData = new FormData();
+        formData.append('case_id', caseId);
+        formData.append('file', estimateFile);
+        formData.append('document_type', 'ESTIMATE');
+        const uploadRes = await uploadDoc(formData);
+        if (uploadRes?.error) { setStepError(uploadRes.error); setEstimateUploading(false); return; }
+        // Refresh documents list
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data: docsData } = await supabase
+          .from('case_documents')
+          .select('id, file_name, file_path, file_size, mime_type, created_at')
+          .eq('case_id', caseId)
+          .order('created_at', { ascending: false });
+        if (docsData) setLocalDocuments(docsData as typeof documents);
+      }
+      setEstimatePanelStepId(null);
+      setEstimateFile(null);
+      await performComplete(step);
+    } finally {
+      setEstimateUploading(false);
     }
   }
 
@@ -1108,6 +1172,70 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                           className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
                         >
                           ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PREP_ESTIMATE file upload panel */}
+                  {canEdit && estimatePanelStepId === s.id && s.step_key === 'PREP_ESTIMATE' && !isDone && !isSkipped && (
+                    <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-orange-300 shadow-md">
+                      <p className="text-xs font-semibold text-orange-700 mb-1">📄 העלה קובץ אומדן (אופציונלי)</p>
+                      <p className="text-xs text-gray-500 mb-3">ניתן להמשיך גם ללא קובץ</p>
+                      <input
+                        type="file"
+                        onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-3"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={estimateUploading}
+                          onClick={() => void handleEstimateConfirm(s)}
+                          className="px-4 py-1.5 bg-orange-600 text-white rounded-md text-xs font-semibold hover:bg-orange-700 disabled:opacity-50"
+                        >
+                          {estimateUploading ? '⏳ מעלה...' : '✓ אישור והשלמת שלב'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEstimatePanelStepId(null); setEstimateFile(null); }}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
+                        >
+                          ✕ ביטול
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QUALITY CONTROL: bodywork advisor selection popup */}
+                  {canEdit && qcPopupStepId === s.id && s.step_key === 'QUALITY_CONTROL' && !isDone && !isSkipped && (
+                    <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-indigo-300 shadow-md">
+                      <p className="text-xs font-semibold text-indigo-700 mb-3">👤 בחר יועץ שביצע את בקרת האיכות</p>
+                      <select
+                        value={qcSelectedAdvisor}
+                        onChange={(e) => setQcSelectedAdvisor(e.target.value)}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-3"
+                      >
+                        <option value="">— בחר יועץ —</option>
+                        {bodyworkAdvisors.map((adv) => (
+                          <option key={adv.id} value={adv.full_name}>{adv.full_name}</option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!qcSelectedAdvisor}
+                          onClick={() => void handleQcConfirm(s)}
+                          className="px-4 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          ✓ אישור והשלמת שלב
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQcPopupStepId(null); setQcSelectedAdvisor(''); }}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
+                        >
+                          ✕ ביטול
                         </button>
                       </div>
                     </div>
