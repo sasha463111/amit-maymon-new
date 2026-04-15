@@ -635,6 +635,7 @@ export async function deleteCase(caseId: string) {
 
   await writeAudit(supabase, 'CASE', caseId, 'CASE_DELETED', user.id);
   revalidatePath('/cases');
+  revalidatePath('/cases/archive');
   return { ok: true, error: null };
 }
 
@@ -656,5 +657,6 @@ export async function restoreCase(caseId: string) {
 
   await writeAudit(supabase, 'CASE', caseId, 'CASE_RESTORED', user.id);
   revalidatePath('/cases');
+  revalidatePath('/cases/archive');
   return { ok: true, error: null };
 }

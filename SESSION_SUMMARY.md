@@ -794,3 +794,98 @@ e1872c4  feat: remove תאריך עלייה from new case form, optimistic appro
 | manage_extras_status | ✅ | ❌ | ✅ | ❌ | ❌ |
 | upload_documents | ✅ | ✅ | ✅ | ❌ | ❌ |
 | delete_documents | ✅ | ✅ | ✅ | ❌ | ❌ |
+
+
+---
+
+## Session 6 — הגירה ל-Frankfurt + ארכיון + RLS fix (16.04.2026)
+
+**Scope:** העברה מלאה של Supabase מ-`ap-south-1` ל-`eu-central-1` (Frankfurt), ממשק ארכיון לתיקים מחוקים, ביצועים, תיקון RLS קריטי.
+
+---
+
+### א. הגירת Supabase
+
+**פרויקט ישן:** `yhanmyvolpeiuxspcxmk` (ap-south-1, Mumbai) — נשאר זמנית עד אימות מלא.
+**פרויקט חדש:** `wmkklwymowwnyvkweeyx` (eu-central-1, Frankfurt) — ייצור.
+
+#### כלים שנבנו
+| קובץ | תפקיד |
+|------|-------|
+| `src/db/setup_fresh.sql` | סכמה מאוחדת (001–018). מריצים פעם אחת על פרויקט חדש |
+| `scripts/migrate-to-new-supabase.mjs` | Node.js — מעתיק כל הטבלאות + buckets בסדר תלותי |
+| `scripts/export-auth-users.sql` | SQL להעתקת `auth.users` + `auth.identities` |
+| `SUPABASE_MIGRATION_GUIDE.md` | מדריך ידני בעברית |
+| `.env.example` | טמפלייט לכל משתני הסביבה |
+
+#### תהליך שבוצע
+1. ארגון יוקרם ב-Pro plan (~$25/חודש) כי free tier מוגבל ל-2 פרויקטים
+2. פרויקט חדש `tehila-bodyshop-eu` נוצר ב-Frankfurt
+3. 3 buckets נוצרו: `extras-images`, `painter-images`, `case-documents` (private)
+4. `setup_fresh.sql` הורץ ב-SQL Editor
+5. `auth.users` + `auth.identities` הועתקו דרך SECURITY DEFINER RPC (שומר את ה-password hashes המקוריים — **משתמשים ממשיכים להתחבר בלי איפוס**)
+6. סקריפט Node העתיק 8 טבלאות דאטה (19 תיקים, 251 שלבים, 281 audit events, 32 notifications)
+7. ENUM `approval_type` הורחב ב-`CASE_CLOSURE` (היה חסר ממיגרציה 001)
+8. 2 branches כפולות באנגלית (seed ב-004) נמחקו — נשארו רק המקוריות בעברית
+9. `.env.local` עודכן לכתובת החדשה
+10. Vercel env vars עודכנו (Production + Development) דרך Vercel CLI
+11. Production deploy — אלייאס `https://amit-maymon-new.vercel.app`
+
+#### תיקונים שהתגלו ותוקנו
+- `auth.user_profile()` הועבר מ-`auth` ל-`public` — Supabase חסם יצירת פונקציות ב-schema auth בפרויקטים חדשים
+- `migrations/016_appraiser_status.sql` + `017_soft_delete_and_painter.sql` שוחזרו כקבצים (הורצו בעבר ישירות ב-Dashboard, לא נשמרו בגיט)
+- `role_permissions` + `workflow_step_templates` + `branches` — הוספו `TRUNCATE` לפני העברה כדי לא להתנגש עם seed
+
+---
+
+### ב. ממשק ארכיון תיקים מחוקים (`/cases/archive`)
+
+**גישה:** CEO בלבד. לחיצה על "ארכיון" בניווט → דף עם כל התיקים ש-`deleted_at IS NOT NULL`.
+
+**קבצים:**
+- `src/app/(dashboard)/cases/archive/page.tsx` — Server Component עם query + JOIN ל-profiles/branches כדי להציג שם המוחק ושם הסניף
+- `src/app/(dashboard)/cases/archive/ArchiveTable.tsx` — Client Component עם כפתור "שחזר" לכל שורה
+
+**שינויים נוספים:**
+- `src/app/actions/workflow.ts` — `deleteCase` + `restoreCase` קוראים גם `revalidatePath('/cases/archive')`
+- `src/app/(dashboard)/layout.tsx` — הוסף לינק "ארכיון" ל-CEO nav
+
+---
+
+### ג. שיפורי ביצועים ב-`/cases/[id]`
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/page.tsx`
+
+**שינויים:**
+- `workflow_step_templates` נטען במקביל ל-`case_workflow_runs` (במקום סדרתית) — חוסך round-trip אחד בכל טעינת תיק
+- `bodyworkAdvisors` נוסף ל-`Promise.all` של השאילתות העצמאיות — חוסך עוד round-trip (היה סדרתי בסוף)
+
+**תוצאה:** 2 round-trips פחות לשרת לכל טעינת תיק = ~50–100ms מהר יותר.
+
+---
+
+### ד. תיקון RLS קריטי — Migration 018
+
+**בעיה שהתגלתה:** אחרי ההגירה, login כ-`ceo@test.com` נכשל בשאילתת cases עם שגיאה:
+```
+infinite recursion detected in policy for relation "profiles"
+```
+
+**שורש:** ב-`profiles_select_branch` יש `WHERE branch_id IN (SELECT branch_id FROM profiles WHERE id = auth.uid())`. הסאב-שאילתה על `profiles` מפעילה RLS על השורות שלה, שמפעילה שוב את `profiles_select_branch` — רקורסיה.
+
+**פתרון:** שתי פונקציות `SECURITY DEFINER` ב-`public`:
+- `current_user_branch_id()` — מחזיר `branch_id` של המשתמש המחובר
+- `current_user_role()` — מחזיר `role::text`
+
+עקפו את ה-subqueries על `profiles` בכל ה-policies של: `profiles`, `cars`, `cases`, `case_workflow_runs`, `case_workflow_steps`, `ceo_approvals`, `bodywork_extras`.
+
+**קובץ:** `src/db/migrations/018_fix_rls_recursion.sql` — הורץ בפרויקט החדש והתיקון אומת.
+
+---
+
+### ה. משימות שעדיין פתוחות
+
+- Migration 018 עדיין לא הוחל על הפרויקט **הישן** (ap-south-1) — אם נרצה להפעיל אותו שוב ב-DR, לרוץ ידנית
+- `_export_auth` helper function עדיין קיימת בפרויקט הישן — ניקיון כשהפרויקט הישן יושבת
+- Subqueries ב-policies החדשות על `cases` עדיין קיימות (`case_id IN (SELECT id FROM cases ...)`). אם נחווה רקורסיה גם שם, יהיה אפשר להרחיב את הפונקציות
+

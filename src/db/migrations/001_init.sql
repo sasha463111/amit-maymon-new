@@ -232,7 +232,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY;
 
 -- Helper: get current user's profile (branch_id, role)
-CREATE OR REPLACE FUNCTION auth.user_profile()
+CREATE OR REPLACE FUNCTION public.user_profile()
 RETURNS TABLE (profile_id UUID, branch_id UUID, role user_role) AS $$
   SELECT id, profiles.branch_id, profiles.role
   FROM profiles

@@ -76,12 +76,22 @@ async function CaseDetailData({
 }) {
   const supabase = await createClient();
 
-  // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes
-  const { data: allRuns } = await supabase
-    .from('case_workflow_runs')
-    .select('id, status')
-    .eq('case_id', id)
-    .eq('workflow_type', 'PROFESSIONAL');
+  // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes.
+  // Load templates in parallel — used only if we need to seed steps, but cheap enough to fetch
+  // alongside runs to avoid a second sequential round-trip when seeding is required.
+  const [{ data: allRuns }, { data: stepTemplatesData }] = await Promise.all([
+    supabase
+      .from('case_workflow_runs')
+      .select('id, status')
+      .eq('case_id', id)
+      .eq('workflow_type', 'PROFESSIONAL'),
+    supabase
+      .from('workflow_step_templates')
+      .select('step_key, step_label, order_index, requires_link, requires_file_or_link, requires_ceo_approval')
+      .eq('is_enabled', true)
+      .order('order_index'),
+  ]);
+  const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
 
   let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null }[] = [];
 
@@ -121,14 +131,6 @@ async function CaseDetailData({
       }
     }
   }
-
-  // Load workflow step templates once
-  const { data: stepTemplatesData } = await supabase
-    .from('workflow_step_templates')
-    .select('step_key, step_label, order_index, requires_link, requires_file_or_link, requires_ceo_approval')
-    .eq('is_enabled', true)
-    .order('order_index');
-  const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
 
   // If we still have no steps but have a run, try loading by run_id
   if (actualRun && steps.length === 0) {
@@ -202,6 +204,7 @@ async function CaseDetailData({
     { data: caseAudit },
     { data: documentsData },
     stepAuditResult,
+    { data: advisorsData },
   ] = await Promise.all([
     supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
     supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
@@ -210,6 +213,7 @@ async function CaseDetailData({
     (stepIds.length > 0
       ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
       : Promise.resolve({ data: null })) as Promise<AuditResult>,
+    supabase.from('profiles').select('id, full_name').eq('is_bodywork_advisor', true).eq('is_active', true).order('full_name'),
   ]);
 
   let auditRows: AuditRow[] = (caseAudit ?? []) as AuditRow[];
@@ -240,13 +244,6 @@ async function CaseDetailData({
     }
   }
 
-  // Load bodywork advisors for QC step
-  const { data: advisorsData } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .eq('is_bodywork_advisor', true)
-    .eq('is_active', true)
-    .order('full_name');
   const bodyworkAdvisors = (advisorsData ?? []) as { id: string; full_name: string }[];
 
   const car = Array.isArray(caseRow.cars) ? caseRow.cars[0] : caseRow.cars;
