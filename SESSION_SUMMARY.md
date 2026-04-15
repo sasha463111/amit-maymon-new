@@ -3,6 +3,155 @@
 
 ---
 
+## Session 5 — תשתית + פיצ'רים מלקוח (commit: `3a2ffe6`)
+**תאריך:** 15.04.2026
+
+---
+
+### א. תשתית
+
+#### Vercel Region — Frankfurt
+- **`vercel.json`** נוצר עם `"regions": ["fra1"]` — Serverless Functions עכשיו רצות בפרנקפורט (הכי קרוב לישראל)
+- Deploy אוטומטי הופעל עם ה-push
+
+#### Supabase Region — הערה
+- לא ניתן להעביר project קיים לאזור אחר דרך API/MCP
+- כדי להעביר: צור project חדש ב-`eu-central-1` (Frankfurt) → הרץ את כל המיגרציות → עדכן env vars ב-Vercel
+
+---
+
+### ב. DB — Migration 017
+
+| שינוי | תיאור |
+|-------|--------|
+| `cases.deleted_at` | Soft delete timestamp |
+| `cases.deleted_by` | FK לפרופיל שמחק |
+| `profiles.is_bodywork_advisor` | דגל יועץ פחח (SERVICE_MANAGER + SERVICE_ADVISOR = true כברירת מחדל) |
+| `painter_requests` | בקשות פחח (description, request_type, status) |
+| `painter_request_images` | תמונות לבקשות פחח |
+| `case_documents.document_type` | סוג מסמך (ESTIMATE וכו') |
+| bucket `painter-images` | Storage לתמונות פחח |
+| RLS על `cases_select` | עדכון לסנן `deleted_at IS NULL` לכולם חוץ מ-CEO |
+
+---
+
+### ג. מחיקת תיקים (Soft Delete)
+
+**קובץ:** `src/app/actions/workflow.ts`
+
+- `deleteCase` — שונה מ-hard delete ל-soft delete: עדכון `deleted_at` + `deleted_by`
+- `restoreCase` — פונקציה חדשה לשחזור תיק (CEO בלבד)
+- `cases/page.tsx` + `painters/page.tsx` — מסנן `.is('deleted_at', null)`
+
+---
+
+### ד. READY_FOR_OFFICE — מעבר אוטומטי לאילנה
+
+**קובץ:** `src/app/actions/workflow.ts`
+
+כשמשלימים שלב `READY_FOR_OFFICE`:
+1. **התראה** לכל משתמשי OFFICE בסניף: "רכב X מוכן לתהליך סגירה"
+2. **פתיחה אוטומטית** של CLOSURE workflow run עם 4 שלבים:
+   - `CLOSURE_VERIFY_DETAILS_DOCS` (ACTIVE)
+   - `CLOSURE_PROFORMA_IF_NEEDED`
+   - `CLOSURE_PREPARE_CLOSING_FORMS`
+   - `CLOSE_CASE`
+
+---
+
+### ה. PREP_ESTIMATE — העלאת קובץ אומדן
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
+
+- לחיצה על "סמן בוצע" בשלב `PREP_ESTIMATE` פותחת פאנל כתום
+- ניתן להעלות קובץ אומדן (אופציונלי) — אפשר להמשיך גם ללא קובץ
+- הקובץ נשמר ב-`case_documents` עם `document_type = 'ESTIMATE'`
+
+---
+
+### ו. WASH — התראת יועצי פחח
+
+**קובץ:** `src/app/actions/workflow.ts`
+
+כשמשלימים שלב `WASH` → התראה לכל `is_bodywork_advisor = true` בסניף:
+> "רכב X נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה"
+
+---
+
+### ז. עמוד פחח נפרד
+
+**קבצים חדשים:**
+- `src/app/(dashboard)/painters/[id]/page.tsx` — Server Component
+- `src/app/(dashboard)/painters/[id]/PainterCaseClient.tsx` — Client Component
+
+**מה מוצג לפחח:**
+- פרטי לקוח בלבד: שם, טלפון, רכב (ללא ביטוח / אירוע / סוג תביעה)
+- **צ'קליסט פחח:**
+  - ✅ נכנס לעבודה (→ מעדכן `painter_status = IN_WORK`)
+  - ✅ התקבל חלקים (→ מעדכן `parts_arrived = true`)
+- **בקשות לפחח:**
+  - טופס בקשה — סוג (עבודה/חלקים) + תיאור חופשי + תמונות
+  - שליחה → התראה אוטומטית לכל יועצי הפחח בסניף
+  - רשימת בקשות קיימות עם סטטוס
+
+**`painters/page.tsx`** — עודכן:
+- גישה ל-PAINTER + SERVICE_MANAGER + CEO (לא רק CEO)
+- כל תיק מקשר ל-`/painters/[id]` (לא `/cases/[id]`)
+- מסנן `deleted_at IS NULL`
+
+---
+
+### ח. יועצי פחחות בהגדרות
+
+**קבצים:**
+- `src/app/(dashboard)/settings/BodyworkAdvisorsTab.tsx` — קומפוננט חדש
+- `src/app/(dashboard)/settings/page.tsx` — נוסף טאב "🔧 יועצי פחחות"
+- `src/app/actions/settings.ts` — נוספו:
+  - `getBodyworkAdvisors()` — שולף SERVICE_MANAGER + SERVICE_ADVISOR
+  - `toggleBodyworkAdvisor(profileId, isAdvisor)` — מפעיל/מכבה דגל
+
+**מה רואים בטאב:**
+- רשימת כל משתמשי SERVICE_MANAGER + SERVICE_ADVISOR
+- Checkbox לכל משתמש — האם הוא יועץ פחח פעיל
+- שמירה אופטימית עם revert בשגיאה
+
+---
+
+### ט. בקרת איכות — בחירת יועץ מבצע
+
+**קובץ:** `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx`
+
+כשלוחצים "סמן בוצע" על שלב `QUALITY_CONTROL` (ויש יועצים מוגדרים):
+1. נפתח popup סגול לבחירת יועץ מרשימת `bodyworkAdvisors`
+2. לאחר בחירה → שמירה ל-`cases.qc_assignee` + השלמת השלב
+
+**`page.tsx`** — עדכון:
+- טעינת `bodyworkAdvisors` (כל מי שיש להם `is_bodywork_advisor = true`)
+- העברה כ-prop ל-`CaseDetailClientV2`
+
+---
+
+### Server Actions חדש
+
+**`src/app/actions/painter.ts`** — פעולות פחח:
+```typescript
+updatePainterChecklist(caseId, { painter_entered_work?, parts_arrived? })
+createPainterRequest(caseId, description, requestType, imageFiles?)
+getPainterRequests(caseId)
+updatePainterRequestStatus(requestId, status)
+```
+
+---
+
+### Git Commits — Session 5
+
+```
+3a2ffe6  feat: soft delete, painter page, QC advisor, WASH notify, closure auto-start, PREP_ESTIMATE upload
+bbb9534  feat: apply Stitch design system across all pages
+```
+
+---
+
 ## גרסאות קודמות (Session 1)
 
 ### 1. שלבי סגירה (Closure Workflow)
