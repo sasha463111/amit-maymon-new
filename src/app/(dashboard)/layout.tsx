@@ -18,9 +18,9 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'התראות', href: '/notifications' },
   ],
   CEO: [
+    { label: 'תיקים', href: '/cases' },
     { label: 'אישורים', href: '/approvals' },
     { label: 'סגירה', href: '/closure' },
-    { label: 'תיקים', href: '/cases' },
     { label: 'פחחים', href: '/painters' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
@@ -96,10 +96,11 @@ export default async function DashboardLayout({
       )}
       {isPreview && <PreviewRoleSwitcher />}
 
-      {/* Header */}
-      <header className="bg-white border-b border-gray-100 px-6 h-16 flex items-center shadow-sm sticky top-0 z-40">
-        <div className="flex items-center justify-between w-full">
-          {/* Right side: role badge + name + bell + logout */}
+      {/* Top header with brand + nav + user */}
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
+        {/* Upper row: brand + user info */}
+        <div className="px-6 h-14 flex items-center justify-between">
+          {/* Right side (in RTL): role badge + name + bell + logout */}
           <div className="flex items-center gap-2 text-sm">
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg">
               <span className="text-gray-400 text-xs">{roleLabel}</span>
@@ -131,18 +132,17 @@ export default async function DashboardLayout({
             <span className="text-xs text-gray-400 font-medium">ניהול מוסך</span>
           </div>
         </div>
+
+        {/* Lower row: horizontal nav */}
+        <div className="px-6 border-t border-gray-100 bg-gray-50">
+          <div className="py-2">
+            <SidebarNav links={links} />
+          </div>
+        </div>
       </header>
 
-      <div className="flex flex-1">
-        {/* Sidebar — dark theme */}
-        <aside className="w-56 bg-gray-900 flex flex-col shadow-xl flex-shrink-0">
-          <nav className="flex-1 px-3 py-4">
-            <SidebarNav links={links} />
-          </nav>
-        </aside>
-
-        <main className="flex-1 p-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
-      </div>
+      {/* Main content — no more sidebar */}
+      <main className="flex-1 p-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
     </div>
   );
 }
