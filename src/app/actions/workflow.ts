@@ -618,24 +618,29 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     await writeAudit(supabase, 'CASE', caseId, 'CASE_CLOSED', user.id);
   }
 
-  const nextOrder = activeStep.order_index + 1;
-  const { data: nextSteps } = await supabase
-    .from('case_workflow_steps')
-    .select('id, state')
-    .eq('run_id', run.id)
-    .eq('order_index', nextOrder)
-    .limit(1);
-  if (nextSteps && nextSteps.length > 0) {
-    const nextStep = nextSteps[0] as { id: string; state: string };
-    // Only activate if not already SKIPPED (e.g. WHEELS_CHECK auto-skipped for young cars)
-    if (nextStep.state !== 'SKIPPED') {
-      await supabase
-        .from('case_workflow_steps')
-        .update({ state: 'ACTIVE', activated_at: now } as never)
-        .eq('id', nextStep.id);
+  // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the
+  // professional run. Skip the default next-step activation so we don't resurrect it.
+  if (stepKey !== 'SEND_COMPLETION_PHOTOS') {
+    const nextOrder = activeStep.order_index + 1;
+    const { data: nextSteps } = await supabase
+      .from('case_workflow_steps')
+      .select('id, state')
+      .eq('run_id', run.id)
+      .eq('order_index', nextOrder)
+      .limit(1);
+    if (nextSteps && nextSteps.length > 0) {
+      const nextStep = nextSteps[0] as { id: string; state: string };
+      // Only activate if not already SKIPPED (e.g. WHEELS_CHECK auto-skipped for young cars)
+      // and not already DONE (e.g. READY_FOR_OFFICE auto-completed by us)
+      if (nextStep.state !== 'SKIPPED' && nextStep.state !== 'DONE') {
+        await supabase
+          .from('case_workflow_steps')
+          .update({ state: 'ACTIVE', activated_at: now } as never)
+          .eq('id', nextStep.id);
+      }
+    } else if (run.workflow_type === 'PROFESSIONAL') {
+      await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
     }
-  } else if (run.workflow_type === 'PROFESSIONAL') {
-    await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
   }
 
   await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'STEP_COMPLETED', user.id, {
