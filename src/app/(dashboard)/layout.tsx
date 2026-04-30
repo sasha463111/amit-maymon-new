@@ -1,11 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
-import { NotificationsBadge } from '@/components/NotificationsBadge';
+import { NotificationsBell } from '@/components/NotificationsBell';
 import { SidebarNav } from '@/components/SidebarNav';
-import { Bell, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -113,14 +112,7 @@ export default async function DashboardLayout({
                 </>
               )}
             </div>
-            <Link
-              href="/notifications"
-              className="relative bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors"
-              title="התראות"
-            >
-              <Bell size={17} className="text-gray-500" />
-              <NotificationsBadge userId={user.id} />
-            </Link>
+            <NotificationsBell userId={user.id} />
             <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center" title="התנתק">
               <LogOut size={16} className="text-gray-500" />
             </a>
