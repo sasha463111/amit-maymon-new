@@ -58,6 +58,11 @@ type CaseRowMinimal = {
   estimate_link?: string | null;
   painter_status?: string | null;
   appraiser_status?: string | null;
+  // Added migration 020 (Session 6)
+  enter_work_checklist_state?: string[] | null;
+  catalog_numbers_assignee?: string | null;
+  parts_discounts_assignee?: string | null;
+  completion_photos_assignee?: string | null;
   cars:
     | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }
     | { license_plate: string; first_registration_date: string | null; vehicle_type?: string | null; year?: number | null; make?: string | null; model?: string | null; vin?: string | null }[]
@@ -209,7 +214,7 @@ async function CaseDetailData({
     supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
     supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
     supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'CASE').eq('entity_id', id).limit(50),
-    supabase.from('case_documents').select('id, file_name, file_path, file_size, mime_type, created_at').eq('case_id', id).order('created_at', { ascending: false }),
+    supabase.from('case_documents').select('id, file_name, file_path, file_size, mime_type, document_type, created_at').eq('case_id', id).order('created_at', { ascending: false }),
     (stepIds.length > 0
       ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
       : Promise.resolve({ data: null })) as Promise<AuditResult>,
@@ -223,7 +228,7 @@ async function CaseDetailData({
   auditRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   auditRows = auditRows.slice(0, 20);
 
-  const documents = (documentsData ?? []) as { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; created_at: string }[];
+  const documents = (documentsData ?? []) as { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; document_type: string | null; created_at: string }[];
 
   // Build userNames map from audit events + step.completed_by
   const userIdSet = new Set<string>();
@@ -304,6 +309,10 @@ async function CaseDetailData({
       appraiserStatus={caseRow.appraiser_status ?? null}
       carAgeYears={carAgeYears}
       bodyworkAdvisors={bodyworkAdvisors}
+      enterWorkChecklistState={caseRow.enter_work_checklist_state ?? []}
+      catalogNumbersAssignee={caseRow.catalog_numbers_assignee ?? null}
+      partsDiscountsAssignee={caseRow.parts_discounts_assignee ?? null}
+      completionPhotosAssignee={caseRow.completion_photos_assignee ?? null}
     />
   );
 }

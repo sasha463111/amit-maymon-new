@@ -11,7 +11,7 @@ export default async function NotificationsPage() {
 
   const { data: notificationsData } = await supabase
     .from('notifications')
-    .select('id, type, title, body, read, created_at, case_id')
+    .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -24,33 +24,52 @@ export default async function NotificationsPage() {
     read: boolean;
     created_at: string;
     case_id: string | null;
+    action_url: string | null;
+    triggered_by: string | null;
   }[];
 
-  // Fetch license plates for all case_ids in parallel
+  // Collect case_ids and triggered_by user ids
   const seenCaseIds = new Set<string>();
   const caseIds: string[] = [];
+  const userIds = new Set<string>();
   for (const n of rows) {
     if (n.case_id && !seenCaseIds.has(n.case_id)) {
       seenCaseIds.add(n.case_id);
       caseIds.push(n.case_id);
     }
+    if (n.triggered_by) userIds.add(n.triggered_by);
   }
   const plateMap = new Map<string, string>();
+  const userNameMap = new Map<string, string>();
 
-  if (caseIds.length > 0) {
-    const { data: caseRows } = await supabase
-      .from('cases')
-      .select('id, cars(license_plate)')
-      .in('id', caseIds);
-    for (const c of (caseRows ?? []) as { id: string; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }[]) {
-      const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
-      if (car?.license_plate) plateMap.set(c.id, car.license_plate);
-    }
-  }
+  await Promise.all([
+    (async () => {
+      if (caseIds.length === 0) return;
+      const { data: caseRows } = await supabase
+        .from('cases')
+        .select('id, cars(license_plate)')
+        .in('id', caseIds);
+      for (const c of (caseRows ?? []) as { id: string; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }[]) {
+        const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+        if (car?.license_plate) plateMap.set(c.id, car.license_plate);
+      }
+    })(),
+    (async () => {
+      if (userIds.size === 0) return;
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', Array.from(userIds));
+      for (const p of (profilesData ?? []) as { id: string; full_name: string | null }[]) {
+        if (p.full_name) userNameMap.set(p.id, p.full_name);
+      }
+    })(),
+  ]);
 
   const notificationsWithPlate = rows.map((n) => ({
     ...n,
     license_plate: n.case_id ? (plateMap.get(n.case_id) ?? null) : null,
+    triggered_by_name: n.triggered_by ? (userNameMap.get(n.triggered_by) ?? null) : null,
   }));
 
   const unreadCount = rows.filter((n) => !n.read).length;

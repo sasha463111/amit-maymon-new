@@ -27,6 +27,25 @@ const DEFAULT_STEP_LABELS: Record<string, string> = {
   READY_FOR_OFFICE: 'מוכן למשרד',
 };
 
+// Steps that ask "by whom?" before completing.
+const ASSIGNEE_FIELD_BY_STEP: Record<string, 'catalog_numbers_assignee' | 'parts_discounts_assignee' | 'completion_photos_assignee'> = {
+  ISSUE_CATALOG_NUMBERS: 'catalog_numbers_assignee',
+  PARTS_DISCOUNTS: 'parts_discounts_assignee',
+  SEND_COMPLETION_PHOTOS: 'completion_photos_assignee',
+};
+
+// Sub-checklist items for ENTER_WORK (advisory — does not block step completion).
+const ENTER_WORK_CHECKLIST_ITEMS = ['רץ גלגלים', 'הודפסו גלגלים אחרי שעה מינימום'];
+
+// Prepend https:// if the user-entered URL has no scheme — prevents browsers from
+// interpreting it as a relative path under /cases/[id].
+function normalizeUrl(s: string): string {
+  const trimmed = s.trim();
+  if (!trimmed) return '';
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 type StepRow = {
   id: string;
   step_key: string;
@@ -73,7 +92,7 @@ interface CaseDetailClientProps {
   approvals: { id: string; approval_type: string; status: string; rejection_note: string | null }[];
   extras: { id: string; description: string; status: string }[];
   auditEvents: { id: string; action: string; user_id: string | null; created_at: string; payload: unknown }[];
-  documents: { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; created_at: string }[];
+  documents: { id: string; file_name: string; file_path: string; file_size: number | null; mime_type: string | null; document_type?: string | null; created_at: string }[];
   role: string | null;
   userNames: Record<string, string>;
   stepTemplates: StepTemplate[];
@@ -86,6 +105,11 @@ interface CaseDetailClientProps {
   appraiserStatus: string | null;
   carAgeYears: number | null;
   bodyworkAdvisors: { id: string; full_name: string }[];
+  // Session 6 (migration 020)
+  enterWorkChecklistState: string[];
+  catalogNumbersAssignee: string | null;
+  partsDiscountsAssignee: string | null;
+  completionPhotosAssignee: string | null;
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -172,6 +196,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     appraiserStatus: initialAppraiserStatus,
     carAgeYears,
     bodyworkAdvisors,
+    enterWorkChecklistState: initialEnterWorkChecklistState,
+    catalogNumbersAssignee: initialCatalogNumbersAssignee,
+    partsDiscountsAssignee: initialPartsDiscountsAssignee,
+    completionPhotosAssignee: initialCompletionPhotosAssignee,
   } = props;
 
   const router = useRouter();
@@ -376,6 +404,31 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   // QUALITY_CONTROL: select bodywork advisor popup
   const [qcPopupStepId, setQcPopupStepId] = useState<string | null>(null);
   const [qcSelectedAdvisor, setQcSelectedAdvisor] = useState('');
+
+  // ── Session 6 — by-whom popup for ISSUE_CATALOG_NUMBERS / PARTS_DISCOUNTS / SEND_COMPLETION_PHOTOS ──
+  const [assigneePopupStepId, setAssigneePopupStepId] = useState<string | null>(null);
+  const [assigneeInput, setAssigneeInput] = useState('');
+  const [catalogNumbersAssignee, setCatalogNumbersAssignee] = useState(initialCatalogNumbersAssignee ?? '');
+  const [partsDiscountsAssignee, setPartsDiscountsAssignee] = useState(initialPartsDiscountsAssignee ?? '');
+  const [completionPhotosAssignee, setCompletionPhotosAssignee] = useState(initialCompletionPhotosAssignee ?? '');
+
+  // ── Session 6 — ENTER_WORK sub-checklist ──
+  const [enterWorkChecklist, setEnterWorkChecklist] = useState<string[]>(initialEnterWorkChecklistState ?? []);
+
+  // ── Session 6 — final estimate (READY_FOR_OFFICE) optional upload ──
+  const [finalEstimatePanelStepId, setFinalEstimatePanelStepId] = useState<string | null>(null);
+  const [finalEstimateFile, setFinalEstimateFile] = useState<File | null>(null);
+  const [finalEstimateUploading, setFinalEstimateUploading] = useState(false);
+
+  // ── Session 6 — local mirrors of links so the saved value displays without a full reload ──
+  const [wheelsCheckLinkValue, setWheelsCheckLinkValue] = useState(wheelsCheckLink ?? '');
+
+  // Top-of-step error banner (more visible than inline setStepError) for upload failures.
+  const [uploadErrorBanner, setUploadErrorBanner] = useState<string | null>(null);
+  function showUploadError(msg: string) {
+    setUploadErrorBanner(msg);
+    setTimeout(() => setUploadErrorBanner(null), 8000);
+  }
 
   const [returning, setReturning] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -614,16 +667,35 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       return;
     }
 
+    // Session 6 — open "by whom?" popup for catalog/discounts/completion-photos steps.
+    if (ASSIGNEE_FIELD_BY_STEP[step.step_key]) {
+      setAssigneePopupStepId(step.id);
+      // Pre-fill any prior value
+      if (step.step_key === 'ISSUE_CATALOG_NUMBERS') setAssigneeInput(catalogNumbersAssignee || '');
+      else if (step.step_key === 'PARTS_DISCOUNTS') setAssigneeInput(partsDiscountsAssignee || '');
+      else if (step.step_key === 'SEND_COMPLETION_PHOTOS') setAssigneeInput(completionPhotosAssignee || '');
+      return;
+    }
+
     if (step.step_key === 'READY_FOR_OFFICE') {
       if (extras.some((e) => e.status === 'IN_TREATMENT')) {
         setStepError('לא ניתן להשלים - יש תוספות פחחות בטיפול');
         return;
       }
-      const required = effectiveApprovals.filter(
-        (a) => a.approval_type === 'ESTIMATE_AND_DETAILS' || a.approval_type === 'WHEELS_CHECK'
-      );
-      if (required.length > 0 && required.some((a) => a.status !== 'APPROVED')) {
-        setStepError('לא ניתן להשלים - נדרש אישור CEO');
+      // Take the LATEST approval per type to avoid being blocked by a stale duplicate row.
+      const byType = new Map<string, { status: string }>();
+      for (const a of effectiveApprovals) {
+        // assume effectiveApprovals is roughly ordered; if not, the server-side check is authoritative.
+        if (!byType.has(a.approval_type)) byType.set(a.approval_type, a);
+      }
+      const estimate = byType.get('ESTIMATE_AND_DETAILS');
+      const wheels = byType.get('WHEELS_CHECK');
+      if (!estimate || estimate.status !== 'APPROVED') {
+        setStepError('לא ניתן להשלים - נדרש אישור CEO לאומדן');
+        return;
+      }
+      if (wheels && wheels.status !== 'APPROVED') {
+        setStepError('לא ניתן להשלים - נדרש אישור CEO לטפסי גלגלים');
         return;
       }
     }
@@ -632,8 +704,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   }
 
   async function handleSaveLinkAndComplete(step: StepRow) {
-    const link = (stepLinks[step.id] ?? '').trim();
-    if (!link) { setStepError('נדרש קישור'); return; }
+    const raw = (stepLinks[step.id] ?? '').trim();
+    if (!raw) { setStepError('נדרש קישור'); return; }
+    const link = normalizeUrl(raw);
     setStepError(null);
     setEditingLinkStepId(null);
     // Save fixcar link first
@@ -641,6 +714,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       const supabase = (await import('@/lib/supabase/client')).createClient();
       await supabase.from('cases').update({ fixcar_link: link } as never).eq('id', caseId);
       setFixcarValue(link);
+      setStepLinks((prev) => ({ ...prev, [step.id]: link }));
     }
     await performComplete(step, link);
   }
@@ -652,21 +726,35 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       const supabase = (await import('@/lib/supabase/client')).createClient();
 
       if (wheelsMode === 'link') {
-        const link = wheelsLinkValue.trim();
-        if (!link) { setStepError('נדרש קישור'); setWheelsUploading(false); return; }
-        await supabase.from('cases').update({ wheels_check_link: link } as never).eq('id', caseId);
+        const raw = wheelsLinkValue.trim();
+        if (!raw) { setStepError('נדרש קישור'); setWheelsUploading(false); return; }
+        const link = normalizeUrl(raw);
+        const { error } = await supabase.from('cases').update({ wheels_check_link: link } as never).eq('id', caseId);
+        if (error) {
+          showUploadError(`שמירת הקישור נכשלה: ${error.message}`);
+          setWheelsUploading(false);
+          return;
+        }
+        setWheelsCheckLinkValue(link);
+        setWheelsLinkValue(link);
       } else {
         if (!wheelsFile) { setStepError('נדרש קובץ'); setWheelsUploading(false); return; }
         const { uploadCaseDocument: uploadDoc } = await import('@/app/actions/documents');
         const formData = new FormData();
         formData.append('case_id', caseId);
         formData.append('file', wheelsFile);
+        formData.append('document_type', 'WHEELS_CHECK');
         const uploadRes = await uploadDoc(formData);
-        if (uploadRes?.error) { setStepError(uploadRes.error); setWheelsUploading(false); return; }
+        if (uploadRes?.error) {
+          showUploadError(uploadRes.error);
+          setStepError(uploadRes.error);
+          setWheelsUploading(false);
+          return;
+        }
         // Refresh documents list
         const { data: docsData } = await supabase
           .from('case_documents')
-          .select('id, file_name, file_path, file_size, mime_type, created_at')
+          .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
           .eq('case_id', caseId)
           .order('created_at', { ascending: false });
         if (docsData) setLocalDocuments(docsData as typeof documents);
@@ -675,6 +763,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       setWheelsCheckPanelStepId(null);
       setWheelsFile(null);
       await performComplete(step);
+    } catch (e) {
+      console.error('[handleWheelsConfirm] error', e);
+      showUploadError(e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה');
     } finally {
       setWheelsUploading(false);
     }
@@ -705,12 +796,17 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         formData.append('file', estimateFile);
         formData.append('document_type', 'ESTIMATE');
         const uploadRes = await uploadDoc(formData);
-        if (uploadRes?.error) { setStepError(uploadRes.error); setEstimateUploading(false); return; }
+        if (uploadRes?.error) {
+          showUploadError(uploadRes.error);
+          setStepError(uploadRes.error);
+          setEstimateUploading(false);
+          return;
+        }
         // Refresh documents list
         const supabase = (await import('@/lib/supabase/client')).createClient();
         const { data: docsData } = await supabase
           .from('case_documents')
-          .select('id, file_name, file_path, file_size, mime_type, created_at')
+          .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
           .eq('case_id', caseId)
           .order('created_at', { ascending: false });
         if (docsData) setLocalDocuments(docsData as typeof documents);
@@ -718,8 +814,95 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       setEstimatePanelStepId(null);
       setEstimateFile(null);
       await performComplete(step);
+    } catch (e) {
+      console.error('[handleEstimateConfirm] error', e);
+      showUploadError(e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה');
     } finally {
       setEstimateUploading(false);
+    }
+  }
+
+  // Capture pasted screenshots (Ctrl+V) inside the PREP_ESTIMATE panel.
+  function handleEstimatePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imgItem = items.find((it) => it.type.startsWith('image/'));
+    if (!imgItem) return;
+    const file = imgItem.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    // Rename to a friendlier name with a timestamp
+    const ext = file.type.split('/')[1] || 'png';
+    const renamed = new File([file], `estimate-paste-${Date.now()}.${ext}`, { type: file.type });
+    setEstimateFile(renamed);
+  }
+
+  // ── Session 6 — by-whom popup confirm ──
+  async function handleAssigneeConfirm(step: StepRow) {
+    const trimmed = assigneeInput.trim();
+    if (!trimmed) { setStepError('נדרש שם'); return; }
+    const fieldKey = ASSIGNEE_FIELD_BY_STEP[step.step_key];
+    if (!fieldKey) { return; }
+    setStepError(null);
+    try {
+      const res = await updateCaseDetails(caseId, { [fieldKey]: trimmed });
+      if (res?.error) { setStepError(res.error); return; }
+      if (fieldKey === 'catalog_numbers_assignee') setCatalogNumbersAssignee(trimmed);
+      else if (fieldKey === 'parts_discounts_assignee') setPartsDiscountsAssignee(trimmed);
+      else if (fieldKey === 'completion_photos_assignee') setCompletionPhotosAssignee(trimmed);
+      setAssigneePopupStepId(null);
+      setAssigneeInput('');
+      await performComplete(step);
+    } catch (e) {
+      console.error('[handleAssigneeConfirm] error', e);
+      setStepError('שגיאה בשמירת שם המבצע');
+    }
+  }
+
+  // ── Session 6 — toggle ENTER_WORK sub-checklist item ──
+  async function toggleEnterWorkItem(item: string) {
+    const next = enterWorkChecklist.includes(item)
+      ? enterWorkChecklist.filter((x) => x !== item)
+      : [...enterWorkChecklist, item];
+    setEnterWorkChecklist(next);
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    await supabase.from('cases').update({ enter_work_checklist_state: next } as never).eq('id', caseId);
+  }
+
+  // ── Session 6 — final estimate upload at READY_FOR_OFFICE (optional, doesn't block) ──
+  async function handleFinalEstimateUpload(step: StepRow) {
+    if (!finalEstimateFile) { setStepError('נדרש קובץ'); return; }
+    setStepError(null);
+    setFinalEstimateUploading(true);
+    try {
+      const { uploadCaseDocument: uploadDoc } = await import('@/app/actions/documents');
+      const formData = new FormData();
+      formData.append('case_id', caseId);
+      formData.append('file', finalEstimateFile);
+      formData.append('document_type', 'FINAL_ESTIMATE');
+      const uploadRes = await uploadDoc(formData);
+      if (uploadRes?.error) {
+        showUploadError(uploadRes.error);
+        setStepError(uploadRes.error);
+        return;
+      }
+      // Refresh documents list
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data: docsData } = await supabase
+        .from('case_documents')
+        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+        .eq('case_id', caseId)
+        .order('created_at', { ascending: false });
+      if (docsData) setLocalDocuments(docsData as typeof documents);
+      setFinalEstimateFile(null);
+      setFinalEstimatePanelStepId(null);
+      // Do not auto-complete the step — user still clicks סמן בוצע.
+      // Note: deliberately not awaiting performComplete here.
+      void step;
+    } catch (e) {
+      console.error('[handleFinalEstimateUpload] error', e);
+      showUploadError(e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה');
+    } finally {
+      setFinalEstimateUploading(false);
     }
   }
 
@@ -916,6 +1099,16 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           צ&apos;קליסט עבודה
         </h2>
 
+        {uploadErrorBanner && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-lg flex items-start gap-2">
+            <span className="text-red-600 text-lg">⚠️</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-red-800">העלאת הקובץ נכשלה</p>
+              <p className="text-xs text-red-700 mt-1 break-words">{uploadErrorBanner}</p>
+            </div>
+            <button type="button" onClick={() => setUploadErrorBanner(null)} className="text-red-600 hover:text-red-800 text-sm">✕</button>
+          </div>
+        )}
         {orderedSteps.length === 0 ? (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm text-yellow-800 font-medium">⚠️ אין שלבים להצגה</p>
@@ -929,7 +1122,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               const label = STEP_LABELS[s.step_key] ?? s.step_key ?? `שלב ${index + 1}`;
               const savedLink = stepLinks[s.id] || (s.step_key === 'FIXCAR_PHOTOS' ? fixcarValue : '');
               const hasLink = savedLink.trim().length > 0;
-              const hasWheelsLink = s.step_key === 'WHEELS_CHECK' && wheelsCheckLink;
+              const hasWheelsLink = s.step_key === 'WHEELS_CHECK' && wheelsCheckLinkValue;
 
               let isBlocked = false;
               let blockReason = '';
@@ -942,11 +1135,16 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                   warningMessage = `חלקים לא זמינים — סטטוס נוכחי: ${PARTS_STATUS_LABELS[partsValue] ?? partsValue}`;
                 } else if (s.step_key === 'READY_FOR_OFFICE') {
                   const hasExtrasInTreatment = extras.some((e) => e.status === 'IN_TREATMENT');
-                  const requiredApprovals = effectiveApprovals.filter(
-                    (a) => a.approval_type === 'ESTIMATE_AND_DETAILS' || a.approval_type === 'WHEELS_CHECK'
-                  );
-                  const hasRejectedOrMissing = requiredApprovals.length > 0 && requiredApprovals.some((a) => a.status !== 'APPROVED');
-                  if (hasExtrasInTreatment || hasRejectedOrMissing) {
+                  // Take the LATEST approval per type (Bug C — duplicate rows could falsely block).
+                  const byType = new Map<string, { status: string }>();
+                  for (const a of effectiveApprovals) {
+                    if (!byType.has(a.approval_type)) byType.set(a.approval_type, a);
+                  }
+                  const estimate = byType.get('ESTIMATE_AND_DETAILS');
+                  const wheels = byType.get('WHEELS_CHECK');
+                  const estimateOk = estimate && estimate.status === 'APPROVED';
+                  const wheelsOk = !wheels || wheels.status === 'APPROVED';
+                  if (hasExtrasInTreatment || !estimateOk || !wheelsOk) {
                     isBlocked = true;
                     blockReason = hasExtrasInTreatment ? 'תוספות בטיפול' : 'נדרש אישור CEO';
                   }
@@ -1053,6 +1251,114 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         />
                         הגיע חלקים
                       </label>
+                      <div className="border-t border-blue-200 pt-2 mt-2">
+                        <p className="text-xs font-semibold text-blue-700 mb-1">צ&apos;קליסט גלגלים</p>
+                        {ENTER_WORK_CHECKLIST_ITEMS.map((item) => (
+                          <label key={item} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={enterWorkChecklist.includes(item)}
+                              onChange={() => void toggleEnterWorkItem(item)}
+                              className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                            />
+                            {item}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Session 6 — display "by whom" for catalog/discounts/completion-photos after step is done */}
+                  {isDone && (
+                    (s.step_key === 'ISSUE_CATALOG_NUMBERS' && catalogNumbersAssignee) ||
+                    (s.step_key === 'PARTS_DISCOUNTS' && partsDiscountsAssignee) ||
+                    (s.step_key === 'SEND_COMPLETION_PHOTOS' && completionPhotosAssignee)
+                  ) && (
+                    <div className="mr-11 px-3 py-1.5 text-xs text-gray-600">
+                      בוצע על ידי: <span className="font-semibold text-gray-800">
+                        {s.step_key === 'ISSUE_CATALOG_NUMBERS' ? catalogNumbersAssignee :
+                         s.step_key === 'PARTS_DISCOUNTS' ? partsDiscountsAssignee :
+                         completionPhotosAssignee}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Session 6 — by-whom popup */}
+                  {canEdit && assigneePopupStepId === s.id && ASSIGNEE_FIELD_BY_STEP[s.step_key] && !isDone && !isSkipped && (
+                    <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-cyan-300 shadow-md">
+                      <p className="text-xs font-semibold text-cyan-700 mb-2">👤 על ידי מי בוצע השלב?</p>
+                      <input
+                        autoFocus
+                        type="text"
+                        value={assigneeInput}
+                        onChange={(e) => setAssigneeInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void handleAssigneeConfirm(s);
+                          if (e.key === 'Escape') { setAssigneePopupStepId(null); setAssigneeInput(''); }
+                        }}
+                        placeholder="הקלד שם..."
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 mb-3"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={!assigneeInput.trim()}
+                          onClick={() => void handleAssigneeConfirm(s)}
+                          className="px-4 py-1.5 bg-cyan-600 text-white rounded-md text-xs font-semibold hover:bg-cyan-700 disabled:opacity-50"
+                        >
+                          ✓ אישור והשלמת שלב
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAssigneePopupStepId(null); setAssigneeInput(''); }}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
+                        >
+                          ✕ ביטול
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Session 6 — final estimate upload panel for READY_FOR_OFFICE */}
+                  {canEdit && isActive && s.step_key === 'READY_FOR_OFFICE' && (
+                    <div className="mr-11 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                      {finalEstimatePanelStepId === s.id ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-purple-700">📄 העלה אומדן סופי (אופציונלי)</p>
+                          <p className="text-xs text-gray-600">האומדן הסופי כולל הנחות, מק&quot;טים והכל. עמית יראה אותו לפני סגירה.</p>
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={(e) => setFinalEstimateFile(e.target.files?.[0] ?? null)}
+                            className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={!finalEstimateFile || finalEstimateUploading}
+                              onClick={() => void handleFinalEstimateUpload(s)}
+                              className="px-3 py-1.5 bg-purple-600 text-white rounded-md text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
+                            >
+                              {finalEstimateUploading ? '⏳ מעלה...' : '✓ העלה'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setFinalEstimatePanelStepId(null); setFinalEstimateFile(null); }}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
+                            >
+                              ביטול
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setFinalEstimatePanelStepId(s.id)}
+                          className="text-xs text-purple-700 underline"
+                        >
+                          📄 העלה אומדן סופי לבדיקת CEO (אופציונלי)
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -1109,7 +1415,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <p className="text-xs font-medium text-gray-600 mb-1">קישור FixCar:</p>
                       <a
-                        href={savedLink}
+                        href={normalizeUrl(savedLink)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:text-blue-700 underline break-all block"
@@ -1125,13 +1431,13 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <p className="text-xs font-medium text-gray-600 mb-1">קישור טפסי גלגלים:</p>
                       <a
-                        href={wheelsCheckLink!}
+                        href={normalizeUrl(wheelsCheckLinkValue)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:text-blue-700 underline break-all block"
                         dir="ltr"
                       >
-                        {wheelsCheckLink}
+                        {wheelsCheckLinkValue}
                       </a>
                     </div>
                   )}
@@ -1179,14 +1485,24 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
                   {/* PREP_ESTIMATE file upload panel */}
                   {canEdit && estimatePanelStepId === s.id && s.step_key === 'PREP_ESTIMATE' && !isDone && !isSkipped && (
-                    <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-orange-300 shadow-md">
+                    <div
+                      className="mr-11 mt-1 p-4 bg-white rounded-lg border border-orange-300 shadow-md"
+                      tabIndex={0}
+                      onPaste={handleEstimatePaste}
+                    >
                       <p className="text-xs font-semibold text-orange-700 mb-1">📄 העלה קובץ אומדן (אופציונלי)</p>
-                      <p className="text-xs text-gray-500 mb-3">ניתן להמשיך גם ללא קובץ</p>
+                      <p className="text-xs text-gray-500 mb-2">ניתן להמשיך גם ללא קובץ. הדבק תמונה (Ctrl+V) או בחר קובץ ↓</p>
                       <input
                         type="file"
+                        accept="image/*,application/pdf"
                         onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-3"
+                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-2"
                       />
+                      {estimateFile && (
+                        <p className="text-xs text-green-700 mb-3">
+                          ✓ נבחר: <span className="font-semibold">{estimateFile.name}</span> ({(estimateFile.size / 1024).toFixed(0)} KB)
+                        </p>
+                      )}
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -1280,6 +1596,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                       ) : (
                         <input
                           type="file"
+                          accept="image/*,application/pdf"
                           onChange={(e) => setWheelsFile(e.target.files?.[0] ?? null)}
                           className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
                         />
@@ -1357,7 +1674,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     const supabase = createClient();
                     const { data } = await supabase
                       .from('case_documents')
-                      .select('id, file_name, file_path, file_size, mime_type, created_at')
+                      .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
                       .eq('case_id', caseId)
                       .order('created_at', { ascending: false });
                     if (data) setLocalDocuments(data as typeof documents);
@@ -1388,24 +1705,44 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               const { data: urlData } = supabase.storage.from('case-documents').getPublicUrl(doc.file_path);
               const fileSize = doc.file_size ? (doc.file_size / 1024).toFixed(1) + ' KB' : '—';
               const isImage = doc.mime_type?.startsWith('image/');
+              const docType = doc.document_type ?? null;
+              const isFinalEstimate = docType === 'FINAL_ESTIMATE';
+              const docTypeLabel: Record<string, string> = {
+                ESTIMATE: 'אומדן',
+                FINAL_ESTIMATE: 'אומדן סופי',
+                WHEELS_CHECK: 'טפסי גלגלים',
+              };
               return (
                 <div
                   key={doc.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                    isFinalEstimate
+                      ? 'bg-purple-50 border-purple-300 hover:bg-purple-100'
+                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0 text-2xl">{isImage ? '🖼️' : '📄'}</div>
+                    <div className="flex-shrink-0 text-2xl">{isFinalEstimate ? '⭐' : isImage ? '🖼️' : '📄'}</div>
                     <div className="flex-1 min-w-0">
                       <a
                         href={urlData.publicUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline truncate block"
+                        className={`text-sm font-medium hover:underline truncate block ${
+                          isFinalEstimate ? 'text-purple-800' : 'text-blue-600 hover:text-blue-800'
+                        }`}
                       >
                         {doc.file_name}
                       </a>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {fileSize} • {new Date(doc.created_at).toLocaleDateString('he-IL')}
+                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                        {docType && (
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            isFinalEstimate ? 'bg-purple-200 text-purple-900' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {docTypeLabel[docType] ?? docType}
+                          </span>
+                        )}
+                        <span>{fileSize} • {new Date(doc.created_at).toLocaleDateString('he-IL')}</span>
                       </div>
                     </div>
                   </div>

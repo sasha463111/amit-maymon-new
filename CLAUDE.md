@@ -123,10 +123,12 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 |---|----------|---------|
 | 0 | `CLOSURE_VERIFY_DETAILS_DOCS` | אימות מסמכים ופרטים |
 | 1 | `CLOSURE_PROFORMA_IF_NEEDED` | פרופורמה אם נדרש |
-| 2 | `CLOSURE_PREPARE_CLOSING_FORMS` | הכנת טפסי סגירה → יוצר `CASE_CLOSURE` approval |
+| 2 | `CLOSURE_PREPARE_CLOSING_FORMS` | הכנת טפסי סגירה (משימתי בלבד מ-Session 6) |
 | 3 | `CLOSE_CASE` | סגירה סופית |
 
 **פותח אוטומטית** כשמשלימים `READY_FOR_OFFICE` ב-workflow המקצועי.
+
+**Session 6 update:** ה-`CASE_CLOSURE` approval בוטל. אישור CEO היחיד הוא `ESTIMATE_AND_DETAILS` (אמצע ה-workflow המקצועי). אילנה יכולה לסגור תיק ישירות ללא אישור נוסף.
 
 ---
 
@@ -165,6 +167,10 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `created_by` | uuid FK→profiles | |
 | **`deleted_at`** | timestamptz | **Soft delete** — null = פעיל |
 | **`deleted_by`** | uuid FK→profiles | **מי מחק** |
+| `enter_work_checklist_state` | jsonb | (020) רשימת items שסומנו ב-ENTER_WORK |
+| `catalog_numbers_assignee` | text | (020) מי ניפק את המק"טים |
+| `parts_discounts_assignee` | text | (020) מי הזין הנחות חלקים |
+| `completion_photos_assignee` | text | (020) מי שלח תמונות לשמאי גמר |
 
 ### `profiles` — משתמשים
 | עמודה | סוג | הערות |
@@ -192,8 +198,10 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `case_id`, `description`, `image_path`, `status` (IN_TREATMENT/REJECTED/DONE), `created_by`
 
 ### `notifications`
-- `user_id`, `case_id`, `type`, `title`, `body`, `read`
-- **סוגי type:** READY_FOR_OFFICE, WASH_STARTED, PAINTER_REQUEST, BLOCKED_ACTION, ...
+- `user_id`, `case_id`, `type`, `title`, `body`, `read`, **`triggered_by`** (020), **`action_url`** (020)
+- **סוגי type:** READY_FOR_OFFICE, WASH_STARTED, PAINTER_REQUEST, BLOCKED_ACTION, PENDING_APPROVAL, CEO_REJECTED, EXTRA_CREATED, ...
+- **action_url:** deep link מותאם לסוג ההתראה (לדוגמה: PENDING_APPROVAL → `/approvals`)
+- **triggered_by:** ה-profile שגרם לאירוע — מוצג ב-UI כ"נשלח על ידי X"
 
 ### `audit_events`
 - `entity_type` (CASE/WORKFLOW_STEP/APPROVAL/EXTRA), `entity_id`, `action`, `user_id`, `payload`
@@ -363,6 +371,9 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | 015 | closure_checklist_state (jsonb) |
 | 016 | appraiser_status column |
 | **017** | **soft delete (deleted_at/deleted_by), is_bodywork_advisor, painter_requests, painter_request_images, document_type** |
+| 018 | fix RLS recursion |
+| 019 | restore CEO bypass for profiles + audit_events |
+| **020** | **Session 6: enter_work_checklist_state, catalog/parts/photos assignees, notifications.triggered_by + action_url, unique index on ceo_approvals(case_id, approval_type)** |
 
 ---
 

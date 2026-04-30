@@ -34,6 +34,58 @@ async function writeAudit(
   } as never);
 }
 
+// Pick the latest approval per type from a list ordered by created_at desc.
+// Use this instead of .find() to avoid stale duplicate rows confusing the gate.
+function latestApprovalsByType(
+  approvals: { approval_type: string; status: string; created_at?: string }[]
+): Map<string, { approval_type: string; status: string }> {
+  const sorted = [...approvals].sort((a, b) => {
+    const ad = a.created_at ?? '';
+    const bd = b.created_at ?? '';
+    return bd.localeCompare(ad); // desc
+  });
+  const map = new Map<string, { approval_type: string; status: string }>();
+  for (const a of sorted) {
+    if (!map.has(a.approval_type)) map.set(a.approval_type, a);
+  }
+  return map;
+}
+
+const APPROVAL_TYPE_LABELS: Record<string, string> = {
+  ESTIMATE_AND_DETAILS: 'אומדן ופרטי תיק',
+  WHEELS_CHECK: 'טפסי גלגלים',
+};
+
+// Notify all CEOs that a new approval is pending for them.
+async function notifyCeosPendingApproval(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caseId: string,
+  approvalType: string,
+  triggeredBy: string
+) {
+  const { data: caseData } = await supabase
+    .from('cases')
+    .select('case_key, cars(license_plate)')
+    .eq('id', caseId)
+    .single();
+  const c = caseData as { case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+  const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
+
+  const { data: ceos } = await supabase.from('profiles').select('id').eq('role', 'CEO');
+  const label = APPROVAL_TYPE_LABELS[approvalType] ?? approvalType;
+  for (const ceo of (ceos ?? []) as { id: string }[]) {
+    await supabase.from('notifications').insert({
+      user_id: ceo.id,
+      case_id: caseId,
+      type: 'PENDING_APPROVAL',
+      title: `אישור ${label} ממתין`,
+      body: `רכב ${plate} ממתין לאישורך`,
+      action_url: `/approvals`,
+      triggered_by: triggeredBy,
+    } as never);
+  }
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function createCase(input: CreateCaseInput) {
@@ -295,75 +347,90 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     if (extras && extras.length > 0) {
       await supabase.from('notifications').insert({
         user_id: profile!.id,
+        case_id: caseId,
         type: 'BLOCKED_ACTION',
         title: 'פעולה חסומה',
         body: 'קיימות תוספות בטיפול',
+        action_url: `/cases/${caseId}`,
       } as never);
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
       });
       return { error: 'יש תוספות בטיפול' };
     }
-    const { data: approvals } = await supabase
-      .from('ceo_approvals')
-      .select('approval_type, status')
-      .eq('case_id', caseId);
-    const approvalsArr = (approvals ?? []) as { approval_type: string; status: string }[];
-    const estimateApproval = approvalsArr.find((a) => a.approval_type === 'ESTIMATE_AND_DETAILS');
-    const wheelsApproval = approvalsArr.find((a) => a.approval_type === 'WHEELS_CHECK');
-    const { data: wheelsStep } = await supabase
-      .from('case_workflow_steps')
-      .select('id')
-      .eq('run_id', run.id)
-      .eq('step_key', 'WHEELS_CHECK')
-      .eq('state', 'DONE')
-      .maybeSingle();
-    const needsWheelsApproval = !!(wheelsStep as { id: string } | null)?.id;
 
-    // Ensure CEO approvals exist before blocking — so the case always מופיע במסך האישורים
-    if (!estimateApproval) {
-      await supabase.from('ceo_approvals').insert({
-        case_id: caseId,
-        approval_type: 'ESTIMATE_AND_DETAILS',
-        status: 'PENDING',
-      } as never);
-    }
-    if (needsWheelsApproval && !wheelsApproval) {
-      await supabase.from('ceo_approvals').insert({
-        case_id: caseId,
-        approval_type: 'WHEELS_CHECK',
-        status: 'PENDING',
-      } as never);
-    }
+    // CLOSE_CASE no longer requires a separate CASE_CLOSURE approval (Session 6).
+    // ESTIMATE_AND_DETAILS approval (already given mid-workflow) is the single CEO sign-off.
+    if (stepKey === 'CLOSE_CASE') {
+      // No further approval gate — proceed to closure logic below.
+    } else {
+      // READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS (and WHEELS_CHECK if relevant).
+      const { data: approvals } = await supabase
+        .from('ceo_approvals')
+        .select('approval_type, status, created_at')
+        .eq('case_id', caseId);
+      const approvalsArr = (approvals ?? []) as { approval_type: string; status: string; created_at: string }[];
+      const latest = latestApprovalsByType(approvalsArr);
+      const estimateApproval = latest.get('ESTIMATE_AND_DETAILS') ?? null;
+      const wheelsApproval = latest.get('WHEELS_CHECK') ?? null;
+      const { data: wheelsStep } = await supabase
+        .from('case_workflow_steps')
+        .select('id')
+        .eq('run_id', run.id)
+        .eq('step_key', 'WHEELS_CHECK')
+        .eq('state', 'DONE')
+        .maybeSingle();
+      const needsWheelsApproval = !!(wheelsStep as { id: string } | null)?.id;
 
-    if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
-      await supabase.from('notifications').insert({
-        user_id: profile!.id,
-        type: 'BLOCKED_ACTION',
-        title: 'פעולה חסומה',
-        body: 'חסר או נדחה אישור CEO לאומדן',
-      } as never);
-      await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-        reason: 'ceo_approval_missing_or_rejected',
-      });
-      return { error: 'נדרש אישור CEO לאומדן' };
-    }
-    if (needsWheelsApproval && (!wheelsApproval || wheelsApproval.status !== 'APPROVED')) {
-      await supabase.from('notifications').insert({
-        user_id: profile!.id,
-        type: 'BLOCKED_ACTION',
-        title: 'פעולה חסומה',
-        body: 'חסר או נדחה אישור CEO לטפסי גלגלים',
-      } as never);
-      await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-        reason: 'ceo_approval_missing_or_rejected',
-      });
-      return { error: 'נדרש אישור CEO לטפסי גלגלים' };
+      // Ensure approvals exist (so case appears on the approvals screen).
+      if (!estimateApproval) {
+        await supabase.from('ceo_approvals').insert({
+          case_id: caseId,
+          approval_type: 'ESTIMATE_AND_DETAILS',
+          status: 'PENDING',
+        } as never);
+      }
+      if (needsWheelsApproval && !wheelsApproval) {
+        await supabase.from('ceo_approvals').insert({
+          case_id: caseId,
+          approval_type: 'WHEELS_CHECK',
+          status: 'PENDING',
+        } as never);
+      }
+
+      if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
+        await supabase.from('notifications').insert({
+          user_id: profile!.id,
+          case_id: caseId,
+          type: 'BLOCKED_ACTION',
+          title: 'פעולה חסומה',
+          body: 'חסר או נדחה אישור CEO לאומדן',
+          action_url: `/approvals`,
+        } as never);
+        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
+          reason: 'ceo_approval_missing_or_rejected',
+        });
+        return { error: 'נדרש אישור CEO לאומדן' };
+      }
+      if (needsWheelsApproval && (!wheelsApproval || wheelsApproval.status !== 'APPROVED')) {
+        await supabase.from('notifications').insert({
+          user_id: profile!.id,
+          case_id: caseId,
+          type: 'BLOCKED_ACTION',
+          title: 'פעולה חסומה',
+          body: 'חסר או נדחה אישור CEO לטפסי גלגלים',
+          action_url: `/approvals`,
+        } as never);
+        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
+          reason: 'ceo_approval_missing_or_rejected',
+        });
+        return { error: 'נדרש אישור CEO לטפסי גלגלים' };
+      }
     }
   }
 
   // For steps that require CEO approval: ensure approval row(s) exist (so case appears in approvals screen).
-  // We do NOT block completing the step — user can advance. Blocking is only at READY_FOR_OFFICE / CLOSE_CASE.
+  // We do NOT block completing the step — user can advance. Blocking is only at READY_FOR_OFFICE.
   {
     const { data: templateData } = await supabase
       .from('workflow_step_templates')
@@ -376,10 +443,10 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       const approvalType = stepKey === 'WAIT_APPRAISER_APPROVAL' ? 'ESTIMATE_AND_DETAILS' : stepKey;
       const { data: existingApprovals } = await supabase
         .from('ceo_approvals')
-        .select('approval_type, status')
+        .select('approval_type, status, created_at')
         .eq('case_id', caseId);
-      const approvalsArr = (existingApprovals ?? []) as { approval_type: string; status: string }[];
-      const existing = approvalsArr.find((a) => a.approval_type === approvalType);
+      const approvalsArr = (existingApprovals ?? []) as { approval_type: string; status: string; created_at: string }[];
+      const existing = latestApprovalsByType(approvalsArr).get(approvalType) ?? null;
 
       if (!existing) {
         await supabase.from('ceo_approvals').insert({
@@ -387,8 +454,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           approval_type: approvalType,
           status: 'PENDING',
         } as never);
+        await notifyCeosPendingApproval(supabase, caseId, approvalType, user.id);
         if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
-          const types = new Set(approvalsArr.map((a) => a.approval_type));
+          const typeKeys = new Set(Array.from(latestApprovalsByType(approvalsArr).keys()));
           const { data: wheelsStep } = await supabase
             .from('case_workflow_steps')
             .select('id')
@@ -396,16 +464,17 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
             .eq('step_key', 'WHEELS_CHECK')
             .eq('state', 'DONE')
             .maybeSingle();
-          if (wheelsStep && !types.has('WHEELS_CHECK')) {
+          if (wheelsStep && !typeKeys.has('WHEELS_CHECK')) {
             await supabase.from('ceo_approvals').insert({
               case_id: caseId,
               approval_type: 'WHEELS_CHECK',
               status: 'PENDING',
             } as never);
+            await notifyCeosPendingApproval(supabase, caseId, 'WHEELS_CHECK', user.id);
           }
         }
       }
-      // Allow step to be marked DONE — closure is blocked at READY_FOR_OFFICE / CLOSE_CASE only.
+      // Allow step to be marked DONE — gating is only at READY_FOR_OFFICE.
     }
   }
 
@@ -447,6 +516,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         type: 'READY_FOR_OFFICE',
         title: 'תיק מוכן לסגירה',
         body: `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`,
+        action_url: `/closure/${caseId}`,
+        triggered_by: user.id,
       } as never);
     }
 
@@ -502,40 +573,16 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         type: 'WASH_STARTED',
         title: 'רכב נשלח לשטיפה',
         body: `רכב ${washPlate} נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`,
+        action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
       } as never);
     }
   }
 
-  if (stepKey === 'CLOSURE_PREPARE_CLOSING_FORMS' && isClosure) {
-    const { data: existing } = await supabase
-      .from('ceo_approvals')
-      .select('id')
-      .eq('case_id', caseId)
-      .eq('approval_type', 'CASE_CLOSURE')
-      .maybeSingle();
-
-    if (!existing) {
-      await supabase.from('ceo_approvals').insert({
-        case_id: caseId,
-        approval_type: 'CASE_CLOSURE',
-        status: 'PENDING',
-      } as never);
-    }
-  }
+  // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).
+  // Removed in Session 6 — Amit's ESTIMATE_AND_DETAILS approval is the sole CEO sign-off.
 
   if (stepKey === 'CLOSE_CASE') {
-    const { data: closureApprovalData } = await supabase
-      .from('ceo_approvals')
-      .select('status')
-      .eq('case_id', caseId)
-      .eq('approval_type', 'CASE_CLOSURE')
-      .maybeSingle();
-    const closureApproval = closureApprovalData as { status: string } | null;
-
-    if (!closureApproval || closureApproval.status !== 'APPROVED') {
-      return { error: 'נדרש אישור CEO לסגירת תיק' };
-    }
-
     await supabase.from('cases').update({ closed_at: now, general_status: 'COMPLETED' } as never).eq('id', caseId);
     await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
     await writeAudit(supabase, 'CASE', caseId, 'CASE_CLOSED', user.id);

@@ -64,10 +64,12 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     for (const m of (managers ?? []) as { id: string }[]) {
       await supabase.from('notifications').insert({
         user_id: m.id,
+        case_id: approval.case_id,
         type: 'CEO_REJECTED',
         title: 'אישור נדחה',
         body: input.rejection_note ?? 'עמית דחה אישור',
-        case_id: approval.case_id,
+        action_url: `/cases/${approval.case_id}`,
+        triggered_by: user.id,
       } as never);
     }
   }
@@ -76,13 +78,17 @@ export async function decideApproval(input: ApprovalDecisionInput) {
   if (input.status === 'APPROVED') {
     const { data: allApprovals } = await supabase
       .from('ceo_approvals')
-      .select('approval_type, status')
-      .eq('case_id', approval.case_id);
-    const approvals = (allApprovals ?? []) as { approval_type: string; status: string }[];
-    const estimateOk = approvals.some(
-      (a) => a.approval_type === 'ESTIMATE_AND_DETAILS' && a.status === 'APPROVED'
-    );
-    const wheelsEntry = approvals.find((a) => a.approval_type === 'WHEELS_CHECK');
+      .select('approval_type, status, created_at')
+      .eq('case_id', approval.case_id)
+      .order('created_at', { ascending: false });
+    const approvals = (allApprovals ?? []) as { approval_type: string; status: string; created_at: string }[];
+    // Take latest per type to avoid stale duplicates
+    const latestByType = new Map<string, { status: string }>();
+    for (const a of approvals) {
+      if (!latestByType.has(a.approval_type)) latestByType.set(a.approval_type, a);
+    }
+    const estimateOk = latestByType.get('ESTIMATE_AND_DETAILS')?.status === 'APPROVED';
+    const wheelsEntry = latestByType.get('WHEELS_CHECK') ?? null;
     const wheelsOk = !wheelsEntry || wheelsEntry.status === 'APPROVED';
 
     if (estimateOk && wheelsOk) {

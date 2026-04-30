@@ -118,6 +118,10 @@ export const MOCK_CASES: Case[] = [
     parts_arrived: null,
     qc_assignee: null,
     estimate_link: null,
+    enter_work_checklist_state: null,
+    catalog_numbers_assignee: null,
+    parts_discounts_assignee: null,
+    completion_photos_assignee: null,
   },
   {
     id: '30000000-0000-0000-0000-000000000002',
@@ -149,6 +153,10 @@ export const MOCK_CASES: Case[] = [
     parts_arrived: null,
     qc_assignee: null,
     estimate_link: null,
+    enter_work_checklist_state: null,
+    catalog_numbers_assignee: null,
+    parts_discounts_assignee: null,
+    completion_photos_assignee: null,
   },
 ];
 
@@ -278,6 +286,8 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     read: false,
     created_at: now,
     case_id: null,
+    triggered_by: null,
+    action_url: null,
   },
 ];
 

@@ -103,9 +103,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
   const wheelsOk = !wheelsDone || approvals.some(
     (a) => a.approval_type === 'WHEELS_CHECK' && a.status === 'APPROVED'
   );
-  // Check for CASE_CLOSURE approval (required for CLOSE_CASE step)
-  const closureApproval = approvals.find((a) => a.approval_type === 'CASE_CLOSURE');
-  // blockedByApprovals is only for estimate/wheels approvals (not closure approval)
+  // Session 6: CASE_CLOSURE approval removed — no longer gates closing.
   const blockedByApprovals = !estimateOk || !wheelsOk;
 
   const car = Array.isArray((caseRow as { cars: unknown }).cars)
@@ -147,7 +145,6 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
       blockedByApprovals={blockedByApprovals}
       canClose={isPreview || profile?.role === 'OFFICE' || profile?.role === 'CEO'}
       isPreview={isPreview}
-      closureApprovalStatus={closureApproval?.status ?? null}
       initialChecklistState={row.closure_checklist_state ?? {}}
     />
   );

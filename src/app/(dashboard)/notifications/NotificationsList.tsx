@@ -12,6 +12,8 @@ interface NotificationRow {
   created_at: string;
   case_id: string | null;
   license_plate: string | null;
+  action_url: string | null;
+  triggered_by_name: string | null;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -25,7 +27,12 @@ const TYPE_ICON: Record<string, string> = {
   EXTRA_CREATED: '➕',
   EXTRA_STATUS_CHANGED: '🔄',
   APPROVAL_NEEDED: '📋',
+  PENDING_APPROVAL: '⏳',
+  PAINTER_REQUEST: '🎨',
   PAINTER_READY_FOR_RELEASE: '✅',
+  READY_FOR_OFFICE: '🏁',
+  WASH_STARTED: '🧽',
+  FINAL_ESTIMATE_UPLOADED: '⭐',
   OTHER: '🔔',
 };
 
@@ -59,11 +66,12 @@ function NotificationItem({
   onNavigate: (n: NotificationRow) => void;
   onMarkRead: (id: string) => void;
 }) {
+  const isClickable = !!(n.action_url || n.case_id);
   return (
     <div
       onClick={() => onNavigate(n)}
       className={`rounded-xl border shadow-sm p-4 flex gap-3 transition-all hover:shadow-md ${
-        n.case_id ? 'cursor-pointer hover:border-brand-red/30' : ''
+        isClickable ? 'cursor-pointer hover:border-brand-red/30' : ''
       } ${!n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'}`}
     >
       <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
@@ -85,10 +93,16 @@ function NotificationItem({
         {n.body && (
           <p className="text-sm text-gray-500 mt-0.5 leading-snug">{n.body}</p>
         )}
+        {n.triggered_by_name && (
+          <p className="text-xs text-gray-500 mt-1">
+            <span className="text-gray-400">נשלח על ידי:</span>{' '}
+            <span className="font-medium text-gray-700">{n.triggered_by_name}</span>
+          </p>
+        )}
         <div className="flex items-center gap-2 mt-1.5">
           <p className="text-xs text-gray-400">{formatDate(n.created_at)}</p>
-          {n.case_id && (
-            <span className="text-xs text-brand-red font-medium">← לחץ לפתיחת תיק</span>
+          {isClickable && (
+            <span className="text-xs text-brand-red font-medium">← פתח</span>
           )}
         </div>
       </div>
@@ -134,7 +148,9 @@ export function NotificationsList({
       await markRead(n.id);
       router.refresh();
     }
-    if (n.case_id) router.push(`/cases/${n.case_id}`);
+    // Prefer per-type deep link; fall back to /cases/{id}
+    if (n.action_url) router.push(n.action_url);
+    else if (n.case_id) router.push(`/cases/${n.case_id}`);
   }
 
   async function handleMarkRead(id: string) {

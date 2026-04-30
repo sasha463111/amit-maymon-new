@@ -67,6 +67,7 @@ const CLOSURE_CHECKLIST: Record<string, string[]> = {
     'חתימה על אישור הסדר',
     'שליחת טפסי גלגלים',
     'שליחת טפסי פרונט / כיול ראדר',
+    'התקבל אישור קיזוז מע"מ',
   ],
   SHLOMO_THIRD_PARTY: [
     'אישור חשבונית גמר במוקד',
@@ -74,6 +75,7 @@ const CLOSURE_CHECKLIST: Record<string, string[]> = {
     'שליחת חשבונית לשמאי של שלמה',
     'שליחת טפסי גלגלים',
     'שליחת טפסי פרונט / כיול ראדר',
+    'התקבל מספר אישור',
   ],
   PRIVATE_REPAIR: [
     'גביית תשלום על תיקון',
@@ -101,7 +103,6 @@ interface ClosureDetailClientProps {
   blockedByApprovals: boolean;
   canClose: boolean;
   isPreview?: boolean;
-  closureApprovalStatus?: string | null;
   initialChecklistState?: Record<string, boolean>;
 }
 
@@ -123,7 +124,6 @@ export function ClosureDetailClient({
   blockedByApprovals,
   canClose,
   isPreview = false,
-  closureApprovalStatus,
   initialChecklistState = {},
 }: ClosureDetailClientProps) {
   const router = useRouter();
@@ -244,27 +244,11 @@ export function ClosureDetailClient({
   const normalizedSteps = normalizeStepStates(orderedSteps);
   const activeStep = normalizedSteps.find((s) => s.state === 'ACTIVE');
 
-  const [localClosureApproval, setLocalClosureApproval] = useState<string | null>(closureApprovalStatus ?? null);
-  useEffect(() => {
-    if (!isPreview) return;
-    (async () => {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      const { data } = await supabase
-        .from('ceo_approvals')
-        .select('status')
-        .eq('case_id', caseId)
-        .eq('approval_type', 'CASE_CLOSURE')
-        .maybeSingle();
-      if (data) setLocalClosureApproval((data as { status: string }).status);
-    })().catch(console.error);
-  }, [isPreview, caseId]);
-
-  const effectiveClosureApproval = isPreview ? localClosureApproval : closureApprovalStatus;
+  // Session 6: CASE_CLOSURE approval requirement removed — closure is no longer gated by a second CEO approval.
+  // The variable is kept to satisfy the older prop, but the gate is purely on extras/estimate now.
   const allDone = normalizedSteps.length > 0 && normalizedSteps.every((s) => s.state === 'DONE');
   const isCaseClosed = allDone;
-  const closeBlocked = activeStep?.step_key === 'CLOSE_CASE'
-    ? (blockedByExtras || effectiveClosureApproval !== 'APPROVED')
-    : (blockedByExtras || blockedByApprovals);
+  const closeBlocked = blockedByExtras || blockedByApprovals;
   const doneCount = normalizedSteps.filter((s) => s.state === 'DONE').length;
 
   const daysOpen = openedAt
@@ -290,37 +274,13 @@ export function ClosureDetailClient({
         .eq('id', nextStep.id);
     }
 
-    if (step.step_key === 'CLOSURE_PREPARE_CLOSING_FORMS') {
-      const { data: existing } = await supabase
-        .from('ceo_approvals')
-        .select('id')
-        .eq('case_id', caseId)
-        .eq('approval_type', 'CASE_CLOSURE')
-        .maybeSingle();
-
-      if (!existing) {
-        await supabase.from('ceo_approvals').insert({
-          case_id: caseId,
-          approval_type: 'CASE_CLOSURE',
-          status: 'PENDING',
-        } as never);
-      }
-    }
+    // Session 6: CASE_CLOSURE approval no longer created — preview mode mirrors production.
 
     if (step.step_key === 'CLOSE_CASE') {
-      const { data: closureApproval } = await supabase
-        .from('ceo_approvals')
-        .select('status')
-        .eq('case_id', caseId)
-        .eq('approval_type', 'CASE_CLOSURE')
-        .maybeSingle();
-
-      if (closureApproval && (closureApproval as { status: string }).status === 'APPROVED') {
-        await supabase
-          .from('cases')
-          .update({ closed_at: now, general_status: 'COMPLETED' } as never)
-          .eq('id', caseId);
-      }
+      await supabase
+        .from('cases')
+        .update({ closed_at: now, general_status: 'COMPLETED' } as never)
+        .eq('id', caseId);
     }
 
     setLocalSteps(
@@ -453,13 +413,12 @@ export function ClosureDetailClient({
           )}
         </div>
 
-        {!isCaseClosed && (blockedByExtras || blockedByApprovals || (activeStep?.step_key === 'CLOSE_CASE' && effectiveClosureApproval !== 'APPROVED')) && (
+        {!isCaseClosed && (blockedByExtras || blockedByApprovals) && (
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <p className="text-sm font-medium text-amber-800 flex items-center gap-2">
               <span>⚠️</span>
               {blockedByExtras && <span>קיימות תוספות פחחות בטיפול.</span>}
               {blockedByApprovals && <span>חסר אישור CEO לאומדן/גלגלים.</span>}
-              {activeStep?.step_key === 'CLOSE_CASE' && effectiveClosureApproval !== 'APPROVED' && <span>חסר אישור CEO לסגירה.</span>}
             </p>
           </div>
         )}
@@ -611,13 +570,7 @@ export function ClosureDetailClient({
                       : '✓ סמן בוצע'}
                 </button>
 
-                {activeStep.step_key === 'CLOSE_CASE' && closeBlocked && (
-                  <p className="text-sm text-amber-700">
-                    {blockedByExtras && 'יש תוספות בטיפול. '}
-                    {effectiveClosureApproval !== 'APPROVED' && 'חסר אישור CEO לסגירת תיק.'}
-                  </p>
-                )}
-                {activeStep && activeStep.step_key !== 'CLOSE_CASE' && closeBlocked && (
+                {closeBlocked && (
                   <p className="text-sm text-amber-700">
                     {blockedByExtras && 'יש תוספות בטיפול. '}
                     {blockedByApprovals && 'חסר אישור CEO לאומדן/גלגלים.'}

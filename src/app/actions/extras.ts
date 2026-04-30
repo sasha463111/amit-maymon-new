@@ -48,9 +48,12 @@ export async function createExtra(input: CreateExtraInput) {
   for (const m of (managers ?? []) as { id: string }[]) {
     await supabase.from('notifications').insert({
       user_id: m.id,
+      case_id: input.case_id,
       type: 'EXTRA_CREATED',
       title: 'תוספת חדשה',
       body: input.description,
+      action_url: `/cases/${input.case_id}`,
+      triggered_by: user.id,
     } as never);
   }
 

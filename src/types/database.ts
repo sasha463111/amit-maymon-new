@@ -119,6 +119,11 @@ export interface Case {
   parts_arrived: boolean | null;
   qc_assignee: string | null;
   estimate_link: string | null;
+  // Added in migration 020 (Session 6)
+  enter_work_checklist_state: string[] | null;
+  catalog_numbers_assignee: string | null;
+  parts_discounts_assignee: string | null;
+  completion_photos_assignee: string | null;
 }
 
 export interface CaseWorkflowRun {
@@ -184,7 +189,12 @@ export type NotificationType =
   | 'EXTRA_CREATED'
   | 'EXTRA_STATUS_CHANGED'
   | 'APPROVAL_NEEDED'
+  | 'PENDING_APPROVAL'
   | 'PAINTER_READY_FOR_RELEASE'
+  | 'PAINTER_REQUEST'
+  | 'READY_FOR_OFFICE'
+  | 'WASH_STARTED'
+  | 'FINAL_ESTIMATE_UPLOADED'
   | 'OTHER';
 
 export interface Notification {
@@ -197,6 +207,9 @@ export interface Notification {
   created_at: string;
   // Added in migration 013
   case_id: string | null;
+  // Added in migration 020 (Session 6)
+  triggered_by: string | null;
+  action_url: string | null;
 }
 
 export interface SystemMessage {

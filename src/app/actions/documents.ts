@@ -12,9 +12,13 @@ export async function uploadCaseDocument(formData: FormData) {
 
   const caseId = formData.get('case_id') as string;
   const file = formData.get('file') as File;
-  
+  const documentType = (formData.get('document_type') as string | null) ?? null;
+
   if (!caseId || !file) {
-    return { error: 'חסרים פרטים' };
+    return { error: 'חסרים פרטים (case_id או file)' };
+  }
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: 'הקובץ ריק או לא תקין' };
   }
 
   // Verify user has access to this case
@@ -23,7 +27,7 @@ export async function uploadCaseDocument(formData: FormData) {
     .select('id, branch_id')
     .eq('id', caseId)
     .single();
-  
+
   if (!caseRow) return { error: 'תיק לא נמצא' };
 
   const { data: profile } = await supabase
@@ -33,7 +37,7 @@ export async function uploadCaseDocument(formData: FormData) {
     .single();
 
   if (!profile) return { error: 'פרופיל לא נמצא' };
-  
+
   const userBranchId = (profile as { branch_id: string | null }).branch_id;
   const userRole = (profile as { role: string }).role;
   const caseBranchId = (caseRow as { branch_id: string }).branch_id;
@@ -42,23 +46,22 @@ export async function uploadCaseDocument(formData: FormData) {
     return { error: 'אין גישה לתיק זה' };
   }
 
-  // Upload file to storage
-  const ext = file.name.split('.').pop() ?? 'bin';
-  const timestamp = Date.now();
-  const path = `${caseId}/${timestamp}-${file.name}`;
+  // Upload file to storage. Path is namespaced by caseId so RLS can scope by prefix.
+  const safeName = file.name.replace(/[^\w.\-א-ת ]/g, '_');
+  const path = `${caseId}/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await supabase.storage
     .from('case-documents')
-    .upload(path, file, { upsert: false });
+    .upload(path, file, { upsert: false, contentType: file.type || undefined });
 
   if (uploadError) {
-    return { error: `שגיאה בהעלאת הקובץ: ${uploadError.message}` };
+    console.error('[uploadCaseDocument] storage upload failed', {
+      caseId,
+      file: { name: file.name, size: file.size, type: file.type },
+      message: uploadError.message,
+    });
+    return { error: `שגיאה בהעלאת הקובץ ל-Storage: ${uploadError.message}` };
   }
-
-  // Get public URL
-  const { data: urlData } = supabase.storage
-    .from('case-documents')
-    .getPublicUrl(path);
 
   // Insert document record
   const { error: insertError } = await supabase
@@ -70,9 +73,15 @@ export async function uploadCaseDocument(formData: FormData) {
       file_size: file.size,
       mime_type: file.type || null,
       uploaded_by: user.id,
+      ...(documentType ? { document_type: documentType } : {}),
     } as never);
 
   if (insertError) {
+    console.error('[uploadCaseDocument] insert row failed', {
+      caseId,
+      path,
+      message: insertError.message,
+    });
     // Try to delete uploaded file if insert failed
     await supabase.storage.from('case-documents').remove([path]);
     return { error: `שגיאה בשמירת פרטי הקובץ: ${insertError.message}` };
@@ -84,11 +93,11 @@ export async function uploadCaseDocument(formData: FormData) {
     entity_id: caseId,
     action: 'DOCUMENT_UPLOADED',
     user_id: user.id,
-    payload: { file_name: file.name, file_size: file.size },
+    payload: { file_name: file.name, file_size: file.size, document_type: documentType },
   } as never);
 
   revalidatePath(`/cases/${caseId}`);
-  return { ok: true, error: null };
+  return { ok: true, error: null, document_type: documentType };
 }
 
 export async function deleteCaseDocument(documentId: string) {

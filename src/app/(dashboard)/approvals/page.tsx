@@ -26,6 +26,8 @@ export default async function ApprovalsPage() {
     );
   }
 
+  // Session 6: CASE_CLOSURE approval is no longer used. Filter it out so any
+  // legacy PENDING rows from before the change don't surface in this list.
   const { data: pending } = await supabase
     .from('ceo_approvals')
     .select(`
@@ -45,6 +47,7 @@ export default async function ApprovalsPage() {
       )
     `)
     .eq('status', 'PENDING')
+    .neq('approval_type', 'CASE_CLOSURE')
     .order('created_at', { ascending: false });
 
   const approvals = (pending ?? []).map((a) => {

@@ -121,6 +121,8 @@ export async function createPainterRequest(
       type: 'PAINTER_REQUEST',
       title: `בקשת פחח — ${typeLabel}`,
       body: `רכב ${plateLabel}: ${description.trim()}`,
+      action_url: `/painters/${caseId}`,
+      triggered_by: user.id,
     } as never);
   }
 
