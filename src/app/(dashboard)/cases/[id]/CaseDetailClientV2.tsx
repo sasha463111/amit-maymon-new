@@ -413,7 +413,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [completionPhotosAssignee, setCompletionPhotosAssignee] = useState(initialCompletionPhotosAssignee ?? '');
 
   // ── Session 6 — ENTER_WORK sub-checklist ──
-  const [enterWorkChecklist, setEnterWorkChecklist] = useState<string[]>(initialEnterWorkChecklistState ?? []);
+  // JSONB can come back as {} from older rows — coerce to array defensively.
+  const [enterWorkChecklist, setEnterWorkChecklist] = useState<string[]>(
+    Array.isArray(initialEnterWorkChecklistState) ? initialEnterWorkChecklistState : []
+  );
 
   // ── Session 6 — final estimate (READY_FOR_OFFICE) optional upload ──
   const [finalEstimatePanelStepId, setFinalEstimatePanelStepId] = useState<string | null>(null);
@@ -663,6 +666,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     }
 
     if (step.step_key === 'QUALITY_CONTROL' && bodyworkAdvisors.length > 0) {
+      setQcSelectedAdvisor(qcAssignee || '');
       setQcPopupStepId(step.id);
       return;
     }
@@ -670,10 +674,13 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     // Session 6 — open "by whom?" popup for catalog/discounts/completion-photos steps.
     if (ASSIGNEE_FIELD_BY_STEP[step.step_key]) {
       setAssigneePopupStepId(step.id);
-      // Pre-fill any prior value
-      if (step.step_key === 'ISSUE_CATALOG_NUMBERS') setAssigneeInput(catalogNumbersAssignee || '');
-      else if (step.step_key === 'PARTS_DISCOUNTS') setAssigneeInput(partsDiscountsAssignee || '');
-      else if (step.step_key === 'SEND_COMPLETION_PHOTOS') setAssigneeInput(completionPhotosAssignee || '');
+      // Pre-fill any prior value (and clear stale input from a previous popup).
+      const prefilled =
+        step.step_key === 'ISSUE_CATALOG_NUMBERS' ? (catalogNumbersAssignee || '') :
+        step.step_key === 'PARTS_DISCOUNTS' ? (partsDiscountsAssignee || '') :
+        step.step_key === 'SEND_COMPLETION_PHOTOS' ? (completionPhotosAssignee || '') :
+        '';
+      setAssigneeInput(prefilled);
       return;
     }
 

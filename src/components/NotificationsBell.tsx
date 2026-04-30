@@ -177,11 +177,16 @@ export function NotificationsBell({ userId }: { userId: string }) {
 
   async function handleNotificationClick(n: Row) {
     setOpen(false);
-    // Mark read optimistically
+    // Mark read optimistically; revert if the server call fails so the badge
+    // doesn't lie about the unread count for a full poll cycle.
     if (!n.read) {
       setRows((prev) => prev.map((r) => (r.id === n.id ? { ...r, read: true } : r)));
       setUnreadCount((c) => Math.max(0, c - 1));
-      markRead(n.id).catch(() => {});
+      markRead(n.id).catch((err) => {
+        console.error('[NotificationsBell] markRead failed', err);
+        setRows((prev) => prev.map((r) => (r.id === n.id ? { ...r, read: false } : r)));
+        setUnreadCount((c) => c + 1);
+      });
     }
     // Navigate: prefer action_url; fall back to /cases/{id}
     if (n.action_url) router.push(n.action_url);
