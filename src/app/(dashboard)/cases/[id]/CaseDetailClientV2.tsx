@@ -1390,20 +1390,23 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     </div>
                   )}
 
-                  {/* QUALITY_CONTROL — assignee */}
+                  {/* QUALITY_CONTROL — assignee (inline, free text with suggestions) */}
                   {s.step_key === 'QUALITY_CONTROL' && canEdit && (
                     <div className="mr-11 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                       <p className="text-xs font-semibold text-gray-600 mb-2">מבצע בקרת איכות</p>
-                      <select
+                      <input
+                        list={`qc-inline-advisors-${s.id}`}
                         value={qcAssignee}
-                        onChange={(e) => void saveQcAssignee(e.target.value)}
-                        className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-brand-red outline-none"
-                      >
-                        <option value="">— בחר —</option>
-                        <option value="נסיה">נסיה</option>
-                        <option value="ערן">ערן</option>
-                        <option value="עמית">עמית</option>
-                      </select>
+                        onChange={(e) => setQcAssignee(e.target.value)}
+                        onBlur={(e) => void saveQcAssignee(e.target.value)}
+                        placeholder="הקלד שם..."
+                        className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:border-brand-red outline-none w-48"
+                      />
+                      <datalist id={`qc-inline-advisors-${s.id}`}>
+                        {bodyworkAdvisors.map((adv) => (
+                          <option key={adv.id} value={adv.full_name} />
+                        ))}
+                      </datalist>
                       {qcAssignee && (
                         <span className="mr-3 text-sm text-gray-600">✓ {qcAssignee}</span>
                       )}
@@ -1523,24 +1526,31 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     </div>
                   )}
 
-                  {/* QUALITY CONTROL: bodywork advisor selection popup */}
+                  {/* QUALITY CONTROL: bodywork advisor selection popup (text + datalist suggestions) */}
                   {canEdit && qcPopupStepId === s.id && s.step_key === 'QUALITY_CONTROL' && !isDone && !isSkipped && (
                     <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-indigo-300 shadow-md">
-                      <p className="text-xs font-semibold text-indigo-700 mb-3">👤 בחר יועץ שביצע את בקרת האיכות</p>
-                      <select
+                      <p className="text-xs font-semibold text-indigo-700 mb-3">👤 מי ביצע את בקרת האיכות?</p>
+                      <input
+                        autoFocus
+                        list={`qc-advisors-${s.id}`}
                         value={qcSelectedAdvisor}
                         onChange={(e) => setQcSelectedAdvisor(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && qcSelectedAdvisor.trim()) void handleQcConfirm(s);
+                          if (e.key === 'Escape') { setQcPopupStepId(null); setQcSelectedAdvisor(''); }
+                        }}
+                        placeholder="הקלד שם או בחר מהרשימה..."
                         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-3"
-                      >
-                        <option value="">— בחר יועץ —</option>
+                      />
+                      <datalist id={`qc-advisors-${s.id}`}>
                         {bodyworkAdvisors.map((adv) => (
-                          <option key={adv.id} value={adv.full_name}>{adv.full_name}</option>
+                          <option key={adv.id} value={adv.full_name} />
                         ))}
-                      </select>
+                      </datalist>
                       <div className="flex gap-2">
                         <button
                           type="button"
-                          disabled={!qcSelectedAdvisor}
+                          disabled={!qcSelectedAdvisor.trim()}
                           onClick={() => void handleQcConfirm(s)}
                           className="px-4 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
                         >

@@ -219,7 +219,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       {open && (
         <div
           dir="rtl"
-          className="absolute left-0 mt-2 w-[360px] max-h-[480px] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col"
+          className="absolute right-0 mt-2 w-[360px] max-w-[calc(100vw-2rem)] max-h-[480px] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col"
           role="dialog"
         >
           {/* Header */}

@@ -338,7 +338,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     });
   }
 
-  if (stepKey === 'READY_FOR_OFFICE' || stepKey === 'CLOSE_CASE') {
+  // Gate the office handoff at SEND_COMPLETION_PHOTOS (the user's "ready for office" signal).
+  // READY_FOR_OFFICE is kept as an auto-completed marker after this step.
+  if (stepKey === 'SEND_COMPLETION_PHOTOS' || stepKey === 'READY_FOR_OFFICE' || stepKey === 'CLOSE_CASE') {
     const { data: extras } = await supabase
       .from('bodywork_extras')
       .select('id')
@@ -364,7 +366,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     if (stepKey === 'CLOSE_CASE') {
       // No further approval gate — proceed to closure logic below.
     } else {
-      // READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS (and WHEELS_CHECK if relevant).
+      // SEND_COMPLETION_PHOTOS / READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS (and WHEELS_CHECK if relevant).
       const { data: approvals } = await supabase
         .from('ceo_approvals')
         .select('approval_type, status, created_at')
@@ -488,7 +490,10 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     } as never)
     .eq('id', activeStep.id);
 
-  if (stepKey === 'READY_FOR_OFFICE') {
+  // Office handoff: trigger at SEND_COMPLETION_PHOTOS (preferred) or READY_FOR_OFFICE (legacy).
+  // After SEND_COMPLETION_PHOTOS: notify office + create closure run + auto-complete READY_FOR_OFFICE.
+  const isOfficeHandoff = stepKey === 'SEND_COMPLETION_PHOTOS' || stepKey === 'READY_FOR_OFFICE';
+  if (isOfficeHandoff) {
     await supabase
       .from('cases')
       .update({ treatment_finished_at: now } as never)
@@ -548,6 +553,31 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           closureSteps.map((s) => ({ ...s, run_id: newRun.id, activated_at: s.state === 'ACTIVE' ? now : null })) as never
         );
       }
+    }
+
+    // If we got here from SEND_COMPLETION_PHOTOS, auto-complete READY_FOR_OFFICE so it
+    // doesn't sit as a manual step delaying Ilana.
+    if (stepKey === 'SEND_COMPLETION_PHOTOS') {
+      const { data: rfoStep } = await supabase
+        .from('case_workflow_steps')
+        .select('id, state')
+        .eq('run_id', run.id)
+        .eq('step_key', 'READY_FOR_OFFICE')
+        .maybeSingle();
+      const rfo = rfoStep as { id: string; state: string } | null;
+      if (rfo && rfo.state !== 'DONE' && rfo.state !== 'SKIPPED') {
+        await supabase
+          .from('case_workflow_steps')
+          .update({ state: 'DONE', completed_at: now, completed_by: user.id } as never)
+          .eq('id', rfo.id);
+        await writeAudit(supabase, 'WORKFLOW_STEP', rfo.id, 'STEP_COMPLETED', user.id, {
+          step_key: 'READY_FOR_OFFICE',
+          auto_completed: true,
+          reason: 'auto_after_send_completion_photos',
+        });
+      }
+      // Mark professional run as completed
+      await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
     }
   }
 
