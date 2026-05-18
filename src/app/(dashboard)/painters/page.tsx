@@ -146,32 +146,51 @@ export default async function PaintersPage() {
                   <a
                     key={row.id}
                     href={`/painters/${row.id}`}
-                    className="flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors"
+                    className="block px-4 py-3 sm:px-5 sm:py-4 hover:bg-gray-50 transition-colors"
                   >
-                    {/* Plate */}
-                    <span className="font-bold text-primary-container text-sm w-24 shrink-0" dir="ltr">
-                      {car?.license_plate ?? '—'}
-                    </span>
-                    {/* Customer name — bumped to second column for prominence */}
-                    <span className="text-sm font-semibold text-gray-800 w-36 shrink-0 truncate" title={row.customer_name ?? ''}>
-                      {row.customer_name ?? '—'}
-                    </span>
-                    {/* Make / Model / Year */}
-                    <span className="text-sm text-gray-600 flex-1 font-medium">
-                      {[car?.make, car?.model, car?.year].filter(Boolean).join(' ')}
-                    </span>
-                    {/* Appraiser */}
-                    <span className="text-xs text-gray-400 w-24 shrink-0 truncate">
-                      {row.appraiser_name ?? '—'}
-                    </span>
-                    {/* Branch */}
-                    <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
-                      {branch?.name ?? '—'}
-                    </span>
-                    {/* Opened */}
-                    <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
-                      {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : '—'}
-                    </span>
+                    {/* MOBILE: stacked card */}
+                    <div className="sm:hidden space-y-1.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-bold text-gray-900 text-base truncate" title={row.customer_name ?? ''}>
+                          {row.customer_name ?? '—'}
+                        </span>
+                        <span className="font-mono text-xs text-primary-container shrink-0" dir="ltr">
+                          {car?.license_plate ?? '—'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {[car?.make, car?.model, car?.year].filter(Boolean).join(' ') || '—'}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-gray-400">
+                        <span>{row.appraiser_name ? `שמאי: ${row.appraiser_name}` : ''}</span>
+                        <span>
+                          {branch?.name && `${branch.name} · `}
+                          {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* DESKTOP: row */}
+                    <div className="hidden sm:flex items-center gap-4">
+                      <span className="font-bold text-primary-container text-sm w-24 shrink-0" dir="ltr">
+                        {car?.license_plate ?? '—'}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-800 w-36 shrink-0 truncate" title={row.customer_name ?? ''}>
+                        {row.customer_name ?? '—'}
+                      </span>
+                      <span className="text-sm text-gray-600 flex-1 font-medium">
+                        {[car?.make, car?.model, car?.year].filter(Boolean).join(' ')}
+                      </span>
+                      <span className="text-xs text-gray-400 w-24 shrink-0 truncate">
+                        {row.appraiser_name ?? '—'}
+                      </span>
+                      <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
+                        {branch?.name ?? '—'}
+                      </span>
+                      <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
+                        {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : '—'}
+                      </span>
+                    </div>
                   </a>
                 );
               })}

@@ -55,13 +55,14 @@ function StatCard({
   highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-xl border shadow-sm p-5 flex items-center justify-between ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
-      <div>
-        <p className="text-gray-500 text-xs font-medium mb-1">{label}</p>
-        <p className={`text-3xl font-bold leading-none ${valueColor ?? 'text-on-surface'}`}>{value}</p>
+    <div className={`rounded-xl border shadow-sm p-3 sm:p-5 flex items-center justify-between gap-2 ${highlight ? 'bg-white border-gray-100' : 'bg-gray-50 border-gray-100'}`}>
+      <div className="min-w-0">
+        <p className="text-gray-500 text-[10px] sm:text-xs font-medium mb-0.5 sm:mb-1 truncate">{label}</p>
+        <p className={`text-xl sm:text-3xl font-bold leading-none ${valueColor ?? 'text-on-surface'}`}>{value}</p>
       </div>
-      <div className={`w-12 h-12 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
-        <Icon size={20} className={iconColor} />
+      <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+        <Icon size={16} className={`sm:hidden ${iconColor}`} />
+        <Icon size={20} className={`hidden sm:block ${iconColor}`} />
       </div>
     </div>
   );
@@ -73,7 +74,8 @@ function StatRow({ stat, highlight }: { stat: StatBlock; highlight?: boolean }) 
       <div className={`text-xs font-semibold ${highlight ? 'text-gray-700' : 'text-gray-500'}`}>
         {stat.label}
       </div>
-      <div className="grid grid-cols-5 gap-3">
+      {/* 2 cols on phone, 3 on small tablet, 5 on desktop */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3">
         <StatCard icon={LayoutGrid} label='סה"כ פתוחים' value={stat.total} iconBg="bg-slate-100" iconColor="text-slate-600" highlight={highlight} />
         <StatCard icon={Wrench} label="בעבודה" value={stat.inWork} iconBg="bg-emerald-100" iconColor="text-emerald-600" valueColor="text-emerald-600" highlight={highlight} />
         <StatCard icon={Package} label="ממתינים לחלקים" value={stat.waitingParts} iconBg="bg-amber-100" iconColor="text-amber-600" valueColor="text-amber-600" highlight={highlight} />

@@ -99,6 +99,26 @@ export function CasesTable({
       searchKeys={['plate', 'claim', 'customer_name']}
       rowKey={(row) => row.id}
       onRowClick={(row) => router.push(`/cases/${row.id}`)}
+      mobileHeadline={(row) => (
+        <div className="flex items-center justify-between gap-2">
+          <span>{row.customer_name || row.plate}</span>
+          {row.notes && (
+            <span
+              title={row.notes}
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-brand-red text-white text-[10px] font-bold shrink-0"
+              aria-label="יש הערה"
+            >
+              !
+            </span>
+          )}
+        </div>
+      )}
+      mobileSubheadline={(row) => (
+        <span dir="ltr">
+          {row.plate}
+          {row.claim !== '—' && <span className="text-gray-400"> · {row.claim}</span>}
+        </span>
+      )}
     />
   );
 }

@@ -352,13 +352,14 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
   }
 
   return (
-    <div className="flex gap-6 h-full" dir="rtl">
-      {/* Right: list (RTL so this is left side visually) */}
-      <div className="w-72 flex-shrink-0">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full" dir="rtl">
+      {/* Right: list (RTL so this is left side visually) — full width on mobile, fixed on desktop */}
+      <div className="w-full lg:w-72 flex-shrink-0">
         <p className="text-xs text-gray-500 mb-2 font-medium">ממתינים לאישור ({localApprovals.length})</p>
-        <ul className="space-y-2">
+        {/* Horizontal scroller on mobile (lg+ becomes vertical list via space-y) */}
+        <ul className="flex lg:block gap-2 lg:space-y-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-3 lg:mx-0 px-3 lg:px-0">
           {localApprovals.map((a) => (
-            <li key={a.id}>
+            <li key={a.id} className="shrink-0 lg:shrink min-w-[240px] lg:min-w-0">
               <button
                 type="button"
                 onClick={() => { setSelectedId(a.id); setActiveTab('approval'); }}

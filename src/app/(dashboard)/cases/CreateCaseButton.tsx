@@ -168,16 +168,16 @@ export function CreateCaseButton({
 
       {open && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
           dir="rtl"
           onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-y-auto max-h-[92vh]"
+            className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-2xl w-full overflow-y-auto max-h-[95vh] sm:max-h-[92vh]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <h2 className="text-lg font-bold text-gray-800">פתיחת תיק חדש</h2>
               <button
                 type="button"
@@ -188,11 +188,11 @@ export function CreateCaseButton({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
               {/* ── פרטי רכב ── */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי רכב</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>מספר רישוי *</label>
                     <input
@@ -247,7 +247,7 @@ export function CreateCaseButton({
               {/* ── פרטי לקוח ── */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי לקוח</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>שם לקוח</label>
                     <input
@@ -277,7 +277,7 @@ export function CreateCaseButton({
               {/* ── פרטי ביטוח ── */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי ביטוח ותביעה</p>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>חברת ביטוח</label>
                     <select

@@ -7,6 +7,8 @@ export interface Column<T> {
   key: string;
   label: string;
   render?: (row: T) => React.ReactNode;
+  // Optional: prioritize this column on mobile card view. Higher = more important.
+  mobilePriority?: number;
 }
 
 interface DataTableProps<T> {
@@ -16,6 +18,10 @@ interface DataTableProps<T> {
   searchKeys?: (keyof T)[];
   rowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  // Optional: render a primary headline (e.g. customer name) for mobile cards
+  mobileHeadline?: (row: T) => React.ReactNode;
+  // Optional: render a subheadline (e.g. plate + claim) for mobile cards
+  mobileSubheadline?: (row: T) => React.ReactNode;
 }
 
 export function DataTable<T extends object>({
@@ -25,6 +31,8 @@ export function DataTable<T extends object>({
   searchKeys,
   rowKey,
   onRowClick,
+  mobileHeadline,
+  mobileSubheadline,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -65,7 +73,65 @@ export function DataTable<T extends object>({
           </div>
         </div>
       )}
-      <div className="overflow-x-auto">
+      {/* MOBILE: card view (hidden on md+) */}
+      <div className="md:hidden divide-y divide-gray-100">
+        {filtered.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-400">
+            <div className="flex flex-col items-center gap-2">
+              <InboxIcon size={32} className="text-gray-300" />
+              <span className="text-sm">לא נמצאו תוצאות</span>
+            </div>
+          </div>
+        ) : (
+          filtered.map((row) => {
+            const r = row as T;
+            return (
+              <div
+                key={rowKey(r)}
+                onClick={() => onRowClick?.(r)}
+                role={onRowClick ? 'button' : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                className={`px-4 py-3 ${
+                  onRowClick ? 'hover:bg-red-50/50 cursor-pointer active:bg-red-100/50' : ''
+                }`}
+              >
+                {(mobileHeadline || mobileSubheadline) && (
+                  <div className="mb-2">
+                    {mobileHeadline && (
+                      <div className="text-base font-semibold text-gray-900 leading-tight">
+                        {mobileHeadline(r)}
+                      </div>
+                    )}
+                    {mobileSubheadline && (
+                      <div className="text-xs text-gray-500 mt-0.5">{mobileSubheadline(r)}</div>
+                    )}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                  {columns.map((col) => {
+                    const cell = col.render ? col.render(r) : String(rowRecord(row)[col.key] ?? '');
+                    // Skip empty cells in card view to reduce clutter
+                    if (cell === null || cell === undefined || cell === '' || cell === '—') return null;
+                    return (
+                      <div key={col.key} className="min-w-0">
+                        {col.label && (
+                          <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">
+                            {col.label}
+                          </div>
+                        )}
+                        <div className="text-sm text-gray-700 truncate">{cell}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* DESKTOP: table view (hidden below md) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-100">
           <thead>
             <tr className="bg-gray-50">

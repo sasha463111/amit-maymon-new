@@ -104,7 +104,124 @@ export function UsersTab({
         </div>
       )}
 
-      <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+      {/* MOBILE: cards */}
+      <div className="md:hidden space-y-3">
+        {users.map((u) => {
+          const isEditing = editingId === u.id;
+          return (
+            <div key={u.id} className="bg-white border border-gray-200 rounded-lg p-3">
+              {isEditing && draft ? (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] uppercase text-gray-400">שם</label>
+                    <input
+                      type="text"
+                      value={draft.full_name}
+                      onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] uppercase text-gray-400">תפקיד</label>
+                      <select
+                        value={draft.role}
+                        onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                      >
+                        {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase text-gray-400">סניף</label>
+                      <select
+                        value={draft.branch_id ?? ''}
+                        onChange={(e) => setDraft({ ...draft, branch_id: e.target.value || null })}
+                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                      >
+                        <option value="">— ללא —</option>
+                        {branches.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.is_active}
+                      onChange={(e) => setDraft({ ...draft, is_active: e.target.checked })}
+                      className="w-4 h-4"
+                    />
+                    משתמש פעיל
+                  </label>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={busyId === u.id}
+                      onClick={() => void saveEdit(u)}
+                      className="flex-1 px-3 py-2 bg-green-600 text-white rounded text-xs font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <Save size={12} />
+                      שמור
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingId(null); setDraft(null); }}
+                      className="px-3 py-2 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                    >
+                      ביטול
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {ROLE_LABELS[u.role] ?? u.role}
+                        {u.branch_name && ` · ${u.branch_name}`}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5 text-[10px] shrink-0">
+                      <span className={u.is_active ? 'text-green-600' : 'text-red-600'}>
+                        {u.is_active ? '● פעיל' : '○ לא פעיל'}
+                      </span>
+                      {u.is_bodywork_advisor && <span className="text-amber-600">יועץ פחח</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(u)}
+                      className="flex-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-200"
+                    >
+                      ערוך
+                    </button>
+                    {u.id !== currentUserId && (
+                      <button
+                        type="button"
+                        disabled={busyId === u.id}
+                        onClick={() => void viewAs(u)}
+                        className="flex-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded text-xs font-medium hover:bg-purple-200 disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        <Eye size={12} />
+                        צפה כמותו
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* DESKTOP: table */}
+      <div className="hidden md:block overflow-x-auto bg-white rounded-lg border border-gray-200">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
             <tr>

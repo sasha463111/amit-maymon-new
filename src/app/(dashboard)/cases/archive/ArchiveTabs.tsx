@@ -126,8 +126,10 @@ export function ArchiveTabs({
 
   return (
     <div dir="rtl" className="space-y-4">
-      {/* Tabs — big and obvious */}
-      <div className="grid grid-cols-3 gap-3" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
+      {/* Tabs — stack on phone, side-by-side on tablet+ */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        {/* fixed width per tab on desktop so they share the row equally */}
+        {/* (each tab gets flex-1) */}
         {TABS.map(({ key, label, icon: Icon, count, tone }) => {
           const isActive = tab === key;
           const cls = TONE_CLASSES[tone];
@@ -136,21 +138,22 @@ export function ArchiveTabs({
               key={key}
               type="button"
               onClick={() => switchTab(key)}
-              className={`relative flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-right ${
+              className={`relative flex-1 flex items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl border-2 transition-all text-right ${
                 isActive ? cls.active : cls.inactive
               }`}
             >
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${
                 isActive ? 'bg-white/70' : 'bg-gray-100'
               }`}>
-                <Icon size={18} />
+                <Icon size={16} className="sm:hidden" />
+                <Icon size={18} className="hidden sm:block" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold">{label}</p>
-                <p className="text-xs opacity-70">{count} תיקים</p>
+                <p className="text-sm font-bold leading-tight">{label}</p>
+                <p className="text-[11px] sm:text-xs opacity-70">{count} תיקים</p>
               </div>
               {count > 0 && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cls.chip}`}>{count}</span>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cls.chip} shrink-0`}>{count}</span>
               )}
             </button>
           );
@@ -196,7 +199,67 @@ export function ArchiveTabs({
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* MOBILE: cards */}
+          <div className="md:hidden divide-y divide-gray-100">
+            {filtered.map((r) => {
+              const dateValue =
+                tab === 'in_closure' ? r.treatment_finished_at :
+                tab === 'closed' ? r.closed_at :
+                r.deleted_at;
+              const days = daysSince(dateValue);
+              const isStale = tab === 'in_closure' && days !== null && days > 7;
+              return (
+                <div key={r.id} className="p-4">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-base font-semibold text-gray-900 truncate">{r.customer}</p>
+                      <p className="text-xs text-gray-500 mt-0.5" dir="ltr">
+                        {r.plate}
+                        {r.claim !== '—' && <span className="text-gray-400"> · {r.claim}</span>}
+                      </p>
+                    </div>
+                    {days !== null && (
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full shrink-0 ${isStale ? 'bg-rose-100 text-rose-700 font-semibold' : 'bg-gray-100 text-gray-500'}`}>
+                        {days === 0 ? 'היום' : `${days}י׳${isStale ? ' ⚠️' : ''}`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600 mb-3">
+                    {r.phone && (
+                      <a href={`tel:${r.phone}`} className="text-blue-600 truncate" dir="ltr">📞 {r.phone}</a>
+                    )}
+                    {r.insurance && <span className="truncate">🏢 {r.insurance}</span>}
+                    {r.branch_name && r.branch_name !== '—' && <span className="truncate">📍 {r.branch_name}</span>}
+                    {tab === 'deleted' && r.deleted_by_name !== '—' && (
+                      <span className="truncate">❌ ע"י {r.deleted_by_name}</span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Link
+                      href={tab === 'in_closure' ? `/closure/${r.id}` : `/cases/${r.id}`}
+                      className="flex-1 text-center inline-flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-2 rounded-lg border border-indigo-200"
+                    >
+                      <FileText size={12} />
+                      {tab === 'in_closure' ? 'המשך סגירה' : 'פתח תיק'}
+                    </Link>
+                    {tab === 'deleted' && canRestoreDeleted && (
+                      <button
+                        onClick={() => handleRestore(r)}
+                        disabled={pending && restoringId === r.id}
+                        className="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-700 text-xs font-semibold px-3 py-2 rounded-lg border border-emerald-200"
+                      >
+                        <RotateCcw size={12} />
+                        {pending && restoringId === r.id ? 'משחזר…' : 'שחזר'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DESKTOP: table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 text-xs uppercase">
                 <tr>

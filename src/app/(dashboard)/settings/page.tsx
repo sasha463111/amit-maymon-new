@@ -52,11 +52,11 @@ export default async function SettingsPage({
 
   return (
     <div dir="rtl">
-      <div className="flex items-center gap-3 mb-6">
-        <span className="text-4xl">⚙️</span>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">הגדרות מערכת</h1>
-          <p className="text-gray-500 text-sm mt-1">ניהול הרשאות, צ&apos;קליסט ויועצי פחחות</p>
+      <div className="flex items-center gap-3 mb-4 sm:mb-6">
+        <span className="text-3xl sm:text-4xl">⚙️</span>
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-800">הגדרות מערכת</h1>
+          <p className="text-gray-500 text-xs sm:text-sm mt-1 hidden sm:block">ניהול הרשאות, צ&apos;קליסט ויועצי פחחות</p>
         </div>
       </div>
 
@@ -66,11 +66,11 @@ export default async function SettingsPage({
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      {/* Tabs — horizontal scroll on mobile */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
         <a
           href="/settings?tab=permissions"
-          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`whitespace-nowrap px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
             activeTab === 'permissions'
               ? 'border-indigo-600 text-indigo-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -80,7 +80,7 @@ export default async function SettingsPage({
         </a>
         <a
           href="/settings?tab=checklist"
-          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`whitespace-nowrap px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
             activeTab === 'checklist'
               ? 'border-indigo-600 text-indigo-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -90,7 +90,7 @@ export default async function SettingsPage({
         </a>
         <a
           href="/settings?tab=advisors"
-          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`whitespace-nowrap px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
             activeTab === 'advisors'
               ? 'border-indigo-600 text-indigo-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -100,7 +100,7 @@ export default async function SettingsPage({
         </a>
         <a
           href="/settings?tab=users"
-          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`whitespace-nowrap px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
             activeTab === 'users'
               ? 'border-indigo-600 text-indigo-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -110,7 +110,7 @@ export default async function SettingsPage({
         </a>
       </div>
 
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
         {activeTab === 'permissions' ? (
           <PermissionsTab initialPermissions={permissions} />
         ) : activeTab === 'checklist' ? (

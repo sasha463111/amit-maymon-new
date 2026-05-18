@@ -1070,7 +1070,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       </div>
 
       {/* ── פרטי תיק ── */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-3 sm:p-6">
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
           <span className="text-2xl">📋</span>
           פרטי תיק
@@ -1188,7 +1188,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       </div>
 
       {/* ── צ'קליסט עבודה ── */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
           <span className="text-2xl">✅</span>
           צ&apos;קליסט עבודה
@@ -1824,7 +1824,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       </div>
 
       {/* ── מסמכים ── */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <span className="text-2xl">📎</span>
@@ -1984,7 +1984,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
       {/* ── ציר זמן ── */}
       {timeline.length > 0 && (
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
           <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
             <span className="text-2xl">⏱️</span>
             ציר זמן
