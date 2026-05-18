@@ -313,6 +313,8 @@ async function CaseDetailData({
       catalogNumbersAssignee={caseRow.catalog_numbers_assignee ?? null}
       partsDiscountsAssignee={caseRow.parts_discounts_assignee ?? null}
       completionPhotosAssignee={caseRow.completion_photos_assignee ?? null}
+      treatmentFinishedAt={caseRow.treatment_finished_at ?? null}
+      closedAt={caseRow.closed_at ?? null}
     />
   );
 }

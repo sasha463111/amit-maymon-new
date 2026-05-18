@@ -11,11 +11,13 @@ import { StopViewAsButton } from './StopViewAsButton';
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
     { label: 'תיקים', href: '/cases' },
+    { label: 'ארכיון', href: '/cases/archive' },
     { label: 'תוספות', href: '/extras' },
     { label: 'התראות', href: '/notifications' },
   ],
   OFFICE: [
     { label: 'סגירה', href: '/closure' },
+    { label: 'ארכיון', href: '/cases/archive' },
     { label: 'התראות', href: '/notifications' },
   ],
   CEO: [
@@ -34,6 +36,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   SERVICE_ADVISOR: [
     { label: 'תיקים', href: '/cases' },
+    { label: 'ארכיון', href: '/cases/archive' },
     { label: 'התראות', href: '/notifications' },
   ],
 };

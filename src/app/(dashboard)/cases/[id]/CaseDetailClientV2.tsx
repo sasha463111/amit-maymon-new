@@ -110,6 +110,9 @@ interface CaseDetailClientProps {
   catalogNumbersAssignee: string | null;
   partsDiscountsAssignee: string | null;
   completionPhotosAssignee: string | null;
+  // Session 7 — status banner
+  treatmentFinishedAt?: string | null;
+  closedAt?: string | null;
 }
 
 const SUB_CLAIM_LABELS: Record<string, string> = {
@@ -970,8 +973,65 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     }
   }
 
+  // ── Session 7 — case status banner: makes it instantly obvious where this case is.
+  const activeProfessionalStepLabel = useMemo(() => {
+    const PROFESSIONAL_KEYS = new Set([
+      'OPEN_CASE','FIXCAR_PHOTOS','WHEELS_CHECK','PREP_ESTIMATE','SEND_TO_APPRAISER',
+      'WAIT_APPRAISER_APPROVAL','ENTER_WORK','ISSUE_CATALOG_NUMBERS','PARTS_DISCOUNTS',
+      'QUALITY_CONTROL','WASH','SEND_COMPLETION_PHOTOS','READY_FOR_OFFICE',
+    ]);
+    const active = localSteps.find((s) => PROFESSIONAL_KEYS.has(s.step_key) && s.state === 'ACTIVE');
+    if (!active) return null;
+    return STEP_LABELS[active.step_key] ?? active.step_key;
+  }, [localSteps, STEP_LABELS]);
+
+  const isClosed = !!props.closedAt;
+  const isInClosure = !isClosed && !!props.treatmentFinishedAt;
+  const isActive = !isClosed && !isInClosure;
+
   return (
     <div className="space-y-6" dir="rtl">
+      {/* Case status banner — top-of-page, color-coded so the user sees state at a glance */}
+      {isClosed ? (
+        <div className="bg-gradient-to-l from-gray-100 to-gray-50 border-2 border-gray-300 rounded-xl px-5 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gray-400 text-white flex items-center justify-center text-lg">🔒</div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-gray-700">תיק סגור</p>
+            <p className="text-xs text-gray-500">
+              נסגר בתאריך {props.closedAt ? new Date(props.closedAt).toLocaleDateString('he-IL') : '—'}
+            </p>
+          </div>
+        </div>
+      ) : isInClosure ? (
+        <div className="bg-gradient-to-l from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl px-5 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-400 text-white flex items-center justify-center text-lg">📋</div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-amber-900">הועבר למשרד — בתהליך סגירה</p>
+            <p className="text-xs text-amber-700">
+              הסתיים הטיפול המקצועי בתאריך{' '}
+              {props.treatmentFinishedAt ? new Date(props.treatmentFinishedAt).toLocaleDateString('he-IL') : '—'} —
+              אילנה משלימה את הסגירה.
+            </p>
+          </div>
+          {(role === 'OFFICE' || role === 'CEO') && (
+            <Link
+              href={`/closure/${caseId}`}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shrink-0"
+            >
+              המשך סגירה ←
+            </Link>
+          )}
+        </div>
+      ) : isActive && activeProfessionalStepLabel ? (
+        <div className="bg-gradient-to-l from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl px-5 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-lg">⏱</div>
+          <div className="flex-1">
+            <p className="text-xs text-blue-700 font-medium">השלב הנוכחי</p>
+            <p className="text-base font-bold text-blue-900">{activeProfessionalStepLabel}</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between">
         <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
           <span>←</span>
