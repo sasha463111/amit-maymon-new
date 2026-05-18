@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getRolePermissions, getWorkflowStepTemplates, getBodyworkAdvisors } from '@/app/actions/settings';
+import { listSystemUsers } from '@/app/actions/users';
 import { PermissionsTab } from './PermissionsTab';
 import { ChecklistTab } from './ChecklistTab';
 import { BodyworkAdvisorsTab } from './BodyworkAdvisorsTab';
+import { UsersTab } from './UsersTab';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 
 export default async function SettingsPage({
@@ -28,17 +30,25 @@ export default async function SettingsPage({
 
   const resolvedParams = await searchParams;
   const { tab = 'permissions' } = resolvedParams;
-  const activeTab = tab === 'checklist' ? 'checklist' : tab === 'advisors' ? 'advisors' : 'permissions';
+  const activeTab =
+    tab === 'checklist' ? 'checklist' :
+    tab === 'advisors' ? 'advisors' :
+    tab === 'users' ? 'users' :
+    'permissions';
 
-  const [permissionsResult, stepsResult, advisorsResult] = await Promise.all([
+  const [permissionsResult, stepsResult, advisorsResult, usersResult, branchesResult] = await Promise.all([
     getRolePermissions(),
     getWorkflowStepTemplates(),
     getBodyworkAdvisors(),
+    listSystemUsers(),
+    supabase.from('branches').select('id, name').order('name'),
   ]);
 
   const permissions = (permissionsResult.data ?? []) as RolePermission[];
   const steps = (stepsResult.data ?? []) as WorkflowStepTemplate[];
   const advisors = advisorsResult.data ?? [];
+  const systemUsers = usersResult.data ?? [];
+  const branches = (branchesResult.data ?? []) as { id: string; name: string }[];
 
   return (
     <div dir="rtl">
@@ -88,6 +98,16 @@ export default async function SettingsPage({
         >
           🔧 יועצי פחחות
         </a>
+        <a
+          href="/settings?tab=users"
+          className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'users'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          👥 משתמשים
+        </a>
       </div>
 
       <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
@@ -95,8 +115,10 @@ export default async function SettingsPage({
           <PermissionsTab initialPermissions={permissions} />
         ) : activeTab === 'checklist' ? (
           <ChecklistTab initialSteps={steps} />
-        ) : (
+        ) : activeTab === 'advisors' ? (
           <BodyworkAdvisorsTab initialAdvisors={advisors} />
+        ) : (
+          <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} />
         )}
       </div>
     </div>

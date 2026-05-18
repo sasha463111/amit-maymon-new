@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { sendPushToUser } from '@/app/actions/push';
 
 /** Update painter checklist fields on the case */
 export async function updatePainterChecklist(
@@ -114,16 +115,19 @@ export async function createPainterRequest(
     .eq('is_bodywork_advisor', true);
 
   const typeLabel = requestType === 'WORK' ? 'עבודה' : 'חלקים';
+  const reqTitle = `בקשת פחח — ${typeLabel}`;
+  const reqBody = `רכב ${plateLabel}: ${description.trim()}`;
   for (const adv of (advisors ?? []) as { id: string }[]) {
     await supabase.from('notifications').insert({
       user_id: adv.id,
       case_id: caseId,
       type: 'PAINTER_REQUEST',
-      title: `בקשת פחח — ${typeLabel}`,
-      body: `רכב ${plateLabel}: ${description.trim()}`,
+      title: reqTitle,
+      body: reqBody,
       action_url: `/painters/${caseId}`,
       triggered_by: user.id,
     } as never);
+    void sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
   }
 
   revalidatePath(`/painters/${caseId}`);

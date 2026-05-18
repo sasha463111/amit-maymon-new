@@ -2,7 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { sendPushToUser } from '@/app/actions/push';
 import type { ApprovalDecisionInput } from '@/types/database';
+
+const APPROVAL_TYPE_LABELS: Record<string, string> = {
+  ESTIMATE_AND_DETAILS: 'אומדן ופרטי תיק',
+  WHEELS_CHECK: 'טפסי גלגלים',
+};
 
 export async function decideApproval(input: ApprovalDecisionInput) {
   const supabase = await createClient();
@@ -49,28 +55,70 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     payload: { case_id: approval.case_id },
   } as never);
 
+  // Fetch case context (branch + plate) once for any notification we send below.
+  const { data: caseCtxData } = await supabase
+    .from('cases')
+    .select('branch_id, case_key, cars(license_plate)')
+    .eq('id', approval.case_id)
+    .single();
+  const caseCtx = caseCtxData as {
+    branch_id: string;
+    case_key: string | null;
+    cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
+  } | null;
+  const plateLabel =
+    (Array.isArray(caseCtx?.cars) ? caseCtx?.cars[0]?.license_plate : caseCtx?.cars?.license_plate) ??
+    caseCtx?.case_key ?? 'תיק';
+  const branchId = caseCtx?.branch_id ?? '';
+
+  // Look up the original approval type so we can include it in notifications below.
+  const { data: approvalTypeRow } = await supabase
+    .from('ceo_approvals')
+    .select('approval_type')
+    .eq('id', input.approval_id)
+    .single();
+  const approvalTypeLabel = APPROVAL_TYPE_LABELS[(approvalTypeRow as { approval_type: string } | null)?.approval_type ?? ''] ?? 'אישור';
+
   if (input.status === 'REJECTED') {
-    const { data: caseData } = await supabase
-      .from('cases')
-      .select('branch_id')
-      .eq('id', approval.case_id)
-      .single();
-    const branchId = (caseData as { branch_id: string } | null)?.branch_id;
     const { data: managers } = await supabase
       .from('profiles')
       .select('id')
       .eq('role', 'SERVICE_MANAGER')
-      .eq('branch_id', branchId ?? '');
+      .eq('branch_id', branchId);
+    const rejTitle = `${approvalTypeLabel} נדחה`;
+    const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} — עמית דחה את האישור`;
     for (const m of (managers ?? []) as { id: string }[]) {
       await supabase.from('notifications').insert({
         user_id: m.id,
         case_id: approval.case_id,
         type: 'CEO_REJECTED',
-        title: 'אישור נדחה',
-        body: input.rejection_note ?? 'עמית דחה אישור',
+        title: rejTitle,
+        body: rejBody,
         action_url: `/cases/${approval.case_id}`,
         triggered_by: user.id,
       } as never);
+      void sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
+    }
+  } else if (input.status === 'APPROVED') {
+    // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
+    const { data: managers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'SERVICE_MANAGER')
+      .eq('branch_id', branchId);
+    const okTitle = `${approvalTypeLabel} אושר ✓`;
+    const okBody = `רכב ${plateLabel} — עמית אישר. אפשר להמשיך בטיפול.`;
+    for (const m of (managers ?? []) as { id: string }[]) {
+      await supabase.from('notifications').insert({
+        user_id: m.id,
+        case_id: approval.case_id,
+        type: 'OTHER',
+        title: okTitle,
+        body: okBody,
+        action_url: `/cases/${approval.case_id}`,
+        triggered_by: user.id,
+      } as never);
+      void sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
   }
 

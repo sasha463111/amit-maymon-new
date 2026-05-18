@@ -143,11 +143,24 @@ export function ClosureDetailClient({
   // Debounce timer ref for checklist save
   const checklistSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [checklistSaveError, setChecklistSaveError] = useState<string | null>(null);
+  const [checklistSavedAt, setChecklistSavedAt] = useState<number | null>(null);
+
   const saveChecklistState = useCallback(async (state: boolean[]) => {
     const supabase = (await import('@/lib/supabase/client')).createClient();
     const jsonState: Record<string, boolean> = {};
     state.forEach((v, i) => { if (v) jsonState[String(i)] = true; });
-    await supabase.from('cases').update({ closure_checklist_state: jsonState } as never).eq('id', caseId);
+    const { error: saveErr } = await supabase
+      .from('cases')
+      .update({ closure_checklist_state: jsonState } as never)
+      .eq('id', caseId);
+    if (saveErr) {
+      setChecklistSaveError(saveErr.message);
+      console.error('[saveChecklistState] failed', saveErr);
+    } else {
+      setChecklistSaveError(null);
+      setChecklistSavedAt(Date.now());
+    }
   }, [caseId]);
 
   function handleChecklistChange(index: number) {
@@ -448,8 +461,13 @@ export function ClosureDetailClient({
               </li>
             ))}
           </ul>
-          <div className="mt-4 text-xs text-gray-400">
-            {checkedItems.filter(Boolean).length} / {checklistItems.length} פריטים הושלמו
+          <div className="mt-4 text-xs text-gray-400 flex items-center justify-between">
+            <span>{checkedItems.filter(Boolean).length} / {checklistItems.length} פריטים הושלמו</span>
+            {checklistSaveError ? (
+              <span className="text-red-600">⚠️ שמירה נכשלה: {checklistSaveError}</span>
+            ) : checklistSavedAt ? (
+              <span className="text-green-600">✓ נשמר</span>
+            ) : null}
           </div>
         </div>
       )}

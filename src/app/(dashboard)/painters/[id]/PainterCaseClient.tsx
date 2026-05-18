@@ -152,14 +152,27 @@ export function PainterCaseClient({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto" dir="rtl">
-      {/* Back */}
-      <a href="/painters" className="text-sm text-blue-600 hover:underline">← חזרה ללוח פחחים</a>
+      {/* Back navigation */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <a href="/painters" className="text-sm text-blue-600 hover:underline">← חזרה ללוח פחחים</a>
+        {(role === 'SERVICE_MANAGER' || role === 'CEO') && (
+          <a
+            href={`/cases/${caseId}`}
+            className="text-sm bg-brand-red hover:bg-brand-red-dark text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+          >
+            פתח תיק מלא →
+          </a>
+        )}
+      </div>
 
       {/* Case Header */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800" dir="ltr">{licensePlate ?? caseKey ?? '—'}</h1>
+            {customerName && (
+              <p className="text-base font-semibold text-gray-700 mt-1">{customerName}</p>
+            )}
             {carLabel && <p className="text-gray-500 text-sm mt-0.5">{carLabel}</p>}
           </div>
           {painterStatus && (
@@ -292,15 +305,43 @@ export function PainterCaseClient({
             {/* Images */}
             <div>
               <label className="block text-xs text-gray-500 mb-1">תמונות (אופציונלי)</label>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => setRequestImages(Array.from(e.target.files ?? []))}
-                className="text-sm text-gray-600 file:mr-2 file:px-3 file:py-1 file:rounded file:border-0 file:bg-blue-100 file:text-blue-700 file:text-xs file:cursor-pointer"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
+                  📁 בחר תמונות
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => setRequestImages((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
+                    className="hidden"
+                  />
+                </label>
+                <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-blue-50 border border-blue-300 text-blue-700 rounded-md text-xs font-medium cursor-pointer hover:bg-blue-100">
+                  📷 צלם
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => setRequestImages((prev) => [...prev, ...Array.from(e.target.files ?? [])])}
+                    className="hidden"
+                  />
+                </label>
+              </div>
               {requestImages.length > 0 && (
-                <p className="text-xs text-blue-600 mt-1">{requestImages.length} תמונות נבחרו</p>
+                <div className="mt-2 space-y-1">
+                  {requestImages.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-blue-50 px-2 py-1 rounded">
+                      <span className="truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRequestImages(requestImages.filter((_, idx) => idx !== i))}
+                        className="text-gray-400 hover:text-red-600 ml-2 shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 

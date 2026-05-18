@@ -347,11 +347,13 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       .single();
 
     if (error) {
-      // Fallback: select only stable columns
+      // Fallback: include all customer-facing fields so they don't "disappear" when
+      // a single newer column (eg the Session-6 jsonb additions) breaks the main SELECT.
+      console.error('[cases/[id]/page] main SELECT failed — falling back', error);
       const { data: basicData } = await supabase
         .from('cases')
         .select(
-          'id,case_key,claim_number,fixcar_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,insurance_type,claim_type,cars(license_plate,first_registration_date),branches(name)'
+          'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,appraiser_status,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
         )
         .eq('id', id)
         .single();

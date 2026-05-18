@@ -4,7 +4,9 @@ import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { SidebarNav } from '@/components/SidebarNav';
-import { LogOut } from 'lucide-react';
+import { LogOut, Eye } from 'lucide-react';
+import { getViewAsState } from '@/app/actions/users';
+import { StopViewAsButton } from './StopViewAsButton';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -63,7 +65,12 @@ export default async function DashboardLayout({
 
   const profile = profileData as { full_name?: string; role: string; branch_id: string | null } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
-  const role = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
+  const actualRole = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
+
+  // "View as" preview — CEO previewing another user's UI.
+  const viewAs = actualRole === 'CEO' ? await getViewAsState() : null;
+  const role: UserRole = viewAs?.role ?? actualRole;
+
   const links = isPreview
     ? [
         { label: 'תיקים', href: '/cases' },
@@ -94,6 +101,17 @@ export default async function DashboardLayout({
         </div>
       )}
       {isPreview && <PreviewRoleSwitcher />}
+
+      {/* "View as" banner — CEO previewing another user's UI */}
+      {viewAs && (
+        <div className="bg-purple-100 border-b border-purple-300 px-4 py-2 flex items-center justify-center gap-3 text-sm text-purple-900">
+          <Eye size={14} />
+          <span>
+            את/ה צופ/ה בתצוגה של <strong>{viewAs.userName}</strong> ({ROLE_LABEL[viewAs.role]})
+          </span>
+          <StopViewAsButton />
+        </div>
+      )}
 
       {/* Top header with brand + nav + user */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">

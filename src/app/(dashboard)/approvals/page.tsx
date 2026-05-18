@@ -42,6 +42,11 @@ export default async function ApprovalsPage() {
         fixcar_link,
         wheels_check_link,
         parts_status,
+        customer_name,
+        phone,
+        insurance_company,
+        appraiser_name,
+        notes,
         cars(license_plate),
         branches(name)
       )
@@ -63,6 +68,11 @@ export default async function ApprovalsPage() {
         fixcar_link: string | null;
         wheels_check_link: string | null;
         parts_status: string;
+        customer_name: string | null;
+        phone: string | null;
+        insurance_company: string | null;
+        appraiser_name: string | null;
+        notes: string | null;
         cars: { license_plate: string | null } | null;
         branches: { name: string } | null;
       } | null;
@@ -79,6 +89,11 @@ export default async function ApprovalsPage() {
       fixcar_link: c?.fixcar_link ?? null,
       wheels_check_link: c?.wheels_check_link ?? null,
       parts_status: c?.parts_status ?? null,
+      customer_name: c?.customer_name ?? null,
+      phone: c?.phone ?? null,
+      insurance_company: c?.insurance_company ?? null,
+      appraiser_name: c?.appraiser_name ?? null,
+      notes: c?.notes ?? null,
       plate: car?.license_plate ?? '—',
       branch_name: branch?.name ?? '—',
     };

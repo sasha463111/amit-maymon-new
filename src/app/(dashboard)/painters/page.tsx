@@ -152,13 +152,13 @@ export default async function PaintersPage() {
                     <span className="font-bold text-primary-container text-sm w-24 shrink-0" dir="ltr">
                       {car?.license_plate ?? '—'}
                     </span>
+                    {/* Customer name — bumped to second column for prominence */}
+                    <span className="text-sm font-semibold text-gray-800 w-36 shrink-0 truncate" title={row.customer_name ?? ''}>
+                      {row.customer_name ?? '—'}
+                    </span>
                     {/* Make / Model / Year */}
                     <span className="text-sm text-gray-600 flex-1 font-medium">
                       {[car?.make, car?.model, car?.year].filter(Boolean).join(' ')}
-                    </span>
-                    {/* Customer */}
-                    <span className="text-sm text-gray-500 w-32 shrink-0 truncate">
-                      {row.customer_name ?? '—'}
                     </span>
                     {/* Appraiser */}
                     <span className="text-xs text-gray-400 w-24 shrink-0 truncate">

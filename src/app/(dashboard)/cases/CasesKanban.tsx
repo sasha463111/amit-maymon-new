@@ -9,6 +9,7 @@ export interface KanbanCase {
   plate: string;
   claim: string;
   case_key: string | null;
+  customer_name: string | null;
   opened_at: string | null;
   parts_status: PartsStatus;
   nextStep: string | null;
@@ -72,6 +73,13 @@ function KanbanCard({ c, onClick }: { c: KanbanCase; onClick: () => void }) {
           </span>
         )}
       </div>
+
+      {/* Customer name */}
+      {c.customer_name && (
+        <p className="text-sm font-semibold text-gray-700 truncate" title={c.customer_name}>
+          {c.customer_name}
+        </p>
+      )}
 
       {/* Claim number / case key */}
       {(c.claim !== '—' || c.case_key) && (

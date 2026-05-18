@@ -11,6 +11,7 @@ interface CaseForView {
   plate: string;
   claim: string;
   case_key: string | null;
+  customer_name: string | null;
   opened_at: string | null;
   age: string;
   parts_status: PartsStatus;
@@ -47,6 +48,7 @@ export function CasesViewWrapper({
     plate: c.plate,
     claim: c.claim,
     case_key: c.case_key,
+    customer_name: c.customer_name,
     opened_at: c.opened_at,
     parts_status: c.parts_status,
     nextStep: c.nextStep,

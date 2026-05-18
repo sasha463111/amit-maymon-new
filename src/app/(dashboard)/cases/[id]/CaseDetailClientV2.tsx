@@ -852,7 +852,13 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setStepError(null);
     try {
       const res = await updateCaseDetails(caseId, { [fieldKey]: trimmed });
-      if (res?.error) { setStepError(res.error); return; }
+      if (res?.error) {
+        // Surface the error AND close the popup so the user can retry / see the message.
+        setStepError(`שמירת שם המבצע נכשלה: ${res.error}`);
+        setAssigneePopupStepId(null);
+        setAssigneeInput('');
+        return;
+      }
       if (fieldKey === 'catalog_numbers_assignee') setCatalogNumbersAssignee(trimmed);
       else if (fieldKey === 'parts_discounts_assignee') setPartsDiscountsAssignee(trimmed);
       else if (fieldKey === 'completion_photos_assignee') setCompletionPhotosAssignee(trimmed);
@@ -861,18 +867,40 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       await performComplete(step);
     } catch (e) {
       console.error('[handleAssigneeConfirm] error', e);
-      setStepError('שגיאה בשמירת שם המבצע');
+      setStepError(e instanceof Error ? `שגיאה: ${e.message}` : 'שגיאה בשמירת שם המבצע');
+      setAssigneePopupStepId(null);
+      setAssigneeInput('');
     }
   }
 
   // ── Session 6 — toggle ENTER_WORK sub-checklist item ──
+  // Optimistic, with revert + visible error on failure. Direct supabase update would
+  // silently 4xx if RLS or schema is off; this surfaces those instead of letting the
+  // checkbox "unstick" on next reload without explanation.
+  const [enterWorkSaveError, setEnterWorkSaveError] = useState<string | null>(null);
   async function toggleEnterWorkItem(item: string) {
+    const prev = enterWorkChecklist;
     const next = enterWorkChecklist.includes(item)
       ? enterWorkChecklist.filter((x) => x !== item)
       : [...enterWorkChecklist, item];
     setEnterWorkChecklist(next);
-    const supabase = (await import('@/lib/supabase/client')).createClient();
-    await supabase.from('cases').update({ enter_work_checklist_state: next } as never).eq('id', caseId);
+    setEnterWorkSaveError(null);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { error } = await supabase
+        .from('cases')
+        .update({ enter_work_checklist_state: next } as never)
+        .eq('id', caseId);
+      if (error) {
+        setEnterWorkChecklist(prev);
+        setEnterWorkSaveError(error.message);
+        console.error('[toggleEnterWorkItem] update failed', error);
+      }
+    } catch (e) {
+      setEnterWorkChecklist(prev);
+      setEnterWorkSaveError(e instanceof Error ? e.message : 'שגיאה בשמירה');
+      console.error('[toggleEnterWorkItem] exception', e);
+    }
   }
 
   // ── Session 6 — final estimate upload at READY_FOR_OFFICE (optional, doesn't block) ──
@@ -1271,6 +1299,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                             {item}
                           </label>
                         ))}
+                        {enterWorkSaveError && (
+                          <p className="mt-2 text-xs text-red-600">⚠️ שמירה נכשלה: {enterWorkSaveError}</p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1333,12 +1364,30 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         <div className="space-y-2">
                           <p className="text-xs font-semibold text-purple-700">📄 העלה אומדן סופי (אופציונלי)</p>
                           <p className="text-xs text-gray-600">האומדן הסופי כולל הנחות, מק&quot;טים והכל. עמית יראה אותו לפני סגירה.</p>
-                          <input
-                            type="file"
-                            accept="image/*,application/pdf"
-                            onChange={(e) => setFinalEstimateFile(e.target.files?.[0] ?? null)}
-                            className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
+                              📁 בחר קובץ
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => setFinalEstimateFile(e.target.files?.[0] ?? null)}
+                                className="hidden"
+                              />
+                            </label>
+                            <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-purple-100 border border-purple-300 text-purple-700 rounded-md text-xs font-medium cursor-pointer hover:bg-purple-200">
+                              📷 צלם
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => setFinalEstimateFile(e.target.files?.[0] ?? null)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          {finalEstimateFile && (
+                            <p className="text-xs text-green-700">✓ {finalEstimateFile.name} ({(finalEstimateFile.size / 1024).toFixed(0)} KB)</p>
+                          )}
                           <div className="flex gap-2">
                             <button
                               type="button"
@@ -1502,12 +1551,27 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                     >
                       <p className="text-xs font-semibold text-orange-700 mb-1">📄 העלה קובץ אומדן (אופציונלי)</p>
                       <p className="text-xs text-gray-500 mb-2">ניתן להמשיך גם ללא קובץ. הדבק תמונה (Ctrl+V) או בחר קובץ ↓</p>
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
-                        className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm mb-2"
-                      />
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
+                          📁 בחר קובץ
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
+                            className="hidden"
+                          />
+                        </label>
+                        <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-orange-100 border border-orange-300 text-orange-700 rounded-md text-xs font-medium cursor-pointer hover:bg-orange-200">
+                          📷 צלם
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
                       {estimateFile && (
                         <p className="text-xs text-green-700 mb-3">
                           ✓ נבחר: <span className="font-semibold">{estimateFile.name}</span> ({(estimateFile.size / 1024).toFixed(0)} KB)
@@ -1611,12 +1675,32 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                           placeholder="https://..."
                         />
                       ) : (
-                        <input
-                          type="file"
-                          accept="image/*,application/pdf"
-                          onChange={(e) => setWheelsFile(e.target.files?.[0] ?? null)}
-                          className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-                        />
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
+                              📁 בחר קובץ (PDF/תמונה)
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => setWheelsFile(e.target.files?.[0] ?? null)}
+                                className="hidden"
+                              />
+                            </label>
+                            <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-purple-100 border border-purple-300 text-purple-700 rounded-md text-xs font-medium cursor-pointer hover:bg-purple-200">
+                              📷 צלם
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={(e) => setWheelsFile(e.target.files?.[0] ?? null)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          {wheelsFile && (
+                            <p className="text-xs text-green-700">✓ {wheelsFile.name} ({(wheelsFile.size / 1024).toFixed(0)} KB)</p>
+                          )}
+                        </div>
                       )}
 
                       <div className="flex gap-2 mt-3">
@@ -1650,18 +1734,33 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           </div>
         )}
 
-        {canEdit && (
-          <div className="mt-2">
-            <button
-              type="button"
-              disabled={returning}
-              onClick={() => void handleReturnToEstimate()}
-              className="text-sm text-amber-600 underline"
-            >
-              {returning ? '...' : 'החזר לאומדן'}
-            </button>
-          </div>
-        )}
+        {canEdit && (() => {
+          // Hide "return to estimate" once the professional workflow is finished.
+          // Treatment is over once there's no ACTIVE professional step left
+          // (SEND_COMPLETION_PHOTOS auto-completes READY_FOR_OFFICE and ends the run).
+          const PROFESSIONAL_KEYS = new Set([
+            'OPEN_CASE','FIXCAR_PHOTOS','WHEELS_CHECK','PREP_ESTIMATE','SEND_TO_APPRAISER',
+            'WAIT_APPRAISER_APPROVAL','ENTER_WORK','ISSUE_CATALOG_NUMBERS','PARTS_DISCOUNTS',
+            'QUALITY_CONTROL','WASH','SEND_COMPLETION_PHOTOS','READY_FOR_OFFICE',
+          ]);
+          const hasActiveProfessionalStep = orderedSteps.some(
+            (s) => PROFESSIONAL_KEYS.has(s.step_key) && s.state === 'ACTIVE'
+          );
+          const caseClosed = props.generalStatus === 'COMPLETED';
+          if (!hasActiveProfessionalStep || caseClosed) return null;
+          return (
+            <div className="mt-2">
+              <button
+                type="button"
+                disabled={returning}
+                onClick={() => void handleReturnToEstimate()}
+                className="text-sm text-amber-600 underline"
+              >
+                {returning ? '...' : 'החזר לאומדן'}
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── מסמכים ── */}
@@ -1672,37 +1771,73 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
             מסמכים וקבצים
           </h2>
           {canEdit && (
-            <label className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors">
-              <input
-                type="file"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setDocumentError(null);
-                  setUploadingDocument(true);
-                  const formData = new FormData();
-                  formData.append('case_id', caseId);
-                  formData.append('file', file);
-                  const res = await uploadCaseDocument(formData);
-                  if (res?.error) {
-                    setDocumentError(res.error);
-                  } else {
-                    const supabase = createClient();
-                    const { data } = await supabase
-                      .from('case_documents')
-                      .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
-                      .eq('case_id', caseId)
-                      .order('created_at', { ascending: false });
-                    if (data) setLocalDocuments(data as typeof documents);
-                    e.target.value = '';
-                  }
-                  setUploadingDocument(false);
-                }}
-                disabled={uploadingDocument}
-              />
-              {uploadingDocument ? 'מעלה...' : '+ הוסף קובץ'}
-            </label>
+            <div className="flex gap-2">
+              <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setDocumentError(null);
+                    setUploadingDocument(true);
+                    const formData = new FormData();
+                    formData.append('case_id', caseId);
+                    formData.append('file', file);
+                    const res = await uploadCaseDocument(formData);
+                    if (res?.error) {
+                      setDocumentError(res.error);
+                    } else {
+                      const supabase = createClient();
+                      const { data } = await supabase
+                        .from('case_documents')
+                        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+                        .eq('case_id', caseId)
+                        .order('created_at', { ascending: false });
+                      if (data) setLocalDocuments(data as typeof documents);
+                      e.target.value = '';
+                    }
+                    setUploadingDocument(false);
+                  }}
+                  disabled={uploadingDocument}
+                />
+                📁 {uploadingDocument ? 'מעלה...' : 'בחר קובץ'}
+              </label>
+              <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setDocumentError(null);
+                    setUploadingDocument(true);
+                    const formData = new FormData();
+                    formData.append('case_id', caseId);
+                    formData.append('file', file);
+                    const res = await uploadCaseDocument(formData);
+                    if (res?.error) {
+                      setDocumentError(res.error);
+                    } else {
+                      const supabase = createClient();
+                      const { data } = await supabase
+                        .from('case_documents')
+                        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+                        .eq('case_id', caseId)
+                        .order('created_at', { ascending: false });
+                      if (data) setLocalDocuments(data as typeof documents);
+                      e.target.value = '';
+                    }
+                    setUploadingDocument(false);
+                  }}
+                  disabled={uploadingDocument}
+                />
+                📷 צלם
+              </label>
+            </div>
           )}
         </div>
         {documentError && (

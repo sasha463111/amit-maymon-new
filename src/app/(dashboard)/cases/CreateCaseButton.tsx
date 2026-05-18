@@ -108,14 +108,27 @@ export function CreateCaseButton({
     }
 
     const newCaseId = res?.caseId;
+    const failedUploads: string[] = [];
     if (newCaseId && files.length > 0) {
       const { uploadCaseDocument } = await import('@/app/actions/documents');
       for (const file of files) {
         const formData = new FormData();
         formData.append('case_id', newCaseId);
         formData.append('file', file);
-        await uploadCaseDocument(formData);
+        const uploadRes = await uploadCaseDocument(formData);
+        if (uploadRes?.error) {
+          failedUploads.push(`${file.name}: ${uploadRes.error}`);
+        }
       }
+    }
+
+    if (failedUploads.length > 0) {
+      setError(
+        `התיק נפתח, אך ${failedUploads.length} מתוך ${files.length} קבצים לא הועלו:\n${failedUploads.join('\n')}`
+      );
+      // Keep dialog open so user can see the error
+      router.refresh();
+      return;
     }
 
     setOpen(false);
@@ -364,16 +377,44 @@ export function CreateCaseButton({
               {/* ── קבצים ── */}
               <div>
                 <label className={labelCls}>קבצים מצורפים (אופציונלי)</label>
-                <input
-                  type="file"
-                  multiple
-                  onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-gray-100 file:text-gray-700 file:text-sm"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center justify-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 cursor-pointer transition-colors">
+                    📁 בחר קבצים
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,application/pdf"
+                      onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files || [])])}
+                      className="hidden"
+                    />
+                  </label>
+                  <label className="flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-sm font-medium text-blue-700 cursor-pointer transition-colors">
+                    📷 צלם במצלמה
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => setFiles((prev) => [...prev, ...Array.from(e.target.files || [])])}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
                 {files.length > 0 && (
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    {files.length} קבצים: {files.map((f) => f.name).join(', ')}
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    {files.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs bg-gray-50 px-2 py-1 rounded">
+                        <span className="truncate">{f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles(files.filter((_, idx) => idx !== i))}
+                          className="text-gray-400 hover:text-red-600 ml-2 shrink-0"
+                          aria-label="הסר קובץ"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

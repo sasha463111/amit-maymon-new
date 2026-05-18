@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { sendPushToUser } from '@/app/actions/push';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
   type CreateCaseInput,
@@ -73,16 +74,19 @@ async function notifyCeosPendingApproval(
 
   const { data: ceos } = await supabase.from('profiles').select('id').eq('role', 'CEO');
   const label = APPROVAL_TYPE_LABELS[approvalType] ?? approvalType;
+  const title = `אישור ${label} ממתין`;
+  const body = `רכב ${plate} ממתין לאישורך`;
   for (const ceo of (ceos ?? []) as { id: string }[]) {
     await supabase.from('notifications').insert({
       user_id: ceo.id,
       case_id: caseId,
       type: 'PENDING_APPROVAL',
-      title: `אישור ${label} ממתין`,
-      body: `רכב ${plate} ממתין לאישורך`,
+      title,
+      body,
       action_url: `/approvals`,
       triggered_by: triggeredBy,
     } as never);
+    void sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
   }
 }
 
@@ -347,14 +351,17 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .eq('case_id', caseId)
       .eq('status', 'IN_TREATMENT');
     if (extras && extras.length > 0) {
+      const blockedTitle = 'פעולה חסומה';
+      const blockedBody = 'קיימות תוספות בטיפול';
       await supabase.from('notifications').insert({
         user_id: profile!.id,
         case_id: caseId,
         type: 'BLOCKED_ACTION',
-        title: 'פעולה חסומה',
-        body: 'קיימות תוספות בטיפול',
+        title: blockedTitle,
+        body: blockedBody,
         action_url: `/cases/${caseId}`,
       } as never);
+      void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
       });
@@ -401,28 +408,34 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       }
 
       if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
+        const blockedTitle = 'פעולה חסומה';
+        const blockedBody = 'חסר או נדחה אישור CEO לאומדן';
         await supabase.from('notifications').insert({
           user_id: profile!.id,
           case_id: caseId,
           type: 'BLOCKED_ACTION',
-          title: 'פעולה חסומה',
-          body: 'חסר או נדחה אישור CEO לאומדן',
+          title: blockedTitle,
+          body: blockedBody,
           action_url: `/approvals`,
         } as never);
+        void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
         });
         return { error: 'נדרש אישור CEO לאומדן' };
       }
       if (needsWheelsApproval && (!wheelsApproval || wheelsApproval.status !== 'APPROVED')) {
+        const blockedTitle = 'פעולה חסומה';
+        const blockedBody = 'חסר או נדחה אישור CEO לטפסי גלגלים';
         await supabase.from('notifications').insert({
           user_id: profile!.id,
           case_id: caseId,
           type: 'BLOCKED_ACTION',
-          title: 'פעולה חסומה',
-          body: 'חסר או נדחה אישור CEO לטפסי גלגלים',
+          title: blockedTitle,
+          body: blockedBody,
           action_url: `/approvals`,
         } as never);
+        void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
         });
@@ -514,16 +527,19 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .select('id')
       .eq('role', 'OFFICE')
       .eq('branch_id', caseNotif?.branch_id ?? '');
+    const officeTitle = 'תיק מוכן לסגירה';
+    const officeBody = `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`;
     for (const ou of (officeUsers ?? []) as { id: string }[]) {
       await supabase.from('notifications').insert({
         user_id: ou.id,
         case_id: caseId,
         type: 'READY_FOR_OFFICE',
-        title: 'תיק מוכן לסגירה',
-        body: `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`,
+        title: officeTitle,
+        body: officeBody,
         action_url: `/closure/${caseId}`,
         triggered_by: user.id,
       } as never);
+      void sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
 
     // Auto-start CLOSURE workflow if not already exists
@@ -596,16 +612,19 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .select('id')
       .eq('branch_id', washCase?.branch_id ?? '')
       .eq('is_bodywork_advisor', true);
+    const washTitle = 'רכב נשלח לשטיפה';
+    const washBody = `רכב ${washPlate} נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
     for (const adv of (advisors ?? []) as { id: string }[]) {
       await supabase.from('notifications').insert({
         user_id: adv.id,
         case_id: caseId,
         type: 'WASH_STARTED',
-        title: 'רכב נשלח לשטיפה',
-        body: `רכב ${washPlate} נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`,
+        title: washTitle,
+        body: washBody,
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
+      void sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
     }
   }
 

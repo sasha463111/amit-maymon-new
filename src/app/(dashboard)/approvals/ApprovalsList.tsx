@@ -17,6 +17,11 @@ interface ApprovalRow {
   parts_status: string | null;
   plate: string;
   branch_name: string;
+  customer_name?: string | null;
+  phone?: string | null;
+  insurance_company?: string | null;
+  appraiser_name?: string | null;
+  notes?: string | null;
 }
 
 const APPROVAL_TYPE_LABELS: Record<string, string> = {
@@ -231,31 +236,45 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
         supabase.from('case_workflow_runs').select('id').eq('case_id', caseId).eq('workflow_type', 'PROFESSIONAL').eq('status', 'ACTIVE'),
         supabase.from('bodywork_extras').select('id, description, status, created_at').eq('case_id', caseId).order('created_at', { ascending: false }),
       ]);
-      const caseResult = await (supabase.from('cases').select('opened_at, notes, painter_status, claim_number, case_details(customer_name, phone, insurance_company, appraiser_name, sub_claim_type, claim_type, car_vin, vehicle_year), cars(make, model)').eq('id', caseId).single() as unknown as Promise<{ data: unknown; error: unknown }>);
+      const caseResult = await (supabase
+        .from('cases')
+        .select('opened_at, notes, painter_status, claim_number, customer_name, phone, insurance_company, appraiser_name, sub_claim_type, claim_type, cars(make, model, vin, year)')
+        .eq('id', caseId)
+        .single() as unknown as Promise<{ data: unknown; error: unknown }>);
 
       setDocuments((docsResult.data ?? []) as CaseDocument[]);
       setDocsLoading(false);
 
       if (caseResult.data) {
-        type CaseDetailShape = { customer_name: string | null; phone: string | null; insurance_company: string | null; appraiser_name: string | null; sub_claim_type: string | null; claim_type: string | null; car_vin: string | null; vehicle_year: number | null };
-        type CarShape = { make: string | null; model: string | null };
-        type CaseShape = { opened_at: string | null; notes: string | null; painter_status: string | null; claim_number: string | null; case_details: CaseDetailShape | CaseDetailShape[] | null; cars: CarShape | CarShape[] | null };
+        type CarShape = { make: string | null; model: string | null; vin: string | null; year: number | null };
+        type CaseShape = {
+          opened_at: string | null;
+          notes: string | null;
+          painter_status: string | null;
+          claim_number: string | null;
+          customer_name: string | null;
+          phone: string | null;
+          insurance_company: string | null;
+          appraiser_name: string | null;
+          sub_claim_type: string | null;
+          claim_type: string | null;
+          cars: CarShape | CarShape[] | null;
+        };
         const c = caseResult.data as unknown as CaseShape;
-        const det = Array.isArray(c.case_details) ? (c.case_details as CaseDetailShape[])[0] : (c.case_details as CaseDetailShape | null);
-        const car = Array.isArray(c.cars) ? (c.cars as CarShape[])[0] : (c.cars as CarShape | null);
+        const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
         setCaseInfo({
-          customer_name: det?.customer_name ?? null,
-          phone: det?.phone ?? null,
-          insurance_company: det?.insurance_company ?? null,
-          appraiser_name: det?.appraiser_name ?? null,
+          customer_name: c.customer_name ?? null,
+          phone: c.phone ?? null,
+          insurance_company: c.insurance_company ?? null,
+          appraiser_name: c.appraiser_name ?? null,
           claim_number: c.claim_number ?? null,
-          sub_claim_type: det?.sub_claim_type ?? null,
-          claim_type: det?.claim_type ?? null,
+          sub_claim_type: c.sub_claim_type ?? null,
+          claim_type: c.claim_type ?? null,
           opened_at: c.opened_at ?? null,
           car_make: car?.make ?? null,
           car_model: car?.model ?? null,
-          car_vin: det?.car_vin ?? null,
-          vehicle_year: det?.vehicle_year ?? null,
+          car_vin: car?.vin ?? null,
+          vehicle_year: car?.year ?? null,
           notes: c.notes ?? null,
           painter_status: c.painter_status ?? null,
         });
@@ -349,7 +368,20 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                     : 'border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50'
                 }`}
               >
-                <div className="font-semibold text-gray-800 text-sm">{a.case_key ?? a.plate}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-gray-800 text-sm truncate">
+                    {a.customer_name ?? a.case_key ?? a.plate}
+                  </div>
+                  {a.notes && (
+                    <span
+                      title={a.notes}
+                      className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold shrink-0"
+                      aria-label="יש הערה"
+                    >
+                      !
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-500 mt-0.5">{a.plate} · {a.branch_name}</div>
                 <div className={`text-xs mt-1 font-medium ${selectedId === a.id ? 'text-indigo-600' : 'text-amber-600'}`}>
                   ⏳ {getApprovalLabel(a.approval_type)}
@@ -419,6 +451,49 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
               {/* ── Tab: אישור ── */}
               {activeTab === 'approval' && (
                 <div className="space-y-5">
+                  {/* Customer quick summary */}
+                  {(selected.customer_name || selected.phone || selected.insurance_company || selected.appraiser_name) && (
+                    <div className="bg-gradient-to-l from-indigo-50 to-blue-50 rounded-lg p-4 border border-indigo-100">
+                      <p className="text-xs font-semibold text-indigo-700 mb-2">פרטי לקוח ותביעה</p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        {selected.customer_name && (
+                          <div>
+                            <p className="text-xs text-gray-500">לקוח</p>
+                            <p className="font-semibold text-gray-800">{selected.customer_name}</p>
+                          </div>
+                        )}
+                        {selected.phone && (
+                          <div>
+                            <p className="text-xs text-gray-500">טלפון</p>
+                            <p className="font-medium text-gray-800" dir="ltr">{selected.phone}</p>
+                          </div>
+                        )}
+                        {selected.insurance_company && (
+                          <div>
+                            <p className="text-xs text-gray-500">חברת ביטוח</p>
+                            <p className="font-medium text-gray-800">{selected.insurance_company}</p>
+                          </div>
+                        )}
+                        {selected.appraiser_name && (
+                          <div>
+                            <p className="text-xs text-gray-500">שמאי</p>
+                            <p className="font-medium text-gray-800">{selected.appraiser_name}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes — shown prominently on the approval tab */}
+                  {selected.notes && (
+                    <div className="bg-amber-50 rounded-lg p-4 border-2 border-amber-200">
+                      <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1.5">
+                        📝 הערות מהמוסך
+                      </p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{selected.notes}</p>
+                    </div>
+                  )}
+
                   {/* Parts status */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="bg-gray-50 rounded-lg p-3">

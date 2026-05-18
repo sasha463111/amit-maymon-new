@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { markRead, markAllRead } from '@/app/actions/notifications';
+import { PushSubscriber } from '@/components/PushSubscriber';
 
 interface Row {
   id: string;
@@ -20,6 +21,7 @@ interface Row {
   // Joined
   license_plate: string | null;
   case_key: string | null;
+  customer_name: string | null;
   triggered_by_name: string | null;
 }
 
@@ -89,6 +91,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
 
     const plateMap = new Map<string, string>();
     const caseKeyMap = new Map<string, string>();
+    const customerNameMap = new Map<string, string>();
     const userNameMap = new Map<string, string>();
 
     await Promise.all([
@@ -96,12 +99,13 @@ export function NotificationsBell({ userId }: { userId: string }) {
         if (caseIds.length === 0) return;
         const { data: caseRows } = await supabase
           .from('cases')
-          .select('id, case_key, cars(license_plate)')
+          .select('id, case_key, customer_name, cars(license_plate)')
           .in('id', caseIds);
-        for (const c of (caseRows ?? []) as Array<{ id: string; case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }>) {
+        for (const c of (caseRows ?? []) as Array<{ id: string; case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }>) {
           const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
           if (car?.license_plate) plateMap.set(c.id, car.license_plate);
           if (c.case_key) caseKeyMap.set(c.id, c.case_key);
+          if (c.customer_name) customerNameMap.set(c.id, c.customer_name);
         }
       })(),
       (async () => {
@@ -120,6 +124,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       ...n,
       license_plate: n.case_id ? plateMap.get(n.case_id) ?? null : null,
       case_key: n.case_id ? caseKeyMap.get(n.case_id) ?? null : null,
+      customer_name: n.case_id ? customerNameMap.get(n.case_id) ?? null : null,
       triggered_by_name: n.triggered_by ? userNameMap.get(n.triggered_by) ?? null : null,
     }));
 
@@ -273,14 +278,19 @@ export function NotificationsBell({ userId }: { userId: string }) {
                       >
                         <div className="text-xl shrink-0 leading-none mt-0.5">{getIcon(n.type)}</div>
                         <div className="flex-1 min-w-0">
-                          {/* Plate badge + title */}
+                          {/* Plate badge + customer name + title */}
                           <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                             {n.license_plate && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-bold tracking-wide" dir="ltr">
                                 🚗 {n.license_plate}
                               </span>
                             )}
-                            {n.case_key && !n.license_plate && (
+                            {n.customer_name && (
+                              <span className="text-[11px] font-semibold text-gray-700 truncate max-w-[120px]">
+                                {n.customer_name}
+                              </span>
+                            )}
+                            {n.case_key && !n.license_plate && !n.customer_name && (
                               <span className="text-[10px] font-bold text-gray-600">{n.case_key}</span>
                             )}
                             <span className={`text-sm leading-snug ${!n.read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
@@ -310,6 +320,9 @@ export function NotificationsBell({ userId }: { userId: string }) {
               </ul>
             )}
           </div>
+
+          {/* Push subscribe banner */}
+          <PushSubscriber />
 
           {/* Footer */}
           <Link

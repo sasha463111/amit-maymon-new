@@ -95,8 +95,8 @@ export function CasesTable({
     <DataTable<CaseRow>
       columns={columns}
       data={cases}
-      searchPlaceholder="חיפוש רישוי, תביעה..."
-      searchKeys={['plate', 'claim']}
+      searchPlaceholder="חיפוש רישוי, תביעה, שם לקוח..."
+      searchKeys={['plate', 'claim', 'customer_name']}
       rowKey={(row) => row.id}
       onRowClick={(row) => router.push(`/cases/${row.id}`)}
     />

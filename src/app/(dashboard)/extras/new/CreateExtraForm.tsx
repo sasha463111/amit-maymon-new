@@ -87,13 +87,31 @@ export function CreateExtraForm({ cases }: { cases: CaseOption[] }) {
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">תמונה *</label>
-        <input
-          type="file"
-          accept="image/*"
-          required
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="w-full text-sm"
-        />
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50">
+            📁 בחר תמונה
+            <input
+              type="file"
+              accept="image/*"
+              required
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+          </label>
+          <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-50 border border-blue-300 text-blue-700 rounded-md text-sm font-medium cursor-pointer hover:bg-blue-100">
+            📷 צלם במצלמה
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+          </label>
+        </div>
+        {file && (
+          <p className="mt-2 text-xs text-green-700">✓ {file.name} ({(file.size / 1024).toFixed(0)} KB)</p>
+        )}
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button

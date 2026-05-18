@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { sendPushToUser } from '@/app/actions/push';
 import type { CreateExtraInput, UpdateExtraStatusInput } from '@/types/database';
 
 export async function createExtra(input: CreateExtraInput) {
@@ -45,16 +46,19 @@ export async function createExtra(input: CreateExtraInput) {
     .select('id')
     .eq('role', 'SERVICE_MANAGER')
     .eq('branch_id', branchId ?? '');
+  const extraTitle = 'תוספת חדשה';
+  const extraBody = input.description;
   for (const m of (managers ?? []) as { id: string }[]) {
     await supabase.from('notifications').insert({
       user_id: m.id,
       case_id: input.case_id,
       type: 'EXTRA_CREATED',
-      title: 'תוספת חדשה',
-      body: input.description,
+      title: extraTitle,
+      body: extraBody,
       action_url: `/cases/${input.case_id}`,
       triggered_by: user.id,
     } as never);
+    void sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
   }
 
   await supabase.from('audit_events').insert({
