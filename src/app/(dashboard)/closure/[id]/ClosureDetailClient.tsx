@@ -328,22 +328,68 @@ export function ClosureDetailClient({
     }, 100);
   }
 
+  // Reload closure steps from DB — used after completing a step so UI updates
+  // without requiring the user to refresh / re-enter the page.
+  async function reloadClosureSteps() {
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { data: runs } = await supabase
+      .from('case_workflow_runs')
+      .select('id')
+      .eq('case_id', caseId)
+      .eq('workflow_type', 'CLOSURE');
+    const runIds = (runs as { id: string }[] | null)?.map((r) => r.id) ?? [];
+    if (!runIds.length) return;
+    const { data } = await supabase
+      .from('case_workflow_steps')
+      .select('id, step_key, state, order_index')
+      .in('run_id', runIds)
+      .order('order_index');
+    if (data) {
+      const sorted = (data as StepRow[]).sort((a, b) => a.order_index - b.order_index);
+      setLocalSteps(normalizeStepStates(sorted));
+    }
+  }
+
   async function handleCompleteStep() {
     if (!activeStep) return;
     setError(null);
     setLoading(true);
     setCompletingStepId(activeStep.id);
+
+    // Optimistic update: mark this step DONE + advance the next PENDING step
+    // immediately so the user sees the change without waiting for the round-trip.
+    const stepBeingCompleted = activeStep;
+    setLocalSteps((prev) => {
+      const sorted = [...prev].sort((a, b) => a.order_index - b.order_index);
+      const nextStep = sorted.find(
+        (s) => s.order_index > stepBeingCompleted.order_index && s.state !== 'DONE'
+      );
+      return sorted.map((s) => {
+        if (s.id === stepBeingCompleted.id) return { ...s, state: 'DONE' };
+        if (nextStep && s.id === nextStep.id) return { ...s, state: 'ACTIVE' };
+        return s;
+      });
+    });
+
     try {
       if (isPreview) {
-        await completePreviewStep(activeStep);
+        await completePreviewStep(stepBeingCompleted);
       } else {
         const res = await completeActiveStep(caseId);
-        if (res?.error) setError(res.error);
-        else router.refresh();
+        if (res?.error) {
+          setError(res.error);
+          // Roll back optimistic update on error
+          await reloadClosureSteps();
+        } else {
+          // Confirm against DB (and pick up server-side side effects like CLOSE_CASE)
+          await reloadClosureSteps();
+          router.refresh();
+        }
       }
     } catch (e) {
       console.error('[ClosureDetailClient] error:', e);
       setError('שגיאה בהשלמת השלב');
+      await reloadClosureSteps();
     } finally {
       setLoading(false);
       setCompletingStepId(null);

@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, Save, Users as UsersIcon } from 'lucide-react';
+import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
 import { updateSystemUser, startViewAsUser, type SystemUser } from '@/app/actions/users';
+import { sendTestPushToSelf } from '@/app/actions/push';
 import type { UserRole } from '@/types/database';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -35,6 +36,20 @@ export function UsersTab({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [pushTestBusy, setPushTestBusy] = useState(false);
+
+  async function handleTestPush() {
+    setPushTestBusy(true);
+    setPushTest(null);
+    const res = await sendTestPushToSelf();
+    if (res?.ok) {
+      setPushTest({ ok: true, msg: `✅ נשלח בהצלחה (${res.diagnostic ?? ''}). אם לא הגיע לטלפון — בדוק הרשאות התראות בדפדפן.` });
+    } else {
+      setPushTest({ ok: false, msg: `❌ ${res?.error ?? 'נכשל'} ${res?.diagnostic ? `(${res.diagnostic})` : ''}` });
+    }
+    setPushTestBusy(false);
+  }
 
   function startEdit(u: SystemUser) {
     setEditingId(u.id);
@@ -96,6 +111,32 @@ export function UsersTab({
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
         ℹ️ כדי <strong>ליצור משתמש חדש</strong>, היכנס ל-Supabase Dashboard → Authentication → Add user. אחרי שתיצור,
         חזור לכאן והגדר את התפקיד והסניף. המערכת יוצרת אוטומטית רשומה ב-<code className="bg-white px-1 rounded">profiles</code> דרך טריגר.
+      </div>
+
+      {/* Push test card — diagnose if Web Push actually reaches your device */}
+      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+        <div className="flex items-start gap-3">
+          <BellRing size={18} className="text-indigo-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-indigo-900 mb-1">בדיקת Push</p>
+            <p className="text-xs text-indigo-700 mb-3">
+              לחץ כדי לשלוח לעצמך התראת Push לבדיקה. ודא שלחצת קודם &quot;הפעל התראות&quot; בפעמון.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleTestPush()}
+              disabled={pushTestBusy}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold disabled:opacity-50"
+            >
+              {pushTestBusy ? '⏳ שולח...' : 'שלח Push לעצמי'}
+            </button>
+            {pushTest && (
+              <p className={`mt-2 text-xs rounded px-2 py-1 ${pushTest.ok ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'}`}>
+                {pushTest.msg}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (

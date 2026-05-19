@@ -341,7 +341,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   async function togglePartsArrived() {
     const next = !partsArrived;
     setPartsArrived(next);
-    await updateCaseDetails(caseId, { parts_arrived: next });
+    // Go through updatePainterChecklist (not updateCaseDetails) so the
+    // "חלקים הגיעו" push notification fires when this flips to true.
+    const { updatePainterChecklist } = await import('@/app/actions/painter');
+    await updatePainterChecklist(caseId, { parts_arrived: next });
   }
 
   async function saveQcAssignee(val: string) {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updatePainterChecklist, createPainterRequest } from '@/app/actions/painter';
+import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
 
 type PainterRequest = {
   id: string;
@@ -45,6 +45,87 @@ interface Props {
   branchName: string | null;
   role: string;
   initialRequests: PainterRequest[];
+}
+
+function PainterRequestItem({
+  req,
+  canManage,
+  onStatusUpdate,
+}: {
+  req: PainterRequest;
+  canManage: boolean;
+  onStatusUpdate: (newStatus: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function setStatus(next: 'PENDING' | 'IN_PROGRESS' | 'DONE') {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const prevStatus = req.status;
+    onStatusUpdate(next); // optimistic
+    const res = await updatePainterRequestStatus(req.id, next);
+    if (res?.error) {
+      setError(res.error);
+      onStatusUpdate(prevStatus); // revert
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <span className="text-xs font-medium text-gray-500 bg-gray-200 rounded px-2 py-0.5">
+            {req.request_type === 'WORK' ? 'עבודה' : 'חלקים'}
+          </span>
+          <span className={`text-xs font-medium rounded px-2 py-0.5 ${REQUEST_STATUS_COLORS[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
+            {REQUEST_STATUS_LABELS[req.status] ?? req.status}
+          </span>
+          <span className="text-xs text-gray-400">
+            {new Date(req.created_at).toLocaleDateString('he-IL')}
+          </span>
+        </div>
+        <p className="text-sm text-gray-700 break-words">{req.description}</p>
+        {canManage && req.status !== 'DONE' && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {req.status === 'PENDING' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setStatus('IN_PROGRESS')}
+                className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs font-semibold disabled:opacity-50"
+              >
+                לקח בטיפול
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setStatus('DONE')}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold disabled:opacity-50"
+            >
+              ✓ בוצע — הודע לפחח
+            </button>
+          </div>
+        )}
+        {canManage && req.status === 'DONE' && (
+          <div className="mt-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void setStatus('PENDING')}
+              className="text-xs text-gray-500 underline hover:text-gray-700 disabled:opacity-50"
+            >
+              החזר לטיפול
+            </button>
+          </div>
+        )}
+        {error && <p className="text-xs text-red-600 mt-1">⚠️ {error}</p>}
+      </div>
+    </div>
+  );
 }
 
 export function PainterCaseClient({
@@ -375,22 +456,16 @@ export function PainterCaseClient({
         ) : (
           <div className="space-y-2">
             {requests.map((req) => (
-              <div key={req.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium text-gray-500 bg-gray-200 rounded px-2 py-0.5">
-                      {req.request_type === 'WORK' ? 'עבודה' : 'חלקים'}
-                    </span>
-                    <span className={`text-xs font-medium rounded px-2 py-0.5 ${REQUEST_STATUS_COLORS[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {REQUEST_STATUS_LABELS[req.status] ?? req.status}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(req.created_at).toLocaleDateString('he-IL')}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-700">{req.description}</p>
-                </div>
-              </div>
+              <PainterRequestItem
+                key={req.id}
+                req={req}
+                canManage={role === 'SERVICE_MANAGER' || role === 'CEO'}
+                onStatusUpdate={(newStatus) => {
+                  setRequests((prev) =>
+                    prev.map((r) => (r.id === req.id ? { ...r, status: newStatus } : r))
+                  );
+                }}
+              />
             ))}
           </div>
         )}

@@ -261,6 +261,34 @@ export async function createCase(input: CreateCaseInput) {
       });
   }
 
+  // Notify branch staff that a new case was opened. Everyone in the branch who
+  // touches cases gets a heads-up so the whole team is aware from minute zero.
+  // Excludes the creator (no point notifying yourself).
+  {
+    const customerLabel = input.customer_name?.trim() || input.plate_number;
+    const title = 'תיק חדש נפתח';
+    const body = `${customerLabel} · ${input.plate_number}`;
+    const { data: branchStaff } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .in('role', ['SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE']);
+    for (const staff of (branchStaff ?? []) as { id: string; role: string }[]) {
+      if (staff.id === user.id) continue; // skip the creator
+      await supabase.from('notifications').insert({
+        user_id: staff.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      void sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
+    }
+  }
+
   return { caseId: String(caseId) };
 }
 
@@ -594,6 +622,38 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       }
       // Mark professional run as completed
       await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
+    }
+  }
+
+  // ENTER_WORK: notify painters in the branch that there's a car waiting for them.
+  if (stepKey === 'ENTER_WORK') {
+    const { data: enterCaseData } = await supabase
+      .from('cases')
+      .select('case_key, branch_id, customer_name, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const ew = enterCaseData as { case_key: string | null; branch_id: string; customer_name: string | null; cars: { license_plate: string | null } | null } | null;
+    const ewPlate = (Array.isArray(ew?.cars) ? ew?.cars[0]?.license_plate : ew?.cars?.license_plate) ?? ew?.case_key ?? 'תיק';
+    const ewCustomer = ew?.customer_name?.trim() || ewPlate;
+    const { data: painters } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('branch_id', ew?.branch_id ?? '')
+      .eq('role', 'PAINTER')
+      .eq('is_active', true);
+    const ewTitle = 'רכב נכנס לעבודה';
+    const ewBody = `${ewCustomer} · ${ewPlate} — מוכן עבורך`;
+    for (const p of (painters ?? []) as { id: string }[]) {
+      await supabase.from('notifications').insert({
+        user_id: p.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title: ewTitle,
+        body: ewBody,
+        action_url: `/painters/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      void sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
   }
 

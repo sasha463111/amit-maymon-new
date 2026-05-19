@@ -266,6 +266,35 @@ async function CaseDetailData({
     age = carAgeYears < 1 ? '<1' : String(carAgeYears);
   }
 
+  // Defensive: if the car turns out to be under 2 years old and WHEELS_CHECK
+  // wasn't already SKIPPED, mark it now. This catches cases that were created
+  // before year was filled in, or before the skip logic ran.
+  if (carAgeYears !== null && carAgeYears < 2) {
+    const wheelsStep = steps.find((s) => s.step_key === 'WHEELS_CHECK');
+    if (wheelsStep && wheelsStep.state !== 'SKIPPED' && wheelsStep.state !== 'DONE') {
+      await supabase
+        .from('case_workflow_steps')
+        .update({ state: 'SKIPPED' } as never)
+        .eq('id', wheelsStep.id);
+      // Also activate the next step if WHEELS_CHECK was blocking it
+      if (wheelsStep.state === 'ACTIVE') {
+        const nextStep = steps
+          .filter((s) => s.order_index > wheelsStep.order_index)
+          .sort((a, b) => a.order_index - b.order_index)[0];
+        if (nextStep && nextStep.state === 'PENDING') {
+          await supabase
+            .from('case_workflow_steps')
+            .update({ state: 'ACTIVE', activated_at: new Date().toISOString() } as never)
+            .eq('id', nextStep.id);
+        }
+      }
+      // Update local steps view so the UI reflects the fix immediately
+      steps = steps.map((s) =>
+        s.id === wheelsStep.id ? { ...s, state: 'SKIPPED' } : s
+      );
+    }
+  }
+
   return (
     <CaseDetailClientV2
       caseId={id}

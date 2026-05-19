@@ -39,7 +39,42 @@ export async function updatePainterChecklist(
     .eq('id', caseId);
 
   if (error) return { error: error.message };
+
+  // Notify painters in the branch when parts arrive — they can resume work.
+  if (updates.parts_arrived === true) {
+    const { data: caseData } = await supabase
+      .from('cases')
+      .select('branch_id, case_key, customer_name, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const c = caseData as { branch_id: string; case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | null } | null;
+    const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
+    const customer = c?.customer_name?.trim() || plate;
+    const { data: painters } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('branch_id', c?.branch_id ?? '')
+      .eq('role', 'PAINTER')
+      .eq('is_active', true);
+    const title = 'חלקים הגיעו';
+    const body = `${customer} · ${plate} — אפשר להמשיך בעבודה`;
+    for (const p of (painters ?? []) as { id: string }[]) {
+      if (p.id === user.id) continue;
+      await supabase.from('notifications').insert({
+        user_id: p.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: `/painters/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      void sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
+    }
+  }
+
   revalidatePath(`/painters/${caseId}`);
+  revalidatePath(`/cases/${caseId}`);
   return { ok: true, error: null };
 }
 
@@ -150,7 +185,8 @@ export async function getPainterRequests(caseId: string) {
   return { data: data ?? [], error: null };
 }
 
-/** Update painter request status (SERVICE_MANAGER / CEO) */
+/** Update painter request status (SERVICE_MANAGER / CEO). Sends a push back
+ *  to the painter who opened the request whenever a manager acts on it. */
 export async function updatePainterRequestStatus(
   requestId: string,
   status: 'PENDING' | 'IN_PROGRESS' | 'DONE'
@@ -169,11 +205,55 @@ export async function updatePainterRequestStatus(
     return { error: 'רק מנהל שירות יכול לעדכן סטטוס בקשה' };
   }
 
+  // Fetch the request so we can notify the original painter + link back to the case.
+  const { data: reqRow } = await supabase
+    .from('painter_requests')
+    .select('id, case_id, description, request_type, created_by')
+    .eq('id', requestId)
+    .single();
+  const req = reqRow as {
+    id: string;
+    case_id: string;
+    description: string;
+    request_type: string;
+    created_by: string | null;
+  } | null;
+  if (!req) return { error: 'הבקשה לא נמצאה' };
+
   const { error } = await supabase
     .from('painter_requests')
     .update({ status } as never)
     .eq('id', requestId);
 
   if (error) return { error: error.message };
+
+  // Notify the painter who opened the request.
+  if (req.created_by && req.created_by !== user.id) {
+    const { data: caseData } = await supabase
+      .from('cases')
+      .select('case_key, cars(license_plate)')
+      .eq('id', req.case_id)
+      .single();
+    const c = caseData as { case_key: string | null; cars: { license_plate: string | null } | null } | null;
+    const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
+    const STATUS_LABELS: Record<string, string> = {
+      PENDING: 'הוחזרה לטיפול',
+      IN_PROGRESS: 'בטיפול',
+      DONE: 'בוצעה',
+    };
+    const title = `הבקשה שלך ${STATUS_LABELS[status] ?? status}`;
+    const body = `${plate} · ${req.description.slice(0, 80)}`;
+    await supabase.from('notifications').insert({
+      user_id: req.created_by,
+      case_id: req.case_id,
+      type: 'OTHER',
+      title,
+      body,
+      action_url: `/painters/${req.case_id}`,
+      triggered_by: user.id,
+    } as never);
+    void sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
+  }
+
   return { ok: true, error: null };
 }
