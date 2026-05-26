@@ -29,6 +29,38 @@ function detectIosNeedsPwa(): boolean {
   return isIos && !isStandalone;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(`${label} לקח יותר מדי זמן. רענן ונסה שוב.`)), ms);
+    }),
+  ]);
+}
+
+async function waitForServiceWorkerActive(reg: ServiceWorkerRegistration): Promise<ServiceWorkerRegistration> {
+  if (reg.active) return reg;
+
+  const worker = reg.installing ?? reg.waiting;
+  if (!worker) return reg;
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error('Service Worker לא הופעל בזמן')), 8000);
+    worker.addEventListener('statechange', () => {
+      if (worker.state === 'activated') {
+        window.clearTimeout(timeout);
+        resolve();
+      }
+    });
+  });
+
+  return reg;
+}
+
+async function getPushRegistration(): Promise<ServiceWorkerRegistration | undefined> {
+  return navigator.serviceWorker.getRegistration('/');
+}
+
 export function PushSubscriber() {
   const [status, setStatus] = useState<Status>('unknown');
   const [busy, setBusy] = useState(false);
@@ -51,16 +83,30 @@ export function PushSubscriber() {
       setStatus('denied');
       return;
     }
-    // Check existing subscription on the push-sw.js scope.
+    // Check existing subscription on the root scope.
     navigator.serviceWorker
-      .getRegistration('/push-sw.js')
+      .getRegistration('/')
       .then(async (reg) => {
         if (!reg) {
           setStatus('unsubscribed');
           return;
         }
         const sub = await reg.pushManager.getSubscription();
-        setStatus(sub ? 'subscribed' : 'unsubscribed');
+        if (!sub) {
+          setStatus('unsubscribed');
+          return;
+        }
+
+        // If the browser already has a subscription but the DB missed it,
+        // refresh the server row quietly. This fixes older broken attempts.
+        const json = sub.toJSON();
+        if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+          await savePushSubscription(
+            { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } },
+            navigator.userAgent
+          ).catch(() => {});
+        }
+        setStatus('subscribed');
       })
       .catch(() => setStatus('unsubscribed'));
   }, []);
@@ -89,19 +135,28 @@ export function PushSubscriber() {
         return;
       }
 
-      // 2. Register a dedicated push service worker (separate from next-pwa's sw.js).
-      // We use a non-root scope so it doesn't clash with the workbox-generated sw.
-      console.log('[PushSubscriber] registering /push-sw.js …');
-      const reg = await navigator.serviceWorker.register('/push-sw.js', { scope: '/push-sw-scope/' });
-      await navigator.serviceWorker.ready;
+      // 2. Register our push worker at the root scope. We disabled next-pwa's
+      // auto-registration, so this worker is the single source of truth for push.
+      console.log('[PushSubscriber] registering /push-sw.js at root scope …');
+      const reg = await withTimeout(
+        navigator.serviceWorker.register('/push-sw.js', { scope: '/' }),
+        10000,
+        'רישום ההתראות'
+      );
+      await withTimeout(waitForServiceWorkerActive(reg), 10000, 'הפעלת ההתראות');
       console.log('[PushSubscriber] worker registered:', reg.scope);
 
       // 3. Subscribe to push
       console.log('[PushSubscriber] subscribing …');
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
-      });
+      const existing = await reg.pushManager.getSubscription();
+      const sub = existing ?? await withTimeout(
+        reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+        }),
+        10000,
+        'יצירת הרשמת Push'
+      );
       const json = sub.toJSON();
       console.log('[PushSubscriber] got subscription, endpoint:', json.endpoint?.slice(0, 60));
 
@@ -112,9 +167,13 @@ export function PushSubscriber() {
 
       // 4. Save to DB
       console.log('[PushSubscriber] calling savePushSubscription …');
-      const res = await savePushSubscription(
-        { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } },
-        navigator.userAgent
+      const res = await withTimeout(
+        savePushSubscription(
+          { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } },
+          navigator.userAgent
+        ),
+        10000,
+        'שמירת ההרשמה'
       );
       console.log('[PushSubscriber] savePushSubscription result:', res);
 
@@ -137,7 +196,7 @@ export function PushSubscriber() {
     setError(null);
     setBusy(true);
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/push-sw.js');
+      const reg = await getPushRegistration();
       const sub = await reg?.pushManager.getSubscription();
       if (sub) {
         await removePushSubscription(sub.endpoint).catch(() => {});

@@ -56,9 +56,20 @@ export async function updatePainterChecklist(
       .eq('branch_id', c?.branch_id ?? '')
       .eq('role', 'PAINTER')
       .eq('is_active', true);
+    let recipients = (painters ?? []) as { id: string }[];
+    if (recipients.length === 0) {
+      const { data: fallbackStaff } = await supabase
+        .from('profiles')
+        .select('id, role, is_bodywork_advisor')
+        .eq('branch_id', c?.branch_id ?? '')
+        .eq('is_active', true);
+      recipients = ((fallbackStaff ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+        .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
+        .map((p) => ({ id: p.id }));
+    }
     const title = 'חלקים הגיעו';
     const body = `${customer} · ${plate} — אפשר להמשיך בעבודה`;
-    for (const p of (painters ?? []) as { id: string }[]) {
+    for (const p of recipients) {
       if (p.id === user.id) continue;
       await supabase.from('notifications').insert({
         user_id: p.id,
@@ -143,16 +154,19 @@ export async function createPainterRequest(
   const c = caseData as { branch_id: string; case_key: string | null; cars: { license_plate: string | null } | null } | null;
   const plateLabel = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
 
-  const { data: advisors } = await supabase
+  const { data: branchUsers } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, role, is_bodywork_advisor')
     .eq('branch_id', c?.branch_id ?? '')
-    .eq('is_bodywork_advisor', true);
+    .eq('is_active', true);
+  const advisors = ((branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+    .filter((p) => p.is_bodywork_advisor === true || p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR');
 
   const typeLabel = requestType === 'WORK' ? 'עבודה' : 'חלקים';
   const reqTitle = `בקשת פחח — ${typeLabel}`;
   const reqBody = `רכב ${plateLabel}: ${description.trim()}`;
-  for (const adv of (advisors ?? []) as { id: string }[]) {
+  for (const adv of advisors) {
+    if (adv.id === user.id) continue;
     await supabase.from('notifications').insert({
       user_id: adv.id,
       case_id: caseId,

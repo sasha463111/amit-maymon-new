@@ -214,6 +214,10 @@ export async function createCase(input: CreateCaseInput) {
     stepsToCreate = PROFESSIONAL_WORKFLOW_STEPS.map((sk, i) => ({ step_key: sk, order_index: i }));
   }
 
+  const firstActiveOrder = stepsToCreate
+    .filter(({ step_key: stepKey }) => stepKey !== 'OPEN_CASE' && !(stepKey === 'WHEELS_CHECK' && skipWheels))
+    .sort((a, b) => a.order_index - b.order_index)[0]?.order_index ?? null;
+
   for (const { step_key: stepKey, order_index } of stepsToCreate) {
     let state: 'PENDING' | 'ACTIVE' | 'DONE' | 'SKIPPED' = 'ACTIVE';
     let completedAt: string | null = null;
@@ -227,9 +231,13 @@ export async function createCase(input: CreateCaseInput) {
       state = 'SKIPPED';
       completedAt = openedAt;
       activatedAt = null;
-    } else {
+    } else if (order_index === firstActiveOrder) {
       state = 'ACTIVE';
       activatedAt = openedAt;
+      completedAt = null;
+    } else {
+      state = 'PENDING';
+      activatedAt = null;
       completedAt = null;
     }
 
@@ -641,9 +649,21 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .eq('branch_id', ew?.branch_id ?? '')
       .eq('role', 'PAINTER')
       .eq('is_active', true);
+    let recipients = (painters ?? []) as { id: string }[];
+    if (recipients.length === 0) {
+      const { data: fallbackStaff } = await supabase
+        .from('profiles')
+        .select('id, role, is_bodywork_advisor')
+        .eq('branch_id', ew?.branch_id ?? '')
+        .eq('is_active', true);
+      recipients = ((fallbackStaff ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+        .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
+        .map((p) => ({ id: p.id }));
+    }
     const ewTitle = 'רכב נכנס לעבודה';
     const ewBody = `${ewCustomer} · ${ewPlate} — מוכן עבורך`;
-    for (const p of (painters ?? []) as { id: string }[]) {
+    for (const p of recipients) {
+      if (p.id === user.id) continue;
       await supabase.from('notifications').insert({
         user_id: p.id,
         case_id: caseId,
@@ -700,12 +720,13 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the
   // professional run. Skip the default next-step activation so we don't resurrect it.
   if (stepKey !== 'SEND_COMPLETION_PHOTOS') {
-    const nextOrder = activeStep.order_index + 1;
     const { data: nextSteps } = await supabase
       .from('case_workflow_steps')
       .select('id, state')
       .eq('run_id', run.id)
-      .eq('order_index', nextOrder)
+      .gt('order_index', activeStep.order_index)
+      .not('state', 'in', '(DONE,SKIPPED)')
+      .order('order_index', { ascending: true })
       .limit(1);
     if (nextSteps && nextSteps.length > 0) {
       const nextStep = nextSteps[0] as { id: string; state: string };

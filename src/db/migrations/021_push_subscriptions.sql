@@ -31,6 +31,12 @@ CREATE POLICY push_subscriptions_insert ON push_subscriptions
   FOR INSERT TO authenticated
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS push_subscriptions_update ON push_subscriptions;
+CREATE POLICY push_subscriptions_update ON push_subscriptions
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
 DROP POLICY IF EXISTS push_subscriptions_delete ON push_subscriptions;
 CREATE POLICY push_subscriptions_delete ON push_subscriptions
   FOR DELETE TO authenticated
