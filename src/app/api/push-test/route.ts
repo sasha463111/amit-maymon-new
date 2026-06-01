@@ -182,6 +182,40 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // PATH NEW: profiles JSONB column (profiles is in PostgREST cache reliably)
+  {
+    const t0 = Date.now();
+    try {
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceRoleKey || !supabaseUrl || !anonKey) {
+        results.push({ path: 'profiles_jsonb_svc', ok: false, error: 'missing_service_role', durationMs: Date.now() - t0 });
+      } else {
+        const sub = { endpoint: testEndpoint + '-jsonb', p256dh: row.p256dh, auth: row.auth, user_agent: row.user_agent };
+        const res = await fetch(`${supabaseUrl}/rest/v1/profiles?id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({ push_subscriptions: [sub] }),
+          cache: 'no-store',
+        });
+        const text = res.ok ? '' : await res.text();
+        results.push({
+          path: 'profiles_jsonb_svc',
+          ok: res.ok,
+          status: res.status,
+          error: res.ok ? undefined : text.slice(0, 300),
+          durationMs: Date.now() - t0,
+        });
+      }
+    } catch (e) {
+      results.push({ path: 'profiles_jsonb_svc', ok: false, error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - t0 });
+    }
+  }
+
   // PATH 4.5: Raw fetch with SERVICE_ROLE bypass (HS256 — every replica knows the secret)
   {
     const t0 = Date.now();
