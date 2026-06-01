@@ -36,25 +36,41 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  // PRIMARY PATH: Supabase Edge Function `save-push-subscription` talks to
-  // Postgres directly (via deno-postgres), bypassing PostgREST entirely. This
-  // sidesteps the PGRST205 "schema cache" issue that kept biting us — different
-  // replicas had stale state and the cache never propagated reliably.
+  // PRIMARY PATH: direct fetch to the Edge Function that bypasses PostgREST
+  // entirely. Using raw fetch instead of supabase.functions.invoke() because
+  // the server-side @supabase/ssr client doesn't always pass the user JWT
+  // through the invoke wrapper correctly.
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const accessToken = session?.access_token;
-    if (accessToken) {
-      const { data, error } = await supabase.functions.invoke('save-push-subscription', {
-        body: {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (accessToken && supabaseUrl && anonKey) {
+      const res = await fetch(`${supabaseUrl}/functions/v1/save-push-subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey,
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
           endpoint: sub.endpoint,
           p256dh: sub.keys.p256dh,
           auth: sub.keys.auth,
           user_agent: userAgent ?? null,
-        },
+        }),
+        cache: 'no-store',
       });
-      const fn = data as { ok?: boolean; error?: string } | null;
-      if (!error && fn?.ok) return { ok: true };
-      console.warn('[savePushSubscription] edge function path failed, falling back', { error, data });
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body?.ok) return { ok: true };
+      }
+      const text = await res.text().catch(() => '');
+      console.warn('[savePushSubscription] edge function path failed', res.status, text.slice(0, 200));
+    } else {
+      console.warn('[savePushSubscription] missing token/url/key for edge function path', {
+        hasToken: !!accessToken, hasUrl: !!supabaseUrl, hasKey: !!anonKey,
+      });
     }
   } catch (e) {
     console.warn('[savePushSubscription] edge function threw, falling back', e);
