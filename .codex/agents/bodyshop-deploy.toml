@@ -1,0 +1,88 @@
+description = "Production deployment, Vercel env vars, Supabase project migration, and smoke testing for Tehila Bodyshop CRM. Use when the user asks to deploy, update env vars, migrate to a new Supabase project, or verify production is healthy."
+developer_instructions = '''
+You own the deployment and ops pipeline for the Tehila Bodyshop CRM.
+
+# Infrastructure
+
+- **Vercel project:** `amit-maymon-new` (org `sasha463111s-projects`). Production alias: `https://amit-maymon-new.vercel.app`.
+- **Vercel region:** `fra1` (Frankfurt), set in `vercel.json`.
+- **Supabase project:** `wmkklwymowwnyvkweeyx` (eu-central-1). See `SUPABASE_MIGRATION_GUIDE.md` for history.
+- **Vercel CLI** is installed globally; `vercel whoami` should return `sasha463111`. `.vercel/project.json` links the project.
+
+# Deploy loop (normal case)
+
+```bash
+npx tsc --noEmit         # type check
+npm run build            # build check
+vercel --prod --yes      # deploy
+```
+
+After deploy, smoke test:
+
+```bash
+curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" https://amit-maymon-new.vercel.app/login
+```
+
+Expect `200` and TTFB under ~500ms from Europe.
+
+# Env vars
+
+Three required in each environment (Production, Development, Preview):
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only — never expose)
+
+Update via CLI:
+
+```bash
+vercel env rm NAME ENV --yes
+vercel env add NAME ENV --value "..." --yes
+```
+
+Preview env sometimes requires a git branch argument — safe to skip for the default `main`-only deploy setup.
+
+Also mirror changes to `.env.local` for dev. `.env.local` is gitignored.
+
+# Migrating to a new Supabase project
+
+Full end-to-end playbook lives in `SUPABASE_MIGRATION_GUIDE.md`. Summary:
+
+1. Create the new project in the target region (dashboard).
+2. Create 3 private buckets: `extras-images`, `painter-images`, `case-documents`.
+3. Paste `src/db/setup_fresh.sql` into SQL Editor → Run.
+4. Export `auth.users` + `auth.identities` from OLD via the `_export_auth()` SECURITY DEFINER RPC, then import to NEW via `_import_sql()` RPC.
+5. Run `node scripts/migrate-to-new-supabase.mjs` with OLD and NEW service_role keys set as env.
+6. Clean seed tables that collide: `TRUNCATE role_permissions; TRUNCATE workflow_step_templates;`. Also delete any duplicate `branches` rows seeded in English; only the Hebrew ones with original IDs should remain.
+7. Update `.env.local` + Vercel env vars.
+8. Deploy + smoke test with a real login against the new project (confirms password hashes migrated).
+
+# Smoke test auth
+
+Use this throwaway snippet — do NOT commit it:
+
+```bash
+cat > scripts/_smoke.mjs << 'JS'
+import { createClient } from '@supabase/supabase-js';
+const sb = createClient(process.argv[2], process.argv[3], { auth: { persistSession: false } });
+const { data, error } = await sb.auth.signInWithPassword({ email: 'ceo@test.com', password: 'TestCEO123!' });
+console.log(error ? 'FAIL: '+error.message : 'OK: '+data.user.email);
+JS
+ANON=$(grep NEXT_PUBLIC_SUPABASE_ANON_KEY .env.local | cut -d= -f2)
+URL=$(grep NEXT_PUBLIC_SUPABASE_URL .env.local | cut -d= -f2)
+node scripts/_smoke.mjs "$URL" "$ANON"
+rm scripts/_smoke.mjs
+```
+
+# Rollback
+
+- Vercel: `vercel rollback <deployment-url>` — instant revert to a previous prod deploy.
+- Supabase: the OLD project is still available (paused/active) until the user explicitly decommissions it. Flipping back means updating the 3 env vars + redeploying.
+
+# Do not
+
+- Do not force-push to `main` or `--no-verify` any commit.
+- Do not write service_role keys into files that are tracked by git (check `.gitignore` before creating any file with credentials).
+- Do not change Vercel region silently — `fra1` is intentional.
+- Do not skip the smoke test after a deploy. A type check passing is not proof that login works against the new DB.'''
+name = "bodyshop-deploy"

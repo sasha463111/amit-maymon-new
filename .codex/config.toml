@@ -1,0 +1,10 @@
+[mcp_servers.supabase]
+args = [
+    "-y",
+    "@supabase/mcp-server-supabase@latest",
+    "--access-token",
+    "sbp_9ed371643080bc5497ccd9f0e2712f43036d72e8",
+    "--project-ref",
+    "yhanmyvolpeiuxspcxmk",
+]
+command = "/Users/sashadibka/node/bin/npx"

@@ -27,22 +27,24 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  // Upsert by endpoint (a re-subscribe should refresh keys, not error out)
-  const { error } = await supabase
-    .from('push_subscriptions')
-    .upsert(
-      {
-        user_id: user.id,
-        endpoint: sub.endpoint,
-        p256dh: sub.keys.p256dh,
-        auth: sub.keys.auth,
-        user_agent: userAgent ?? null,
-        last_used_at: new Date().toISOString(),
-      } as never,
-      { onConflict: 'endpoint' }
-    );
+  // Call the RPC function instead of a direct table upsert. RPC goes through
+  // PostgREST's /rpc/ endpoint, which does NOT rely on the table-schema cache
+  // in the same way. We saw production hits with "Could not find the table
+  // 'public.push_subscriptions' in the schema cache" even though every direct
+  // probe of the table returned 200 — different replicas had stale caches.
+  // SECURITY DEFINER means the function still enforces "you can only save your
+  // own subscription" via auth.uid(), so RLS isn't bypassed in spirit.
+  const { error } = await supabase.rpc('save_push_subscription' as never, {
+    p_endpoint: sub.endpoint,
+    p_p256dh: sub.keys.p256dh,
+    p_auth: sub.keys.auth,
+    p_user_agent: userAgent ?? null,
+  } as never);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error('[savePushSubscription] rpc failed', error);
+    return { error: error.message };
+  }
   return { ok: true };
 }
 
@@ -51,11 +53,9 @@ export async function removePushSubscription(endpoint: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  const { error } = await supabase
-    .from('push_subscriptions')
-    .delete()
-    .eq('endpoint', endpoint)
-    .eq('user_id', user.id);
+  const { error } = await supabase.rpc('remove_push_subscription' as never, {
+    p_endpoint: endpoint,
+  } as never);
 
   if (error) return { error: error.message };
   return { ok: true };
