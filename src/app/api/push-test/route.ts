@@ -182,6 +182,39 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // PATH 4.5: Raw fetch with SERVICE_ROLE bypass (HS256 — every replica knows the secret)
+  {
+    const t0 = Date.now();
+    try {
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceRoleKey || !supabaseUrl || !anonKey) {
+        results.push({ path: 'service_role_raw', ok: false, error: 'missing_service_role', durationMs: Date.now() - t0 });
+      } else {
+        const res = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?on_conflict=endpoint`, {
+          method: 'POST',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({ ...row, endpoint: testEndpoint + '-svc' }),
+          cache: 'no-store',
+        });
+        const text = await res.text();
+        results.push({
+          path: 'service_role_raw',
+          ok: res.ok || res.status === 201,
+          status: res.status,
+          error: (res.ok || res.status === 201) ? undefined : text.slice(0, 300),
+          durationMs: Date.now() - t0,
+        });
+      }
+    } catch (e) {
+      results.push({ path: 'service_role_raw', ok: false, error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - t0 });
+    }
+  }
+
   // PATH 4: Raw fetch to PostgREST table
   {
     const t0 = Date.now();
