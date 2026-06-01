@@ -26,16 +26,29 @@ export async function GET(req: NextRequest) {
   let accessToken: string | null = null;
 
   if (headerToken) {
-    // Verify token directly with the auth server using a plain client
-    const plain = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
-    const { data: { user: tokenUser } } = await plain.auth.getUser(headerToken);
-    if (!tokenUser) {
-      return NextResponse.json({ error: 'bad_test_token' }, { status: 401 });
+    // Verify token directly with the auth server via raw fetch (more diagnosable
+    // than the SDK wrapper which can quietly fail).
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !anonKey) {
+      return NextResponse.json({ error: 'env_missing', supabaseUrl: !!supabaseUrl, anonKey: !!anonKey }, { status: 500 });
     }
-    userId = tokenUser.id;
+    const verifyRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${headerToken}`,
+      },
+    });
+    if (!verifyRes.ok) {
+      const text = await verifyRes.text();
+      return NextResponse.json({
+        error: 'bad_test_token',
+        verifyStatus: verifyRes.status,
+        verifyBody: text.slice(0, 200),
+      }, { status: 401 });
+    }
+    const userData = await verifyRes.json();
+    userId = userData.id;
     accessToken = headerToken;
   } else {
     const supabase = await createClient();
