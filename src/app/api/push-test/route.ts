@@ -99,6 +99,9 @@ export async function GET(req: NextRequest) {
     hasAccessToken: !!accessToken,
     accessTokenLen: accessToken?.length ?? 0,
     hasSupabaseUrl: !!supabaseUrl,
+    supabaseUrlValue: supabaseUrl ?? null,  // <-- expose the actual URL
+    anonKeyPrefix: anonKey?.slice(0, 25) ?? null,
+    serviceRolePrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 25) ?? null,
     hasAnonKey: !!anonKey,
     vapidPublic: !!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     vapidPrivate: !!process.env.VAPID_PRIVATE_KEY,
