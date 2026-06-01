@@ -224,6 +224,17 @@ export async function GET(req: NextRequest) {
       if (!serviceRoleKey || !supabaseUrl || !anonKey) {
         results.push({ path: 'service_role_raw', ok: false, error: 'missing_service_role', durationMs: Date.now() - t0 });
       } else {
+        // Also probe with a known-good table to compare which PoP we're hitting
+        const probe = await fetch(`${supabaseUrl}/rest/v1/branches?select=id&limit=1`, {
+          headers: { 'apikey': anonKey, 'Authorization': `Bearer ${serviceRoleKey}` },
+          cache: 'no-store',
+        });
+        const probeHeaders: Record<string, string> = {};
+        probe.headers.forEach((v, k) => {
+          if (/cf-ray|cf-cache|server|sb-/i.test(k)) probeHeaders[k] = v;
+        });
+        console.log('[push-test] branches probe', probe.status, probeHeaders);
+
         const res = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?on_conflict=endpoint`, {
           method: 'POST',
           headers: {
@@ -236,13 +247,18 @@ export async function GET(req: NextRequest) {
           cache: 'no-store',
         });
         const text = await res.text();
+        const headers: Record<string, string> = {};
+        res.headers.forEach((v, k) => {
+          if (/cf-ray|cf-cache|server|sb-|x-cache/i.test(k)) headers[k] = v;
+        });
         results.push({
           path: 'service_role_raw',
           ok: res.ok || res.status === 201,
           status: res.status,
           error: (res.ok || res.status === 201) ? undefined : text.slice(0, 300),
           durationMs: Date.now() - t0,
-        });
+          ...{ headers, branches_probe_status: probe.status, branches_probe_headers: probeHeaders },
+        } as PathResult & { headers: Record<string, string>; branches_probe_status: number; branches_probe_headers: Record<string, string> });
       }
     } catch (e) {
       results.push({ path: 'service_role_raw', ok: false, error: e instanceof Error ? e.message : String(e), durationMs: Date.now() - t0 });
