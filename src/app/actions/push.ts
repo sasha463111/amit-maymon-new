@@ -36,13 +36,32 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  // The schema cache on Supabase Cloud's PostgREST replicas is delayed
-  // and inconsistent. Try three escalating paths:
-  // 1. RPC (cleanest — uses /rpc/ endpoint)
-  // 2. Direct upsert (different endpoint — different cache)
-  // 3. Brute-force PostgREST via raw fetch with explicit Accept-Profile
-  // We retry each path a few times to wait out replica caches.
+  // PRIMARY PATH: Supabase Edge Function `save-push-subscription` talks to
+  // Postgres directly (via deno-postgres), bypassing PostgREST entirely. This
+  // sidesteps the PGRST205 "schema cache" issue that kept biting us — different
+  // replicas had stale state and the cache never propagated reliably.
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (accessToken) {
+      const { data, error } = await supabase.functions.invoke('save-push-subscription', {
+        body: {
+          endpoint: sub.endpoint,
+          p256dh: sub.keys.p256dh,
+          auth: sub.keys.auth,
+          user_agent: userAgent ?? null,
+        },
+      });
+      const fn = data as { ok?: boolean; error?: string } | null;
+      if (!error && fn?.ok) return { ok: true };
+      console.warn('[savePushSubscription] edge function path failed, falling back', { error, data });
+    }
+  } catch (e) {
+    console.warn('[savePushSubscription] edge function threw, falling back', e);
+  }
 
+  // FALLBACK PATHS (only used if Edge Function path failed). Same staircase
+  // as before: RPC → direct upsert → raw fetch with Accept-Profile.
   const row = {
     user_id: user.id,
     endpoint: sub.endpoint,
@@ -54,9 +73,7 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
 
   let lastError: string | null = null;
 
-  // Path 1+2 with retries — supabase-js
-  for (let attempt = 0; attempt < 4; attempt++) {
-    // Path 1: RPC
+  for (let attempt = 0; attempt < 3; attempt++) {
     {
       const { error } = await supabase.rpc('save_push_subscription' as never, {
         p_endpoint: sub.endpoint,
@@ -70,22 +87,16 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
         console.warn('[savePushSubscription] rpc failed (non-cache)', error);
       }
     }
-    // Path 2: direct upsert
     {
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert(row as never, { onConflict: 'endpoint' });
       if (!error) return { ok: true };
       lastError = error.message;
-      if (!isSchemaCacheError(error.message)) {
-        console.warn('[savePushSubscription] direct upsert failed (non-cache)', error);
-      }
     }
-    await sleep(400 + attempt * 400); // 400, 800, 1200, 1600ms backoff
+    await sleep(400 + attempt * 400);
   }
 
-  // Path 3: raw fetch to PostgREST with an explicit Accept-Profile header,
-  // which forces PostgREST to reload the schema for that request.
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -105,7 +116,6 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
       });
       if (res.ok || res.status === 201) return { ok: true };
       const text = await res.text();
-      console.error('[savePushSubscription] raw fetch fallback failed', res.status, text);
       lastError = `${res.status}: ${text.slice(0, 200)}`;
     }
   } catch (e) {
