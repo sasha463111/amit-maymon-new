@@ -22,30 +22,97 @@ export interface PushSubscriptionPayload {
   keys: { p256dh: string; auth: string };
 }
 
+function isSchemaCacheError(msg: string | undefined): boolean {
+  if (!msg) return false;
+  return msg.includes('schema cache') || msg.includes('PGRST202') || msg.includes('PGRST205');
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export async function savePushSubscription(sub: PushSubscriptionPayload, userAgent?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  // Call the RPC function instead of a direct table upsert. RPC goes through
-  // PostgREST's /rpc/ endpoint, which does NOT rely on the table-schema cache
-  // in the same way. We saw production hits with "Could not find the table
-  // 'public.push_subscriptions' in the schema cache" even though every direct
-  // probe of the table returned 200 — different replicas had stale caches.
-  // SECURITY DEFINER means the function still enforces "you can only save your
-  // own subscription" via auth.uid(), so RLS isn't bypassed in spirit.
-  const { error } = await supabase.rpc('save_push_subscription' as never, {
-    p_endpoint: sub.endpoint,
-    p_p256dh: sub.keys.p256dh,
-    p_auth: sub.keys.auth,
-    p_user_agent: userAgent ?? null,
-  } as never);
+  // The schema cache on Supabase Cloud's PostgREST replicas is delayed
+  // and inconsistent. Try three escalating paths:
+  // 1. RPC (cleanest — uses /rpc/ endpoint)
+  // 2. Direct upsert (different endpoint — different cache)
+  // 3. Brute-force PostgREST via raw fetch with explicit Accept-Profile
+  // We retry each path a few times to wait out replica caches.
 
-  if (error) {
-    console.error('[savePushSubscription] rpc failed', error);
-    return { error: error.message };
+  const row = {
+    user_id: user.id,
+    endpoint: sub.endpoint,
+    p256dh: sub.keys.p256dh,
+    auth: sub.keys.auth,
+    user_agent: userAgent ?? null,
+    last_used_at: new Date().toISOString(),
+  };
+
+  let lastError: string | null = null;
+
+  // Path 1+2 with retries — supabase-js
+  for (let attempt = 0; attempt < 4; attempt++) {
+    // Path 1: RPC
+    {
+      const { error } = await supabase.rpc('save_push_subscription' as never, {
+        p_endpoint: sub.endpoint,
+        p_p256dh: sub.keys.p256dh,
+        p_auth: sub.keys.auth,
+        p_user_agent: userAgent ?? null,
+      } as never);
+      if (!error) return { ok: true };
+      lastError = error.message;
+      if (!isSchemaCacheError(error.message)) {
+        console.warn('[savePushSubscription] rpc failed (non-cache)', error);
+      }
+    }
+    // Path 2: direct upsert
+    {
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .upsert(row as never, { onConflict: 'endpoint' });
+      if (!error) return { ok: true };
+      lastError = error.message;
+      if (!isSchemaCacheError(error.message)) {
+        console.warn('[savePushSubscription] direct upsert failed (non-cache)', error);
+      }
+    }
+    await sleep(400 + attempt * 400); // 400, 800, 1200, 1600ms backoff
   }
-  return { ok: true };
+
+  // Path 3: raw fetch to PostgREST with an explicit Accept-Profile header,
+  // which forces PostgREST to reload the schema for that request.
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (supabaseUrl && anonKey && accessToken) {
+      const res = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?on_conflict=endpoint`, {
+        method: 'POST',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+          'Accept-Profile': 'public',
+        },
+        body: JSON.stringify(row),
+      });
+      if (res.ok || res.status === 201) return { ok: true };
+      const text = await res.text();
+      console.error('[savePushSubscription] raw fetch fallback failed', res.status, text);
+      lastError = `${res.status}: ${text.slice(0, 200)}`;
+    }
+  } catch (e) {
+    console.error('[savePushSubscription] raw fetch threw', e);
+  }
+
+  return { error: lastError ?? 'שמירה נכשלה ולא ידוע מדוע' };
 }
 
 export async function removePushSubscription(endpoint: string) {
@@ -53,10 +120,21 @@ export async function removePushSubscription(endpoint: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  const { error } = await supabase.rpc('remove_push_subscription' as never, {
-    p_endpoint: endpoint,
-  } as never);
-
+  // Try RPC then fall back to direct delete.
+  {
+    const { error } = await supabase.rpc('remove_push_subscription' as never, {
+      p_endpoint: endpoint,
+    } as never);
+    if (!error) return { ok: true };
+    if (!isSchemaCacheError(error.message)) {
+      return { error: error.message };
+    }
+  }
+  const { error } = await supabase
+    .from('push_subscriptions')
+    .delete()
+    .eq('endpoint', endpoint)
+    .eq('user_id', user.id);
   if (error) return { error: error.message };
   return { ok: true };
 }
