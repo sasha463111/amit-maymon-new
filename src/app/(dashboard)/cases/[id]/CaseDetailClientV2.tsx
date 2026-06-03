@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { completeActiveStep, returnToEstimate, deleteCase } from '@/app/actions/workflow';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
-import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
+import { uploadCaseDocument, deleteCaseDocument, getSignedFileUrls } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus, PainterStatus } from '@/types/database';
 import { PARTS_STATUS_LABELS, PAINTER_STATUS_LABELS } from '@/types/database';
@@ -443,6 +443,28 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [localDocuments, setLocalDocuments] = useState(documents);
+  // Signed URLs for the case-documents bucket (private). Keyed by file_path.
+  // Refreshed whenever localDocuments changes so newly uploaded docs become
+  // viewable without a page reload.
+  const [signedDocUrls, setSignedDocUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const paths = localDocuments.map((d) => d.file_path).filter(Boolean);
+    if (paths.length === 0) {
+      setSignedDocUrls({});
+      return;
+    }
+    let cancelled = false;
+    getSignedFileUrls('case-documents', paths, 3600)
+      .then((urls) => {
+        if (!cancelled) setSignedDocUrls(urls);
+      })
+      .catch(() => {
+        if (!cancelled) setSignedDocUrls({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localDocuments]);
 
   const initRef = useRef<string | null>(null);
 
@@ -1914,12 +1936,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
             <p className="text-sm">אין קבצים להצגה</p>
           </div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {localDocuments.map((doc) => {
-              const supabase = createClient();
-              const { data: urlData } = supabase.storage.from('case-documents').getPublicUrl(doc.file_path);
+              const url = signedDocUrls[doc.file_path];
               const fileSize = doc.file_size ? (doc.file_size / 1024).toFixed(1) + ' KB' : '—';
               const isImage = doc.mime_type?.startsWith('image/');
+              const isPdf = doc.mime_type === 'application/pdf';
               const docType = doc.document_type ?? null;
               const isFinalEstimate = docType === 'FINAL_ESTIMATE';
               const docTypeLabel: Record<string, string> = {
@@ -1930,37 +1952,59 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               return (
                 <div
                   key={doc.id}
-                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                  className={`group relative flex flex-col rounded-lg border overflow-hidden transition-all ${
                     isFinalEstimate
-                      ? 'bg-purple-50 border-purple-300 hover:bg-purple-100'
-                      : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      ? 'bg-purple-50 border-purple-300'
+                      : 'bg-gray-50 border-gray-200'
                   }`}
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex-shrink-0 text-2xl">{isFinalEstimate ? '⭐' : isImage ? '🖼️' : '📄'}</div>
-                    <div className="flex-1 min-w-0">
-                      <a
-                        href={urlData.publicUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`text-sm font-medium hover:underline truncate block ${
-                          isFinalEstimate ? 'text-purple-800' : 'text-blue-600 hover:text-blue-800'
-                        }`}
-                      >
-                        {doc.file_name}
-                      </a>
-                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                        {docType && (
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                            isFinalEstimate ? 'bg-purple-200 text-purple-900' : 'bg-blue-100 text-blue-700'
-                          }`}>
-                            {docTypeLabel[docType] ?? docType}
-                          </span>
-                        )}
-                        <span>{fileSize} • {new Date(doc.created_at).toLocaleDateString('he-IL')}</span>
+                  {/* Preview area */}
+                  <a
+                    href={url ?? '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block aspect-square bg-white border-b border-gray-200 overflow-hidden relative"
+                    onClick={(e) => { if (!url) e.preventDefault(); }}
+                  >
+                    {isImage && url ? (
+                      <img
+                        src={url}
+                        alt={doc.file_name}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : isPdf ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                        <span className="text-4xl">📄</span>
+                        <span className="text-[10px] font-semibold mt-1">PDF</span>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                        <span className="text-4xl">{isFinalEstimate ? '⭐' : '📎'}</span>
+                      </div>
+                    )}
+                    {/* Hover overlay with "view" */}
+                    {url && (
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                        <span className="text-white text-xs font-semibold">פתח</span>
+                      </div>
+                    )}
+                  </a>
+                  {/* Caption */}
+                  <div className="p-2 flex-1 flex flex-col gap-1">
+                    <p className="text-xs font-medium text-gray-800 truncate" title={doc.file_name}>
+                      {doc.file_name}
+                    </p>
+                    {docType && (
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold self-start ${
+                        isFinalEstimate ? 'bg-purple-200 text-purple-900' : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {docTypeLabel[docType] ?? docType}
+                      </span>
+                    )}
+                    <p className="text-[10px] text-gray-400">{fileSize} · {new Date(doc.created_at).toLocaleDateString('he-IL')}</p>
                   </div>
+                  {/* Delete (top-right corner, hover-revealed on touchscreens stays visible) */}
                   {canEdit && (
                     <button
                       type="button"
@@ -1973,9 +2017,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                           setLocalDocuments((prev) => prev.filter((d) => d.id !== doc.id));
                         }
                       }}
-                      className="flex-shrink-0 px-3 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                      className="absolute top-1 left-1 w-6 h-6 rounded-full bg-white/90 text-red-600 text-xs shadow-md hover:bg-red-50"
+                      aria-label="מחק קובץ"
                     >
-                      🗑️ מחק
+                      ✕
                     </button>
                   )}
                 </div>

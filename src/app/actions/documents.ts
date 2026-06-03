@@ -3,6 +3,33 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 
+/**
+ * Batch-create signed URLs for storage objects. Used by the case detail page,
+ * approvals screen, painters page, and extras page to display private-bucket
+ * images and PDFs without needing per-image client round-trips.
+ *
+ * Returns a Map keyed by `path` so the caller can look up the URL by path.
+ * Skips paths the user can't access (the storage RLS layer enforces that —
+ * if a signed-URL call returns 403, we just omit the entry).
+ */
+export async function getSignedFileUrls(
+  bucket: 'case-documents' | 'painter-images' | 'extras-images',
+  paths: string[],
+  expiresInSec = 3600
+): Promise<Record<string, string>> {
+  if (paths.length === 0) return {};
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+
+  const { data } = await supabase.storage.from(bucket).createSignedUrls(paths, expiresInSec);
+  const out: Record<string, string> = {};
+  for (const entry of (data ?? []) as Array<{ path: string; signedUrl: string; error: string | null }>) {
+    if (entry.signedUrl && !entry.error) out[entry.path] = entry.signedUrl;
+  }
+  return out;
+}
+
 export async function uploadCaseDocument(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -19,6 +46,19 @@ export async function uploadCaseDocument(formData: FormData) {
   }
   if (!(file instanceof File) || file.size === 0) {
     return { error: 'הקובץ ריק או לא תקין' };
+  }
+
+  // Validate size (20 MB max — generous for high-res iPhone photos but
+  // prevents accidental huge uploads).
+  const MAX_BYTES = 20 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return { error: `הקובץ גדול מדי (${(file.size / 1024 / 1024).toFixed(1)} MB). מקסימום 20 MB.` };
+  }
+
+  // Validate MIME — accept any image type, PDFs, and common doc formats.
+  const ACCEPTED = /^(image\/|application\/(pdf|x-pdf|msword|vnd\.openxmlformats|vnd\.ms-excel))/i;
+  if (file.type && !ACCEPTED.test(file.type)) {
+    return { error: `סוג קובץ לא נתמך: ${file.type}. תמונות + PDF בלבד.` };
   }
 
   // Verify user has access to this case

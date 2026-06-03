@@ -58,7 +58,7 @@ export default async function ExtrasPage() {
 
   const { data: rows } = await query;
 
-  const extras = (rows ?? []).map((r) => {
+  const rawExtras = (rows ?? []).map((r) => {
     const row = r as {
       id: string;
       case_id: string;
@@ -81,6 +81,21 @@ export default async function ExtrasPage() {
       plate: car?.license_plate ?? '—',
     };
   });
+
+  // Batch-sign URLs for the extras-images bucket so the manager actually sees
+  // what the painter uploaded. Without this the image_path is stored but the
+  // UI just had a status pill and no proof of the work.
+  const paths = rawExtras.map((e) => e.image_path).filter(Boolean);
+  let signedImageUrls: Record<string, string> = {};
+  if (paths.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from('extras-images')
+      .createSignedUrls(paths, 3600);
+    for (const e of (signed ?? []) as Array<{ path: string; signedUrl: string; error: string | null }>) {
+      if (e.signedUrl && !e.error) signedImageUrls[e.path] = e.signedUrl;
+    }
+  }
+  const extras = rawExtras.map((e) => ({ ...e, image_url: signedImageUrls[e.image_path] ?? null }));
 
   return (
     <div>

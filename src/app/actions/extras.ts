@@ -85,7 +85,18 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
     .eq('id', user.id)
     .single();
   const profile = profileData as { role: string } | null;
-  if (profile?.role !== 'SERVICE_MANAGER') return { error: 'רק מנהל שירות יכול לעדכן סטטוס' };
+  if (profile?.role !== 'SERVICE_MANAGER' && profile?.role !== 'CEO') {
+    return { error: 'רק מנהל שירות יכול לעדכן סטטוס' };
+  }
+
+  // Fetch the extra (so we know who the painter was) BEFORE updating, so we
+  // can notify the right person after the status flip.
+  const { data: extraRow } = await supabase
+    .from('bodywork_extras')
+    .select('case_id, description, created_by')
+    .eq('id', input.extra_id)
+    .single();
+  const extra = extraRow as { case_id: string; description: string; created_by: string | null } | null;
 
   const { error: updateErr } = await supabase
     .from('bodywork_extras')
@@ -101,6 +112,40 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
     user_id: user.id,
     payload: { status: input.status },
   } as never);
+
+  // Notify the painter who created the extra that their request was decided.
+  if (extra?.created_by && extra.created_by !== user.id) {
+    const { data: caseData } = await supabase
+      .from('cases')
+      .select('case_key, customer_name, cars(license_plate)')
+      .eq('id', extra.case_id)
+      .single();
+    const c = caseData as { case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | null } | null;
+    const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
+    const customer = c?.customer_name?.trim() || plate;
+    const STATUS_LABELS: Record<string, string> = {
+      DONE: 'אושרה ✓',
+      REJECTED: 'נדחתה ✗',
+      IN_TREATMENT: 'בטיפול',
+    };
+    const title = `התוספת שלך ${STATUS_LABELS[input.status] ?? input.status}`;
+    const body = `${customer} · ${plate}\n${extra.description.slice(0, 80)}`;
+    await supabase.from('notifications').insert({
+      user_id: extra.created_by,
+      case_id: extra.case_id,
+      type: 'EXTRA_STATUS_CHANGED',
+      title,
+      body,
+      action_url: `/extras/mine`,
+      triggered_by: user.id,
+    } as never);
+    void sendPushToUser(extra.created_by, {
+      title,
+      body,
+      url: `/extras/mine`,
+      tag: `extra-status-${input.extra_id}`,
+    });
+  }
 
   return { ok: true };
 }

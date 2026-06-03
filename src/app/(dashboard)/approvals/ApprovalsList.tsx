@@ -112,6 +112,49 @@ interface BodyworkExtra {
   created_at: string;
 }
 
+function DocumentTile({ doc }: { doc: CaseDocument }) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data } = await supabase.storage.from('case-documents').createSignedUrl(doc.file_path, 3600);
+      if (!cancelled) setSignedUrl(data?.signedUrl ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [doc.file_path]);
+
+  const isImage = doc.mime_type?.startsWith('image/');
+  const isPdf = doc.mime_type === 'application/pdf';
+
+  return (
+    <a
+      href={signedUrl ?? '#'}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => { if (!signedUrl) e.preventDefault(); }}
+      className="group block bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-indigo-300 hover:shadow-md transition-all"
+    >
+      <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+        {isImage && signedUrl ? (
+          <img src={signedUrl} alt={doc.file_name} loading="lazy" className="w-full h-full object-cover" />
+        ) : isPdf ? (
+          <div className="flex flex-col items-center text-gray-500">
+            <span className="text-4xl">📄</span>
+            <span className="text-[10px] font-semibold mt-1">PDF</span>
+          </div>
+        ) : (
+          <span className="text-4xl text-gray-400">📎</span>
+        )}
+      </div>
+      <div className="p-2 border-t border-gray-100">
+        <p className="text-xs font-medium text-gray-800 truncate" title={doc.file_name}>{doc.file_name}</p>
+      </div>
+    </a>
+  );
+}
+
 function DocumentDownloadButton({ filePath, fileName }: { filePath: string; fileName: string }) {
   async function handleDownload() {
     const supabase = (await import('@/lib/supabase/client')).createClient();
@@ -688,17 +731,11 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                   ) : documents.length === 0 ? (
                     <p className="text-sm text-gray-400">אין מסמכים מועלים לתיק זה</p>
                   ) : (
-                    <ul className="space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {documents.map((doc) => (
-                        <li key={doc.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2.5 text-sm border border-gray-200">
-                          <span className="text-lg">
-                            {doc.mime_type?.startsWith('image/') ? '🖼️' : doc.mime_type === 'application/pdf' ? '📄' : '📎'}
-                          </span>
-                          <span className="flex-1 truncate text-gray-700 font-medium text-xs">{doc.file_name}</span>
-                          <DocumentDownloadButton filePath={doc.file_path} fileName={doc.file_name} />
-                        </li>
+                        <DocumentTile key={doc.id} doc={doc} />
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </div>
               )}

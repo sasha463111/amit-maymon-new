@@ -10,6 +10,7 @@ type PainterRequest = {
   request_type: string;
   status: string;
   created_at: string;
+  image_urls?: string[];
 };
 
 const REQUEST_STATUS_LABELS: Record<string, string> = {
@@ -88,6 +89,26 @@ function PainterRequestItem({
           </span>
         </div>
         <p className="text-sm text-gray-700 break-words">{req.description}</p>
+        {(req.image_urls?.length ?? 0) > 0 && (
+          <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {req.image_urls!.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block aspect-square rounded-md overflow-hidden border border-gray-200 bg-white hover:opacity-90 transition-opacity"
+              >
+                <img
+                  src={url}
+                  alt={`תמונה ${i + 1} מהבקשה`}
+                  loading="lazy"
+                  className="w-full h-full object-cover"
+                />
+              </a>
+            ))}
+          </div>
+        )}
         {canManage && req.status !== 'DONE' && (
           <div className="mt-2 flex flex-wrap gap-2">
             {req.status === 'PENDING' && (

@@ -47,12 +47,53 @@ export default async function PainterCasePage({ params }: { params: { id: string
   const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
   const branch = Array.isArray(c.branches) ? c.branches[0] : c.branches;
 
-  // Load existing painter requests
+  // Load existing painter requests + their images
   const { data: requestsData } = await supabase
     .from('painter_requests')
     .select('id, description, request_type, status, created_at')
     .eq('case_id', params.id)
     .order('created_at', { ascending: false });
+
+  const reqRows = (requestsData ?? []) as {
+    id: string;
+    description: string;
+    request_type: string;
+    status: string;
+    created_at: string;
+  }[];
+
+  // Fetch images for all requests + build signed URLs for inline display.
+  const requestIds = reqRows.map((r) => r.id);
+  let imageRows: { request_id: string; image_path: string }[] = [];
+  let signedImageUrls: Record<string, string> = {};
+  if (requestIds.length > 0) {
+    const { data: imagesData } = await supabase
+      .from('painter_request_images')
+      .select('request_id, image_path')
+      .in('request_id', requestIds);
+    imageRows = (imagesData ?? []) as { request_id: string; image_path: string }[];
+    const paths = imageRows.map((i) => i.image_path);
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage.from('painter-images').createSignedUrls(paths, 3600);
+      for (const e of (signed ?? []) as Array<{ path: string; signedUrl: string; error: string | null }>) {
+        if (e.signedUrl && !e.error) signedImageUrls[e.path] = e.signedUrl;
+      }
+    }
+  }
+
+  // Group images by request_id and attach signed URLs.
+  const imagesByRequest: Record<string, string[]> = {};
+  for (const im of imageRows) {
+    const url = signedImageUrls[im.image_path];
+    if (!url) continue;
+    if (!imagesByRequest[im.request_id]) imagesByRequest[im.request_id] = [];
+    imagesByRequest[im.request_id].push(url);
+  }
+
+  const enrichedRequests = reqRows.map((r) => ({
+    ...r,
+    image_urls: imagesByRequest[r.id] ?? [],
+  }));
 
   return (
     <PainterCaseClient
@@ -69,13 +110,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
       carYear={car?.year ?? null}
       branchName={branch?.name ?? null}
       role={profile.role}
-      initialRequests={(requestsData ?? []) as {
-        id: string;
-        description: string;
-        request_type: string;
-        status: string;
-        created_at: string;
-      }[]}
+      initialRequests={enrichedRequests}
     />
   );
 }

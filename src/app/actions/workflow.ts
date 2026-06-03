@@ -396,6 +396,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         title: blockedTitle,
         body: blockedBody,
         action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
       } as never);
       void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
@@ -453,6 +454,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           title: blockedTitle,
           body: blockedBody,
           action_url: `/approvals`,
+          triggered_by: user.id,
         } as never);
         void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
@@ -470,6 +472,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           title: blockedTitle,
           body: blockedBody,
           action_url: `/approvals`,
+          triggered_by: user.id,
         } as never);
         void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {

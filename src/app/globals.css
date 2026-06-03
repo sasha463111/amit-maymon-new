@@ -6,6 +6,12 @@
   body {
     @apply antialiased;
   }
+  /* Respect EXIF orientation on uploaded photos. iPhone landscape shots
+     have orientation metadata; without this they render sideways on
+     iPad/desktop where other browsers ignore the EXIF tag. */
+  img {
+    image-orientation: from-image;
+  }
 }
 
 @layer utilities {
