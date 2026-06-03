@@ -27,32 +27,38 @@ export const metadata: Metadata = {
   },
 };
 
-// Inline script that runs on every page load BEFORE any other JS. It hunts
-// down any service worker registered at the root scope (the workbox SW from
-// earlier deploys was caching app JS chunks and pinning users to stale code)
-// and unregisters it. push-sw.js — our actual push worker — registers at the
-// dedicated `/push-sw-scope/` scope so it's left alone.
+// Inline cleanup runs on every page load BEFORE any other JS. Purpose: wipe
+// the old workbox sw.js (and its precache of stale JS chunks) that earlier
+// deploys installed on users' devices. Critical: identify our push worker by
+// its **script URL** ending in /push-sw.js — NOT by scope — because
+// push-sw.js registers at scope '/' (the only scope iOS Safari reliably
+// fires push events for) and would otherwise be unregistered alongside the
+// workbox worker. That bug killed every push subscription on every load.
 const SW_CLEANUP_SCRIPT = `
 (function() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   navigator.serviceWorker.getRegistrations().then(function(regs) {
-    var killed = 0;
+    var killedAny = false;
     regs.forEach(function(r) {
-      var scope = r.scope || '';
-      // Leave the dedicated push worker alone, kill everything else at root.
-      if (scope.indexOf('push-sw-scope') === -1) {
-        r.unregister().then(function() { killed++; }).catch(function() {});
-      }
+      var url = (r.active && r.active.scriptURL) || (r.installing && r.installing.scriptURL) || (r.waiting && r.waiting.scriptURL) || '';
+      // Whitelist our push worker by script URL.
+      var isPushWorker = url.indexOf('/push-sw.js') !== -1;
+      if (isPushWorker) return;
+      r.unregister().then(function(ok) { if (ok) killedAny = true; }).catch(function() {});
     });
-    if (killed > 0) {
-      // Wipe all caches the dead worker left behind so they don't keep
-      // serving stale JS.
-      if ('caches' in window) {
-        caches.keys().then(function(keys) {
-          return Promise.all(keys.map(function(k) { return caches.delete(k); }));
-        }).then(function() {
-          location.reload();
-        }).catch(function() {});
+    if (killedAny && 'caches' in window) {
+      caches.keys().then(function(keys) {
+        return Promise.all(keys.map(function(k) {
+          // Don't wipe the push worker's own cache (if it has one).
+          if (k.indexOf('push-sw') !== -1) return Promise.resolve();
+          return caches.delete(k);
+        }));
+      }).catch(function() {});
+      // Reload once so the page picks up the fresh bundle without the dead
+      // workbox SW intercepting in the background.
+      if (!sessionStorage.getItem('__sw_kill_reload__')) {
+        sessionStorage.setItem('__sw_kill_reload__', '1');
+        location.reload();
       }
     }
   }).catch(function() {});
