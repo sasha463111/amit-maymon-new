@@ -74,8 +74,22 @@ export async function updateSystemUser(
   userId: string,
   updates: Partial<{ role: UserRole; branch_id: string | null; is_active: boolean; full_name: string }>
 ) {
-  const { error, supabase } = await requireCeo();
+  const { error, supabase, userId: callerId } = await requireCeo();
   if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
+
+  // Guardrails on the caller editing themselves: prevent locking yourself out.
+  // A CEO can rename themselves but can't demote, disable, or re-branch.
+  if (userId === callerId) {
+    if (updates.role !== undefined && updates.role !== 'CEO') {
+      return { error: 'לא ניתן לשנות את התפקיד של עצמך — שתף משתמש CEO אחר תחילה.' };
+    }
+    if (updates.is_active === false) {
+      return { error: 'לא ניתן להשבית את החשבון שלך.' };
+    }
+    if (updates.branch_id !== undefined) {
+      return { error: 'CEO לא משויך לסניף.' };
+    }
+  }
 
   const { error: updateError } = await supabase
     .from('profiles')

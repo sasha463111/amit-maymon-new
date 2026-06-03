@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   themeColor: '#3b82f6',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black-translucent',
     title: 'Tehila CRM',
   },
   viewport: {

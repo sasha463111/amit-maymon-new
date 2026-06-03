@@ -581,7 +581,10 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       void sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
 
-    // Auto-start CLOSURE workflow if not already exists
+    // Auto-start CLOSURE workflow if not already exists. The DB has a unique
+    // index `uniq_case_workflow_runs_one_closure_per_case` so a concurrent
+    // second completion will get a 23505 here instead of creating a duplicate.
+    // We handle that case by reading the existing row.
     const { data: existingClosure } = await supabase
       .from('case_workflow_runs')
       .select('id')
@@ -590,14 +593,18 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .maybeSingle();
 
     if (!existingClosure) {
-      const { data: newRunData } = await supabase
+      const { data: newRunData, error: closureRunErr } = await supabase
         .from('case_workflow_runs')
         .insert({ case_id: caseId, workflow_type: 'CLOSURE', status: 'ACTIVE' } as never)
         .select('id')
         .single();
+
+      // Unique-violation = another request just created the closure run — skip
+      // step creation and let the other request own the seeding.
+      const wasConflict = (closureRunErr as { code?: string } | null)?.code === '23505';
       const newRun = newRunData as { id: string } | null;
 
-      if (newRun) {
+      if (newRun && !wasConflict) {
         const closureSteps = [
           { step_key: 'CLOSURE_VERIFY_DETAILS_DOCS', order_index: 0, state: 'ACTIVE' },
           { step_key: 'CLOSURE_PROFORMA_IF_NEEDED', order_index: 1, state: 'PENDING' },
@@ -607,6 +614,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         await supabase.from('case_workflow_steps').insert(
           closureSteps.map((s) => ({ ...s, run_id: newRun.id, activated_at: s.state === 'ACTIVE' ? now : null })) as never
         );
+      } else if (closureRunErr && !wasConflict) {
+        console.error('[completeActiveStep] failed to create closure run', closureRunErr);
       }
     }
 

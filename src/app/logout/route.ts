@@ -17,5 +17,10 @@ export async function GET(request: Request) {
   
   const supabase = await createClient();
   await supabase.auth.signOut();
-  return NextResponse.redirect(new URL('/login', url.origin));
+
+  // Clear the CEO "view as" cookie on logout so the next session doesn't
+  // accidentally land in someone else's UI.
+  const response = NextResponse.redirect(new URL('/login', url.origin));
+  response.cookies.delete('tehila_view_as');
+  return response;
 }
