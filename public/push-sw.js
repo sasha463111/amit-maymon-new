@@ -38,15 +38,19 @@ self.addEventListener('notificationclick', (event) => {
   const url = event.notification.data?.url || '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Reuse an existing window if one is open; navigate it to the target.
       for (const client of clientList) {
         if ('focus' in client) {
-          client.focus();
-          if ('navigate' in client) {
-            client.navigate(url);
-            return;
+          const focused = client.focus();
+          if ('navigate' in client && typeof client.navigate === 'function') {
+            return Promise.resolve(focused)
+              .then(() => client.navigate(url))
+              .catch(() => self.clients.openWindow && self.clients.openWindow(url));
           }
+          return focused;
         }
       }
+      // No window open (the iOS-standalone common case): open a fresh one.
       if (self.clients.openWindow) {
         return self.clients.openWindow(url);
       }
