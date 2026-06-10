@@ -14,7 +14,10 @@ export async function createClient() {
 
   const cookieStore = await cookies();
 
-  const hasRemember = cookieStore.get('tehila_remember')?.value === '1';
+  // Always persist the session for a year so the home-screen PWA stays logged
+  // in across app restarts. We no longer gate this on a "remember me" checkbox —
+  // staff should never have to re-login just because they closed the app.
+  const ONE_YEAR = 60 * 60 * 24 * 365;
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,13 +30,16 @@ export async function createClient() {
         setAll(cookiesToSet: CookieToSet[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              const finalOptions = hasRemember
-                ? { ...options, maxAge: 30 * 24 * 60 * 60 }
-                : options;
+              // Respect cookie clearing on logout (empty value); only extend
+              // lifetime for real session writes.
+              const finalOptions = value
+                ? { ...options, path: '/', sameSite: 'lax' as const, maxAge: ONE_YEAR }
+                : { ...options, path: '/' };
               cookieStore.set(name, value, finalOptions);
             });
           } catch {
-            // Called from Server Component; ignore.
+            // Called from a Server Component render pass (read-only cookies);
+            // the middleware handles the actual cookie write on that request.
           }
         },
       },
