@@ -39,11 +39,20 @@ export async function loginAction(credentials: { email: string; password: string
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_active')
     .eq('id', authData.user.id)
     .single();
 
-  const profile = profileData as { role: string } | null;
+  const profile = profileData as { role: string; is_active: boolean } | null;
+
+  // Enforce account deactivation at the gate. A CEO disabling a user via
+  // settings must actually lock them out — the Supabase session alone isn't
+  // enough, so reject + sign out here.
+  if (profile && profile.is_active === false) {
+    await supabase.auth.signOut();
+    return { error: 'החשבון שלך הושבת. פנה למנהל המערכת.' };
+  }
+
   const role = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
   redirect(ROLE_REDIRECT[role]);
 }

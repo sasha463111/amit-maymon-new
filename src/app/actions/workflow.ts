@@ -309,19 +309,26 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, branch_id')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { id: string; role: string } | null;
+  const profile = profileData as { id: string; role: string; branch_id: string | null } | null;
   const role = profile?.role as UserRole | undefined;
 
   const { data: caseData } = await supabase
     .from('cases')
-    .select('id, fixcar_link, parts_status')
+    .select('id, fixcar_link, parts_status, branch_id')
     .eq('id', caseId)
     .single();
   if (!caseData) return { error: 'תיק לא נמצא' };
-  const caseRow = caseData as { id: string; fixcar_link: string | null; parts_status: string | null };
+  const caseRow = caseData as { id: string; fixcar_link: string | null; parts_status: string | null; branch_id: string };
+
+  // Explicit branch check. RLS already prevents cross-branch writes, but
+  // without this the action would silently no-op and return {ok:true} to a
+  // manager acting on another branch's case. Fail loudly instead. CEO exempt.
+  if (role !== 'CEO' && profile?.branch_id !== caseRow.branch_id) {
+    return { error: 'אין הרשאה לתיק זה (סניף אחר)' };
+  }
 
   const { data: runData } = await supabase
     .from('case_workflow_runs')

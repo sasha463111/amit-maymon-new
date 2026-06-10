@@ -62,12 +62,20 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_id')
+    .select('full_name, role, branch_id, is_active')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_id: string | null } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_id: string | null; is_active?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
+
+  // Mid-session deactivation: if a CEO disabled this account, kick them out
+  // even though their Supabase session is still technically valid.
+  if (!isPreview && profile && profile.is_active === false) {
+    await supabase.auth.signOut();
+    redirect('/login');
+  }
+
   const actualRole = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
 
   // "View as" preview — CEO previewing another user's UI.
