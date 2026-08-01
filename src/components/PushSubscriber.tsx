@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { BellRing, BellOff, AlertCircle } from 'lucide-react';
-import { savePushSubscription, removePushSubscription } from '@/app/actions/push';
+import { savePushSubscription, removePushSubscription, sendTestPushToSelf } from '@/app/actions/push';
+
+const isDev = process.env.NODE_ENV !== 'production';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -65,6 +67,8 @@ export function PushSubscriber() {
   const [status, setStatus] = useState<Status>('unknown');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
   useEffect(() => {
@@ -83,32 +87,44 @@ export function PushSubscriber() {
       setStatus('denied');
       return;
     }
-    // Check existing subscription on the root scope.
-    navigator.serviceWorker
-      .getRegistration('/')
-      .then(async (reg) => {
-        if (!reg) {
-          setStatus('unsubscribed');
-          return;
-        }
-        const sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          setStatus('unsubscribed');
-          return;
-        }
 
-        // If the browser already has a subscription but the DB missed it,
-        // refresh the server row quietly. This fixes older broken attempts.
-        const json = sub.toJSON();
-        if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
-          await savePushSubscription(
-            { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } },
-            navigator.userAgent
-          ).catch(() => {});
-        }
-        setStatus('subscribed');
-      })
-      .catch(() => setStatus('unsubscribed'));
+    // Check existing subscription on the root scope and self-heal the DB row
+    // if it drifted (e.g. the browser silently rotated the endpoint). Runs on
+    // mount and again whenever the tab regains focus, so a subscription that
+    // changed while the app was in the background doesn't go stale until the
+    // user happens to reload.
+    function checkSubscription() {
+      navigator.serviceWorker
+        .getRegistration('/')
+        .then(async (reg) => {
+          if (!reg) {
+            setStatus('unsubscribed');
+            return;
+          }
+          const sub = await reg.pushManager.getSubscription();
+          if (!sub) {
+            setStatus('unsubscribed');
+            return;
+          }
+
+          const json = sub.toJSON();
+          if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
+            await savePushSubscription(
+              { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } },
+              navigator.userAgent
+            ).catch(() => {});
+          }
+          setStatus('subscribed');
+        })
+        .catch(() => setStatus('unsubscribed'));
+    }
+
+    checkSubscription();
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') checkSubscription();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, []);
 
   async function enable() {
@@ -208,6 +224,17 @@ export function PushSubscriber() {
     }
   }
 
+  async function runTestPush() {
+    setTestBusy(true);
+    setTestResult(null);
+    try {
+      const res = await sendTestPushToSelf();
+      setTestResult(res.error ? `שגיאה: ${res.error}` : `נשלח — ${res.diagnostic}`);
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
   if (status === 'unsupported') return null;
   if (status === 'unknown') return null;
 
@@ -235,19 +262,38 @@ export function PushSubscriber() {
 
   if (status === 'subscribed') {
     return (
-      <div className="flex items-center justify-between px-3 py-2 text-[11px] bg-green-50 border-t border-green-100">
-        <span className="text-green-700 flex items-center gap-1.5">
-          <BellRing size={12} />
-          התראות push פעילות
-        </span>
-        <button
-          type="button"
-          onClick={() => void disable()}
-          disabled={busy}
-          className="text-gray-500 hover:text-red-600 underline"
-        >
-          {busy ? '...' : 'כבה'}
-        </button>
+      <div className="px-3 py-2 text-[11px] bg-green-50 border-t border-green-100">
+        <div className="flex items-center justify-between">
+          <span className="text-green-700 flex items-center gap-1.5">
+            <BellRing size={12} />
+            התראות push פעילות
+          </span>
+          <div className="flex items-center gap-2">
+            {isDev && (
+              <button
+                type="button"
+                onClick={() => void runTestPush()}
+                disabled={testBusy}
+                className="text-blue-600 hover:text-blue-800 underline"
+              >
+                {testBusy ? 'שולח...' : 'שלח push בדיקה'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void disable()}
+              disabled={busy}
+              className="text-gray-500 hover:text-red-600 underline"
+            >
+              {busy ? '...' : 'כבה'}
+            </button>
+          </div>
+        </div>
+        {isDev && testResult && (
+          <p className="text-gray-600 mt-1.5 bg-white border border-gray-200 rounded px-2 py-1 break-words">
+            {testResult}
+          </p>
+        )}
       </div>
     );
   }

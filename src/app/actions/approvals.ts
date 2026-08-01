@@ -97,7 +97,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         action_url: `/cases/${approval.case_id}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
+      await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
@@ -118,7 +118,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         action_url: `/cases/${approval.case_id}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
+      await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
   }
 

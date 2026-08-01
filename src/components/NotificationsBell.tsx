@@ -150,15 +150,30 @@ export function NotificationsBell({ userId }: { userId: string }) {
     }
   }
 
-  // Poll every 10s
+  // Realtime push (instant) + 10s poll as a fallback in case the realtime
+  // socket drops or the table isn't in the realtime publication.
   useEffect(() => {
     if (!userId) return;
     void loadRows();
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`notifications-bell-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        () => void loadRows()
+      )
+      .subscribe();
+
     const id = setInterval(() => void loadRows(), 10000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      void supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 

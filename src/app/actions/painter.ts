@@ -80,7 +80,7 @@ export async function updatePainterChecklist(
         action_url: `/painters/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
+      await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
     }
   }
 
@@ -176,7 +176,7 @@ export async function createPainterRequest(
       action_url: `/painters/${caseId}`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
+    await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
   }
 
   revalidatePath(`/painters/${caseId}`);
@@ -266,7 +266,7 @@ export async function updatePainterRequestStatus(
       action_url: `/painters/${req.case_id}`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
+    await sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
   }
 
   return { ok: true, error: null };

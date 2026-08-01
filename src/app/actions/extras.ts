@@ -58,7 +58,7 @@ export async function createExtra(input: CreateExtraInput) {
       action_url: `/cases/${input.case_id}`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
+    await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
   }
 
   await supabase.from('audit_events').insert({
@@ -139,7 +139,7 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
       action_url: `/extras/mine`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(extra.created_by, {
+    await sendPushToUser(extra.created_by, {
       title,
       body,
       url: `/extras/mine`,
