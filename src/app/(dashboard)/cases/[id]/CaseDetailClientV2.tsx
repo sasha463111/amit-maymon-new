@@ -9,6 +9,7 @@ import { uploadCaseDocument, deleteCaseDocument, getSignedFileUrls } from '@/app
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus, PainterStatus } from '@/types/database';
 import { PARTS_STATUS_LABELS, PAINTER_STATUS_LABELS } from '@/types/database';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const DEFAULT_STEP_LABELS: Record<string, string> = {
   OPEN_CASE: 'פתיחת תיק',
@@ -1117,7 +1118,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           <InfoRow label="גיל רכב" value={displayAge} />
 
           {/* Editable car fields */}
-          <EditableInfoRow label="רישוי" field="plate" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
+          <EditableInfoRow label="רישוי" field="plate" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} renderDisplay={(v) => v ? <LicensePlate plate={v} size="sm" /> : <span className="text-gray-800">—</span>} />
           <EditableInfoRow label="יצרן" field="carMake" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
           <EditableInfoRow label="דגם" field="carModel" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
           <EditableInfoRow label="סוג רכב" field="vehicleType" fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit} />
@@ -2110,6 +2111,7 @@ function EditableInfoRow({
   onEditChange,
   onSave,
   onCancel,
+  renderDisplay,
 }: {
   label: string;
   field: string;
@@ -2124,6 +2126,7 @@ function EditableInfoRow({
   onEditChange: (v: string) => void;
   onSave: () => void;
   onCancel: () => void;
+  renderDisplay?: (rawValue: string) => React.ReactNode;
 }) {
   const isEditing = editingField === field;
   const rawValue = fieldValues[field] ?? '';
@@ -2179,6 +2182,14 @@ function EditableInfoRow({
           )}
           <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs px-1">✕</button>
         </div>
+      ) : renderDisplay ? (
+        <span
+          className={`flex-1 ${canEdit ? 'cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 transition-colors' : ''}`}
+          onClick={canEdit ? () => onStartEdit(field, rawValue) : undefined}
+          title={canEdit ? `לחץ לעריכת ${label}` : undefined}
+        >
+          {renderDisplay(rawValue)}
+        </span>
       ) : (
         <span
           className={`text-gray-800 flex-1 ${canEdit ? 'cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 hover:text-blue-700 transition-colors' : ''}`}

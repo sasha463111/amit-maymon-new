@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 type PainterRequest = {
   id: string;
@@ -271,7 +272,11 @@ export function PainterCaseClient({
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800" dir="ltr">{licensePlate ?? caseKey ?? '—'}</h1>
+            {licensePlate ? (
+              <LicensePlate plate={licensePlate} size="lg" />
+            ) : (
+              <h1 className="text-2xl font-bold text-gray-800" dir="ltr">{caseKey ?? '—'}</h1>
+            )}
             {customerName && (
               <p className="text-base font-semibold text-gray-700 mt-1">{customerName}</p>
             )}

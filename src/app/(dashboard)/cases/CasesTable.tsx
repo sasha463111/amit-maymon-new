@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { BlockersBadges } from '@/components/ui/BlockersBadges';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 import type { PartsStatus } from '@/types/database';
 
 interface CaseRow {
@@ -12,6 +13,7 @@ interface CaseRow {
   claim: string;
   customer_name?: string | null;
   opened_at: string | null;
+  opened_at_display: string;
   age: string;
   parts_status: PartsStatus;
   general_status: string;
@@ -32,7 +34,7 @@ export function CasesTable({
 }) {
   const router = useRouter();
   const columns: Column<CaseRow>[] = [
-    { key: 'plate', label: 'מספר רישוי' },
+    { key: 'plate', label: 'מספר רישוי', render: (row) => <LicensePlate plate={row.plate} size="sm" /> },
     { key: 'claim', label: 'תביעה' },
     {
       key: 'customer_name',
@@ -95,8 +97,8 @@ export function CasesTable({
     <DataTable<CaseRow>
       columns={columns}
       data={cases}
-      searchPlaceholder="חיפוש רישוי, תביעה, שם לקוח..."
-      searchKeys={['plate', 'claim', 'customer_name']}
+      searchPlaceholder="חיפוש רישוי, תביעה, שם לקוח, תאריך..."
+      searchKeys={['plate', 'claim', 'customer_name', 'opened_at_display']}
       rowKey={(row) => row.id}
       onRowClick={(row) => router.push(`/cases/${row.id}`)}
       mobileHeadline={(row) => (
@@ -114,9 +116,9 @@ export function CasesTable({
         </div>
       )}
       mobileSubheadline={(row) => (
-        <span dir="ltr">
-          {row.plate}
-          {row.claim !== '—' && <span className="text-gray-400"> · {row.claim}</span>}
+        <span className="inline-flex items-center gap-1.5">
+          <LicensePlate plate={row.plate} size="sm" />
+          {row.claim !== '—' && <span className="text-gray-400">· {row.claim}</span>}
         </span>
       )}
     />

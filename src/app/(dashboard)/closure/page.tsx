@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'חלקים זמינים', color: 'text-green-700 bg-green-50 border-green-200' },
@@ -134,9 +135,8 @@ export default async function ClosurePage() {
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                         {car?.license_plate && (
-                          <span className="flex items-center gap-1">
-                            <span>🚗</span>
-                            <span className="font-medium text-gray-700">{car.license_plate}</span>
+                          <span className="flex items-center gap-2">
+                            <LicensePlate plate={car.license_plate} size="sm" />
                             {car.make && <span>{car.make} {car.model}</span>}
                           </span>
                         )}

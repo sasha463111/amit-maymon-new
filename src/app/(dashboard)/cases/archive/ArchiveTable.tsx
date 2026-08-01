@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { restoreCase } from '@/app/actions/workflow';
 import { RotateCcw } from 'lucide-react';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 type Row = {
   id: string;
@@ -77,7 +78,7 @@ export function ArchiveTable({ rows }: { rows: Row[] }) {
             <tbody className="divide-y divide-gray-100">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-mono text-gray-800">{r.plate}</td>
+                  <td className="px-4 py-3"><LicensePlate plate={r.plate} size="sm" /></td>
                   <td className="px-4 py-3 text-gray-700">{r.customer}</td>
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{r.claim}</td>
                   <td className="px-4 py-3 text-gray-600">{r.branch_name}</td>

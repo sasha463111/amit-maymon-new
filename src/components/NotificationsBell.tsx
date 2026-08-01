@@ -7,6 +7,7 @@ import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { markRead, markAllRead } from '@/app/actions/notifications';
 import { PushSubscriber } from '@/components/PushSubscriber';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 interface Row {
   id: string;
@@ -295,11 +296,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
                         <div className="flex-1 min-w-0">
                           {/* Plate badge + customer name + title */}
                           <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                            {n.license_plate && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-bold tracking-wide" dir="ltr">
-                                🚗 {n.license_plate}
-                              </span>
-                            )}
+                            <LicensePlate plate={n.license_plate} size="sm" />
                             {n.customer_name && (
                               <span className="text-[11px] font-semibold text-gray-700 truncate max-w-[120px]">
                                 {n.customer_name}

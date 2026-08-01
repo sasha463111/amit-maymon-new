@@ -13,6 +13,7 @@ interface CaseForView {
   case_key: string | null;
   customer_name: string | null;
   opened_at: string | null;
+  opened_at_display: string;
   age: string;
   parts_status: PartsStatus;
   general_status: string;

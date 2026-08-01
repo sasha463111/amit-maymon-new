@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { updateExtraStatus } from '@/app/actions/extras';
 import type { ExtraStatus } from '@/types/database';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 interface ExtraRow {
   id: string;
@@ -99,10 +100,10 @@ export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
               <div className="flex items-start justify-between gap-2 mb-2">
                 <Link
                   href={`/cases/${e.case_id}`}
-                  className="font-bold text-gray-800 text-sm hover:text-brand-red truncate"
+                  className="font-bold text-gray-800 text-sm hover:text-brand-red truncate flex items-center"
                   title={e.case_key ?? e.plate}
                 >
-                  {e.case_key ?? e.plate}
+                  {e.case_key ?? (e.plate !== '—' ? <LicensePlate plate={e.plate} size="sm" /> : e.plate)}
                 </Link>
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${STATUS_COLORS[e.status]}`}>
                   {STATUS_LABELS[e.status]}

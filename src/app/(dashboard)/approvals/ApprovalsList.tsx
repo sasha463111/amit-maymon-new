@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -426,7 +427,10 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">{a.plate} · {a.branch_name}</div>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                  {a.plate !== '—' && <LicensePlate plate={a.plate} size="sm" />}
+                  <span>{a.branch_name}</span>
+                </div>
                 <div className={`text-xs mt-1 font-medium ${selectedId === a.id ? 'text-indigo-600' : 'text-amber-600'}`}>
                   ⏳ {getApprovalLabel(a.approval_type)}
                 </div>
@@ -444,7 +448,10 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
             <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-start justify-between">
               <div>
                 <h3 className="text-xl font-bold text-gray-800">{selected.case_key ?? selected.plate}</h3>
-                <p className="text-sm text-gray-500 mt-0.5">רישוי: {selected.plate} · סניף: {selected.branch_name}</p>
+                <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
+                  {selected.plate !== '—' && <LicensePlate plate={selected.plate} size="sm" />}
+                  <span>סניף: {selected.branch_name}</span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold">

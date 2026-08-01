@@ -1,8 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { PartsStatus } from '@/types/database';
 import { BlockersBadges } from '@/components/ui/BlockersBadges';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 export interface KanbanCase {
   id: string;
@@ -63,7 +65,7 @@ function KanbanCard({ c, onClick }: { c: KanbanCase; onClick: () => void }) {
     >
       {/* Plate + notes badge */}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-bold text-gray-900 text-sm" dir="ltr">{c.plate}</span>
+        <LicensePlate plate={c.plate} size="sm" />
         {c.notes && (
           <span
             title={c.notes}
@@ -106,8 +108,88 @@ function KanbanCard({ c, onClick }: { c: KanbanCase; onClick: () => void }) {
   );
 }
 
+function CaseQuickView({ c, onClose }: { c: KanbanCase; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        dir="rtl"
+        role="dialog"
+        aria-modal="true"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <LicensePlate plate={c.plate} size="md" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            aria-label="סגור"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3">
+          {c.customer_name && (
+            <p className="text-lg font-bold text-gray-900">{c.customer_name}</p>
+          )}
+          {(c.case_key || c.claim !== '—') && (
+            <p className="text-sm text-gray-500">
+              {c.case_key ? `#${c.case_key}` : ''}{c.case_key && c.claim !== '—' ? ' · ' : ''}{c.claim !== '—' ? c.claim : ''}
+            </p>
+          )}
+          {c.opened_at && (
+            <p className="text-xs text-gray-400">נפתח בתאריך {new Date(c.opened_at).toLocaleDateString('he-IL')}</p>
+          )}
+          {c.nextStep && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1">השלב הבא</p>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-50 text-brand-red rounded-md text-xs font-semibold ring-1 ring-red-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" />
+                {c.nextStep}
+              </span>
+            </div>
+          )}
+          <BlockersBadges
+            partsStatus={c.parts_status}
+            hasExtrasInTreatment={c.hasExtrasInTreatment}
+            approvalBlocked={c.approvalBlocked}
+          />
+          {c.notes && (
+            <div>
+              <p className="text-xs text-gray-400 mb-1">הערות</p>
+              <p className="text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-2">{c.notes}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
+          <Link
+            href={`/cases/${c.id}`}
+            className="flex items-center justify-center gap-1.5 w-full bg-brand-red hover:bg-brand-red-dark text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+          >
+            מעבר לתיק ←
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CasesKanban({ cases, role }: { cases: KanbanCase[]; role: string | null }) {
-  const router = useRouter();
+  const [selected, setSelected] = useState<KanbanCase | null>(null);
   void role; // may be used for future role-based filtering
 
   const byPhase = new Map<Phase, KanbanCase[]>();
@@ -135,7 +217,7 @@ export function CasesKanban({ cases, role }: { cases: KanbanCase[]; role: string
                   <KanbanCard
                     key={c.id}
                     c={c}
-                    onClick={() => router.push(`/cases/${c.id}`)}
+                    onClick={() => setSelected(c)}
                   />
                 ))
               )}
@@ -143,6 +225,8 @@ export function CasesKanban({ cases, role }: { cases: KanbanCase[]; role: string
           </div>
         );
       })}
+
+      {selected && <CaseQuickView c={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

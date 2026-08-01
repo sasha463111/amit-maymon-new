@@ -68,6 +68,61 @@ function StatCard({
   );
 }
 
+type NumericStatKey = 'readyForRelease' | 'airmail' | 'waitingParts' | 'inWork' | 'total';
+
+const BRANCH_TABLE_COLS: { key: NumericStatKey; label: string; icon: React.ElementType; color: string }[] = [
+  { key: 'readyForRelease', label: 'מוכן לשחרור', icon: CheckCircle, color: 'text-green-600' },
+  { key: 'airmail', label: 'דואר אוויר', icon: Plane, color: 'text-sky-600' },
+  { key: 'waitingParts', label: 'ממתינים לחלקים', icon: Package, color: 'text-amber-600' },
+  { key: 'inWork', label: 'בעבודה', icon: Wrench, color: 'text-emerald-600' },
+  { key: 'total', label: 'סה"כ', icon: LayoutGrid, color: 'text-slate-600' },
+];
+
+// Compact per-branch comparison: one row per branch instead of a repeated
+// card grid per branch, so comparing branches doesn't require scrolling
+// between identical-looking sections.
+function BranchStatsTable({ branchStats, allStats }: { branchStats: StatBlock[]; allStats: StatBlock }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+      <table className="w-full" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        <thead>
+          <tr className="border-b border-gray-100">
+            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">סניף</th>
+            {BRANCH_TABLE_COLS.map((c) => (
+              <th key={c.key} className="px-4 py-3 text-center text-xs font-semibold text-gray-500">
+                <span className="inline-flex flex-col items-center gap-1 whitespace-nowrap">
+                  <c.icon size={14} className={c.color} />
+                  {c.label}
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {branchStats.map((bs) => (
+            <tr key={bs.label} className="border-b border-gray-50 last:border-0">
+              <td className="px-4 py-3 text-sm font-semibold text-gray-800 whitespace-nowrap">{bs.label}</td>
+              {BRANCH_TABLE_COLS.map((c) => (
+                <td key={c.key} className={`px-4 py-3 text-center text-base font-bold ${bs[c.key] === 0 ? 'text-gray-300 font-medium' : c.color}`}>
+                  {bs[c.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr className="bg-gray-50">
+            <td className="px-4 py-3 text-sm font-extrabold text-gray-800 whitespace-nowrap">{allStats.label}</td>
+            {BRANCH_TABLE_COLS.map((c) => (
+              <td key={c.key} className={`px-4 py-3 text-center text-base font-extrabold ${allStats[c.key] === 0 ? 'text-gray-300 font-medium' : c.color}`}>
+                {allStats[c.key]}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function StatRow({ stat, highlight }: { stat: StatBlock; highlight?: boolean }) {
   return (
     <div className={`space-y-2 ${highlight ? '' : 'opacity-80'}`}>
@@ -249,6 +304,7 @@ async function CasesDataSection({
       plate,
       claim: row.claim_number ?? '—',
       opened_at: row.opened_at,
+      opened_at_display: row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : '',
       age,
       parts_status: row.parts_status as PartsStatus,
       general_status: row.general_status,
@@ -299,9 +355,7 @@ async function CasesDataSection({
       {/* Statistics */}
       <div className="space-y-4 mb-6">
         <StatRow stat={allStats} highlight />
-        {branchStats.map((bs) => (
-          <StatRow key={bs.label} stat={bs} />
-        ))}
+        {branchStats.length > 0 && <BranchStatsTable branchStats={branchStats} allStats={allStats} />}
       </div>
 
       <CasesViewWrapper

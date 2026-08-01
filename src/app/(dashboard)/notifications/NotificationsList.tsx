@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { markRead, markAllRead } from '@/app/actions/notifications';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 interface NotificationRow {
   id: string;
@@ -77,11 +78,7 @@ function NotificationItem({
       <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          {n.license_plate && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-900 text-white text-xs font-bold tracking-wide" dir="ltr">
-              🚗 {n.license_plate}
-            </span>
-          )}
+          <LicensePlate plate={n.license_plate} size="sm" />
           <p
             className={`text-sm leading-snug ${
               !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
@@ -206,10 +203,11 @@ export function NotificationsList({
               }`}
               onClick={() => router.push(`/cases/${caseId}`)}
             >
-              <span className="text-lg">🚗</span>
-              <span className="font-bold text-gray-800 text-sm">
-                {group.plate ?? 'רכב לא ידוע'}
-              </span>
+              {group.plate ? (
+                <LicensePlate plate={group.plate} size="sm" />
+              ) : (
+                <span className="font-bold text-gray-800 text-sm">רכב לא ידוע</span>
+              )}
               <span className="mr-auto text-xs text-gray-400">
                 {group.items.length} התראות
               </span>

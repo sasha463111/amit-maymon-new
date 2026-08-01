@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const STEP_LABELS: Record<string, string> = {
   CLOSURE_VERIFY_DETAILS_DOCS: 'אימות פרטים ומסמכים',
@@ -413,10 +414,15 @@ export function ClosureDetailClient({
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{caseKey ?? plate}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {plate}{carMake ? ` · ${carMake} ${carModel ?? ''}` : ''} · {branchName}
-            </p>
+            {caseKey ? (
+              <h2 className="text-2xl font-bold text-gray-900">{caseKey}</h2>
+            ) : (
+              <LicensePlate plate={plate} size="lg" />
+            )}
+            <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+              {caseKey && <LicensePlate plate={plate} size="sm" />}
+              <span>{carMake ? `${carMake} ${carModel ?? ''} · ` : ''}{branchName}</span>
+            </div>
           </div>
           {allDone ? (
             <span className="px-3 py-1.5 bg-green-100 text-green-800 border border-green-200 rounded-full text-sm font-semibold">
