@@ -24,12 +24,15 @@ export async function updatePainterChecklist(
   }
 
   // Map painter_entered_work → painter_status
+  const now = new Date().toISOString();
   const caseUpdates: Record<string, unknown> = {};
   if (updates.painter_entered_work !== undefined) {
     caseUpdates.painter_status = updates.painter_entered_work ? 'IN_WORK' : 'WAITING_PARTS';
+    caseUpdates.painter_entered_work_at = updates.painter_entered_work ? now : null;
   }
   if (updates.parts_arrived !== undefined) {
     caseUpdates.parts_arrived = updates.parts_arrived;
+    caseUpdates.parts_arrived_at = updates.parts_arrived ? now : null;
     if (updates.parts_arrived) caseUpdates.painter_status = 'PARTS_ARRIVED';
   }
 
@@ -86,7 +89,7 @@ export async function updatePainterChecklist(
 
   revalidatePath(`/painters/${caseId}`);
   revalidatePath(`/cases/${caseId}`);
-  return { ok: true, error: null };
+  return { ok: true, error: null, at: now };
 }
 
 /** Create a painter request (free text + optional images) and notify bodywork advisors */

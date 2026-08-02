@@ -41,6 +41,30 @@ function getTypeIcon(type: string | null): string {
   return (type && TYPE_ICON[type]) ?? '🔔';
 }
 
+// Semantic color per notification type: red = blocked/rejected, amber = needs
+// your action, green = positive/done, blue = neutral update, gray = other.
+const TYPE_COLOR: Record<string, string> = {
+  BLOCKER: 'bg-red-100 text-red-700',
+  BLOCKED_ACTION: 'bg-red-100 text-red-700',
+  CEO_REJECTED: 'bg-red-100 text-red-700',
+  PENDING_APPROVAL: 'bg-amber-100 text-amber-700',
+  PAINTER_REQUEST: 'bg-amber-100 text-amber-700',
+  APPROVAL_NEEDED: 'bg-amber-100 text-amber-700',
+  EXTRA_CREATED: 'bg-amber-100 text-amber-700',
+  READY_FOR_OFFICE: 'bg-green-100 text-green-700',
+  PAINTER_READY_FOR_RELEASE: 'bg-green-100 text-green-700',
+  FINAL_ESTIMATE_UPLOADED: 'bg-green-100 text-green-700',
+  CASE_CLOSED: 'bg-green-100 text-green-700',
+  WASH_STARTED: 'bg-blue-100 text-blue-700',
+  EXTRA_STATUS_CHANGED: 'bg-blue-100 text-blue-700',
+  WORKFLOW: 'bg-blue-100 text-blue-700',
+  PARTS_UPDATE: 'bg-blue-100 text-blue-700',
+};
+
+function getTypeColor(type: string | null): string {
+  return (type && TYPE_COLOR[type]) ?? 'bg-gray-100 text-gray-500';
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -75,7 +99,9 @@ function NotificationItem({
         isClickable ? 'cursor-pointer hover:border-brand-red/30' : ''
       } ${!n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'}`}
     >
-      <div className="text-2xl mt-0.5 shrink-0">{getTypeIcon(n.type)}</div>
+      <div className={`w-10 h-10 mt-0.5 shrink-0 rounded-full flex items-center justify-center text-lg leading-none ${getTypeColor(n.type)}`}>
+        {getTypeIcon(n.type)}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <LicensePlate plate={n.license_plate} size="sm" />

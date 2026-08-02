@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { PartsStatus } from '@/types/database';
@@ -147,10 +148,14 @@ async function CasesDataSection({
   role,
   branchId,
   isCeo,
+  selectedBranchId,
+  branches,
 }: {
   role: string | null;
   branchId: string | null;
   isCeo: boolean;
+  selectedBranchId: string | null;
+  branches: { id: string; name: string }[];
 }) {
   const supabase = await createClient();
 
@@ -177,17 +182,18 @@ async function CasesDataSection({
 
   if (role !== 'CEO' && branchId) {
     casesQuery = casesQuery.eq('branch_id', branchId);
+  } else if (isCeo && selectedBranchId) {
+    casesQuery = casesQuery.eq('branch_id', selectedBranchId);
   }
 
-  // Fetch branches, system message, and cases in parallel
-  const [{ data: casesRows }, { data: branchesData }, { data: sysMessages }] = await Promise.all([
+  // Fetch system message and cases in parallel (branches are passed in from
+  // the shell, which already fetched them to render the tabs).
+  const [{ data: casesRows }, { data: sysMessages }] = await Promise.all([
     casesQuery,
-    isCeo ? supabase.from('branches').select('id, name') : Promise.resolve({ data: [] }),
     supabase.from('system_messages').select('id, message').eq('is_active', true).order('created_at', { ascending: false }).limit(1),
   ]);
 
   const sysMessage = (sysMessages ?? [])[0] as { id: string; message: string } | undefined;
-  const branches = (branchesData ?? []) as { id: string; name: string }[];
 
   const openCases = (casesRows ?? []).filter((c) => !(c as { closed_at: string | null }).closed_at);
   const caseIds = openCases.map((c) => (c as { id: string }).id);
@@ -331,10 +337,13 @@ async function CasesDataSection({
     return { label, total, inWork, waitingParts, airmail, readyForRelease };
   }
 
-  const allStats = computeStats(casesWithMeta, 'כל הסניפים');
+  // When a branch is selected the query above already scoped casesWithMeta to
+  // just that branch, so label the highlighted row with its name instead of
+  // "כל הסניפים" and skip the (now meaningless) cross-branch comparison table.
+  const selectedBranch = selectedBranchId ? branches.find((b) => b.id === selectedBranchId) ?? null : null;
+  const allStats = computeStats(casesWithMeta, selectedBranch ? selectedBranch.name : 'כל הסניפים');
 
-  // Per-branch stats (only for CEO and only if branches are known)
-  const branchStats: StatBlock[] = isCeo
+  const branchStats: StatBlock[] = isCeo && !selectedBranchId
     ? branches.map((b) =>
         computeStats(
           casesWithMeta.filter((c) => c.branch_id === b.id),
@@ -370,9 +379,33 @@ async function CasesDataSection({
   );
 }
 
+// Plain links (no client JS) so the selected branch is a real, shareable URL
+// and the whole page — title, stats, comparison table, list — re-renders
+// server-side for just that branch in one consistent pass.
+function BranchTabs({ branches, selectedId }: { branches: { id: string; name: string }[]; selectedId: string | null }) {
+  const tabCls = (active: boolean) =>
+    `px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+      active ? 'bg-brand-red text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+    }`;
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto mb-5 -mt-2">
+      <Link href="/cases" className={tabCls(!selectedId)}>הכל</Link>
+      {branches.map((b) => (
+        <Link key={b.id} href={`/cases?branch=${b.id}`} className={tabCls(selectedId === b.id)}>
+          {b.name}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 // ── Shell (renders immediately) ───────────────────────────────────────────────
 
-export default async function CasesPage() {
+export default async function CasesPage({
+  searchParams,
+}: {
+  searchParams: { branch?: string };
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -391,13 +424,23 @@ export default async function CasesPage() {
 
   const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
   const isCeo = role === 'CEO';
+  const selectedBranchId = searchParams.branch ?? null;
+
+  const { data: branchesData } = isCeo
+    ? await supabase.from('branches').select('id, name')
+    : { data: [] };
+  const branches = (branchesData ?? []) as { id: string; name: string }[];
+  const selectedBranch = selectedBranchId ? branches.find((b) => b.id === selectedBranchId) ?? null : null;
 
   return (
     <div>
       <div className="mb-6">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">תיקים פתוחים</h1>
+            <h1 className="text-2xl font-bold text-gray-800">
+              תיקים פתוחים
+              {selectedBranch && <span className="text-brand-red"> — {selectedBranch.name}</span>}
+            </h1>
           </div>
           {canCreate && (
             <CreateCaseButton
@@ -407,8 +450,12 @@ export default async function CasesPage() {
           )}
         </div>
 
-        <Suspense fallback={<CasesPageSkeleton />}>
-          <CasesDataSection role={role} branchId={branchId} isCeo={isCeo} />
+        {isCeo && branches.length > 0 && (
+          <BranchTabs branches={branches} selectedId={selectedBranchId} />
+        )}
+
+        <Suspense key={selectedBranchId ?? 'all'} fallback={<CasesPageSkeleton />}>
+          <CasesDataSection role={role} branchId={branchId} isCeo={isCeo} selectedBranchId={selectedBranchId} branches={branches} />
         </Suspense>
       </div>
     </div>

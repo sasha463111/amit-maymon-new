@@ -32,6 +32,13 @@ const PAINTER_STATUS_LABELS: Record<string, string> = {
   READY_FOR_RELEASE: 'מוכן לשחרור',
 };
 
+function formatCheckedAt(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('he-IL');
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return `סומן ב-${date}, ${time}`;
+}
+
 interface Props {
   caseId: string;
   caseKey: string | null;
@@ -39,6 +46,8 @@ interface Props {
   phone: string | null;
   painterStatus: string | null;
   partsArrived: boolean;
+  enteredWorkAt: string | null;
+  partsArrivedAt: string | null;
   openedAt: string | null;
   licensePlate: string | null;
   carMake: string | null;
@@ -157,6 +166,8 @@ export function PainterCaseClient({
   phone,
   painterStatus,
   partsArrived,
+  enteredWorkAt,
+  partsArrivedAt,
   openedAt,
   licensePlate,
   carMake,
@@ -173,6 +184,8 @@ export function PainterCaseClient({
     painterStatus === 'IN_WORK' || painterStatus === 'PARTS_ARRIVED' || painterStatus === 'READY_FOR_RELEASE'
   );
   const [partsArrivedLocal, setPartsArrivedLocal] = useState(partsArrived);
+  const [enteredWorkAtLocal, setEnteredWorkAtLocal] = useState(enteredWorkAt);
+  const [partsArrivedAtLocal, setPartsArrivedAtLocal] = useState(partsArrivedAt);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [checklistError, setChecklistError] = useState<string | null>(null);
 
@@ -191,9 +204,18 @@ export function PainterCaseClient({
     setChecklistError(null);
     setChecklistLoading(true);
 
-    const prev = { enteredWork, partsArrived: partsArrivedLocal };
-    if (field === 'enteredWork') setEnteredWork(value);
-    else setPartsArrivedLocal(value);
+    const prev = {
+      enteredWork, partsArrived: partsArrivedLocal,
+      enteredWorkAt: enteredWorkAtLocal, partsArrivedAt: partsArrivedAtLocal,
+    };
+    const optimisticAt = value ? new Date().toISOString() : null;
+    if (field === 'enteredWork') {
+      setEnteredWork(value);
+      setEnteredWorkAtLocal(optimisticAt);
+    } else {
+      setPartsArrivedLocal(value);
+      setPartsArrivedAtLocal(optimisticAt);
+    }
 
     const updates =
       field === 'enteredWork'
@@ -204,8 +226,17 @@ export function PainterCaseClient({
     if (res?.error) {
       setChecklistError(res.error);
       // Revert
-      if (field === 'enteredWork') setEnteredWork(prev.enteredWork);
-      else setPartsArrivedLocal(prev.partsArrived);
+      if (field === 'enteredWork') {
+        setEnteredWork(prev.enteredWork);
+        setEnteredWorkAtLocal(prev.enteredWorkAt);
+      } else {
+        setPartsArrivedLocal(prev.partsArrived);
+        setPartsArrivedAtLocal(prev.partsArrivedAt);
+      }
+    } else if (res?.at) {
+      // Sync to the server-computed timestamp so it matches what's persisted.
+      if (field === 'enteredWork' && value) setEnteredWorkAtLocal(res.at);
+      else if (field === 'partsArrived' && value) setPartsArrivedAtLocal(res.at);
     }
     setChecklistLoading(false);
   }
@@ -337,7 +368,11 @@ export function PainterCaseClient({
             />
             <div className="flex-1">
               <p className="font-medium text-gray-800">נכנס לעבודה</p>
-              <p className="text-xs text-gray-500">סמן כשהרכב נכנס לעבודה פעילה</p>
+              {enteredWork && enteredWorkAtLocal ? (
+                <p className="text-xs text-green-700">{formatCheckedAt(enteredWorkAtLocal)}</p>
+              ) : (
+                <p className="text-xs text-gray-500">סמן כשהרכב נכנס לעבודה פעילה</p>
+              )}
             </div>
             {enteredWork && <span className="text-green-600 font-bold text-lg">✓</span>}
           </label>
@@ -355,7 +390,11 @@ export function PainterCaseClient({
             />
             <div className="flex-1">
               <p className="font-medium text-gray-800">התקבל חלקים</p>
-              <p className="text-xs text-gray-500">סמן כשהחלקים הגיעו למוסך</p>
+              {partsArrivedLocal && partsArrivedAtLocal ? (
+                <p className="text-xs text-green-700">{formatCheckedAt(partsArrivedAtLocal)}</p>
+              ) : (
+                <p className="text-xs text-gray-500">סמן כשהחלקים הגיעו למוסך</p>
+              )}
             </div>
             {partsArrivedLocal && <span className="text-green-600 font-bold text-lg">✓</span>}
           </label>

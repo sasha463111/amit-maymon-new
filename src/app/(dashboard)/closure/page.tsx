@@ -45,6 +45,7 @@ export default async function ClosurePage() {
       `
       id,
       case_key,
+      customer_name,
       closed_at,
       opened_at,
       parts_status,
@@ -102,6 +103,7 @@ export default async function ClosurePage() {
             const row = c as {
               id: string;
               case_key: string | null;
+              customer_name: string | null;
               opened_at: string | null;
               parts_status: string | null;
               insurance_type: string | null;
@@ -124,7 +126,7 @@ export default async function ClosurePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-bold text-gray-900 truncate">
-                          {row.case_key ?? car?.license_plate ?? row.id}
+                          {row.customer_name ?? row.case_key ?? car?.license_plate ?? row.id}
                         </h3>
                         {row.insurance_type && (
                           <span className="flex-shrink-0 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">

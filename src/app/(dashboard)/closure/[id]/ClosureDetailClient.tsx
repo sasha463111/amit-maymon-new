@@ -84,11 +84,19 @@ const CLOSURE_CHECKLIST: Record<string, string[]> = {
 };
 
 type StepState = 'ACTIVE' | 'PENDING' | 'DONE' | 'SKIPPED';
-type StepRow = { id: string; step_key: string; state: StepState; order_index: number };
+type StepRow = { id: string; step_key: string; state: StepState; order_index: number; completed_at: string | null };
+
+function formatStepCompletedAt(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('he-IL');
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return `הושלם ב-${date}, ${time}`;
+}
 
 interface ClosureDetailClientProps {
   caseId: string;
   caseKey: string | null;
+  customerName: string | null;
   plate: string;
   carMake: string | null;
   carModel: string | null;
@@ -110,6 +118,7 @@ interface ClosureDetailClientProps {
 export function ClosureDetailClient({
   caseId,
   caseKey,
+  customerName,
   plate,
   carMake,
   carModel,
@@ -195,7 +204,7 @@ export function ClosureDetailClient({
 
       const { data: stepsData } = await supabase
         .from('case_workflow_steps')
-        .select('id, step_key, state, order_index')
+        .select('id, step_key, state, order_index, completed_at')
         .in('run_id', runIds)
         .order('order_index');
 
@@ -223,7 +232,7 @@ export function ClosureDetailClient({
 
       const { data: stepsData } = await supabase
         .from('case_workflow_steps')
-        .select('id, step_key, state, order_index')
+        .select('id, step_key, state, order_index, completed_at')
         .in('run_id', runIds)
         .order('order_index');
 
@@ -299,7 +308,7 @@ export function ClosureDetailClient({
 
     setLocalSteps(
       sorted.map((s) => {
-        if (s.id === step.id) return { ...s, state: 'DONE' };
+        if (s.id === step.id) return { ...s, state: 'DONE', completed_at: now };
         if (nextStep && s.id === nextStep.id) return { ...s, state: 'ACTIVE' };
         if (s.order_index > step.order_index && s.id !== nextStep?.id) return { ...s, state: 'PENDING' };
         return s;
@@ -316,7 +325,7 @@ export function ClosureDetailClient({
       if (runIds.length > 0) {
         const { data: updatedSteps } = await supabase
           .from('case_workflow_steps')
-          .select('id, step_key, state, order_index')
+          .select('id, step_key, state, order_index, completed_at')
           .in('run_id', runIds)
           .order('order_index');
 
@@ -342,7 +351,7 @@ export function ClosureDetailClient({
     if (!runIds.length) return;
     const { data } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index')
+      .select('id, step_key, state, order_index, completed_at')
       .in('run_id', runIds)
       .order('order_index');
     if (data) {
@@ -360,13 +369,14 @@ export function ClosureDetailClient({
     // Optimistic update: mark this step DONE + advance the next PENDING step
     // immediately so the user sees the change without waiting for the round-trip.
     const stepBeingCompleted = activeStep;
+    const completedAtOptimistic = new Date().toISOString();
     setLocalSteps((prev) => {
       const sorted = [...prev].sort((a, b) => a.order_index - b.order_index);
       const nextStep = sorted.find(
         (s) => s.order_index > stepBeingCompleted.order_index && s.state !== 'DONE'
       );
       return sorted.map((s) => {
-        if (s.id === stepBeingCompleted.id) return { ...s, state: 'DONE' };
+        if (s.id === stepBeingCompleted.id) return { ...s, state: 'DONE', completed_at: completedAtOptimistic };
         if (nextStep && s.id === nextStep.id) return { ...s, state: 'ACTIVE' };
         return s;
       });
@@ -414,13 +424,15 @@ export function ClosureDetailClient({
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
         <div className="flex items-start justify-between mb-5">
           <div>
-            {caseKey ? (
+            {customerName ? (
+              <h2 className="text-2xl font-bold text-gray-900">{customerName}</h2>
+            ) : caseKey ? (
               <h2 className="text-2xl font-bold text-gray-900">{caseKey}</h2>
             ) : (
               <LicensePlate plate={plate} size="lg" />
             )}
             <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
-              {caseKey && <LicensePlate plate={plate} size="sm" />}
+              {(customerName || caseKey) && <LicensePlate plate={plate} size="sm" />}
               <span>{carMake ? `${carMake} ${carModel ?? ''} · ` : ''}{branchName}</span>
             </div>
           </div>
@@ -489,41 +501,6 @@ export function ClosureDetailClient({
         )}
       </div>
 
-      {/* Dynamic checklist per claim type */}
-      {checklistItems.length > 0 && (
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <span>✅</span>
-            צ׳קליסט — {SUB_CLAIM_LABELS[subClaimType!] ?? subClaimType}
-          </h2>
-          <ul className="space-y-2">
-            {checklistItems.map((item, i) => (
-              <li key={i} className="flex items-center gap-3">
-                <label className="flex items-center gap-3 cursor-pointer group w-full">
-                  <input
-                    type="checkbox"
-                    checked={checkedItems[i] ?? false}
-                    onChange={() => handleChecklistChange(i)}
-                    className="w-5 h-5 rounded border-gray-300 text-brand-red focus:ring-brand-red cursor-pointer flex-shrink-0"
-                  />
-                  <span className={`text-sm transition-all ${checkedItems[i] ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-gray-900'}`}>
-                    {item}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-4 text-xs text-gray-400 flex items-center justify-between">
-            <span>{checkedItems.filter(Boolean).length} / {checklistItems.length} פריטים הושלמו</span>
-            {checklistSaveError ? (
-              <span className="text-red-600">⚠️ שמירה נכשלה: {checklistSaveError}</span>
-            ) : checklistSavedAt ? (
-              <span className="text-green-600">✓ נשמר</span>
-            ) : null}
-          </div>
-        </div>
-      )}
-
       {/* Closure workflow steps */}
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
         <div className="flex items-center justify-between mb-5">
@@ -550,11 +527,13 @@ export function ClosureDetailClient({
             const isActive = s.state === 'ACTIVE';
             const icon = STEP_ICONS[s.step_key] ?? '•';
             const label = STEP_LABELS[s.step_key] ?? s.step_key;
+            const hasNestedChecklist = s.step_key === 'CLOSURE_VERIFY_DETAILS_DOCS' && checklistItems.length > 0;
+            const checkedCount = checkedItems.filter(Boolean).length;
 
             return (
               <li
                 key={s.id}
-                className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
+                className={`p-4 rounded-xl border-2 transition-all ${
                   isDone
                     ? 'bg-green-50 border-green-200'
                     : isActive
@@ -562,42 +541,77 @@ export function ClosureDetailClient({
                       : 'bg-gray-50 border-gray-100 opacity-60'
                 }`}
               >
-                <div
-                  className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
-                    isDone
-                      ? 'bg-green-500 text-white'
-                      : isActive
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-400'
-                  }`}
-                >
-                  {isDone ? '✓' : icon}
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${
+                      isDone
+                        ? 'bg-green-500 text-white'
+                        : isActive
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200 text-gray-400'
+                    }`}
+                  >
+                    {isDone ? '✓' : icon}
+                  </div>
+
+                  <div className="flex-1">
+                    <p className={`text-sm font-semibold ${isDone ? 'text-green-700 line-through' : isActive ? 'text-blue-800' : 'text-gray-500'}`}>
+                      {label}
+                    </p>
+                    {isActive && !isDone && !hasNestedChecklist && (
+                      <p className="text-xs text-blue-500 mt-0.5">שלב נוכחי</p>
+                    )}
+                    {isDone && s.completed_at && (
+                      <p className="text-xs text-green-600 mt-0.5">{formatStepCompletedAt(s.completed_at)}</p>
+                    )}
+                  </div>
+
+                  <div className="flex-shrink-0">
+                    {isActive && !isDone && hasNestedChecklist ? (
+                      <span className="text-xs font-medium text-blue-600">
+                        {checkedCount} / {checklistItems.length}
+                      </span>
+                    ) : isDone ? (
+                      <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium border border-green-200">
+                        הושלם
+                      </span>
+                    ) : isActive ? (
+                      <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium border border-blue-200">
+                        בתהליך
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">שלב {idx + 1}</span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex-1">
-                  <p className={`text-sm font-semibold ${isDone ? 'text-green-700 line-through' : isActive ? 'text-blue-800' : 'text-gray-500'}`}>
-                    {label}
-                  </p>
-                  {isActive && !isDone && (
-                    <p className="text-xs text-blue-500 mt-0.5">שלב נוכחי</p>
-                  )}
-                </div>
-
-                <div className="flex-shrink-0">
-                  {isDone && (
-                    <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium border border-green-200">
-                      הושלם
-                    </span>
-                  )}
-                  {isActive && !isDone && (
-                    <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium border border-blue-200">
-                      בתהליך
-                    </span>
-                  )}
-                  {!isDone && !isActive && (
-                    <span className="text-gray-300 text-xs">שלב {idx + 1}</span>
-                  )}
-                </div>
+                {/* Insurance paperwork checklist — lives inside this step since it's what completing it actually means */}
+                {hasNestedChecklist && isActive && (
+                  <div className="mt-3 mr-14 pr-3 border-r-2 border-blue-200 space-y-1.5">
+                    {checklistItems.map((item, i) => (
+                      <label key={i} className="flex items-center gap-3 cursor-pointer group w-full">
+                        <input
+                          type="checkbox"
+                          checked={checkedItems[i] ?? false}
+                          onChange={() => handleChecklistChange(i)}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red cursor-pointer flex-shrink-0"
+                        />
+                        <span className={`text-xs transition-all ${checkedItems[i] ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-gray-900'}`}>
+                          {item}
+                        </span>
+                      </label>
+                    ))}
+                    {(checklistSaveError || checklistSavedAt) && (
+                      <div className="pt-1 text-xs">
+                        {checklistSaveError ? (
+                          <span className="text-red-600">⚠️ שמירה נכשלה: {checklistSaveError}</span>
+                        ) : (
+                          <span className="text-green-600">✓ נשמר</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}

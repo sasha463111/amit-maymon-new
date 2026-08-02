@@ -190,7 +190,17 @@ function CaseQuickView({ c, onClose }: { c: KanbanCase; onClose: () => void }) {
 
 export function CasesKanban({ cases, role }: { cases: KanbanCase[]; role: string | null }) {
   const [selected, setSelected] = useState<KanbanCase | null>(null);
+  const [previewPhase, setPreviewPhase] = useState<Phase | null>(null);
   void role; // may be used for future role-based filtering
+
+  useEffect(() => {
+    if (!previewPhase) return;
+    function close() {
+      setPreviewPhase(null);
+    }
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [previewPhase]);
 
   const byPhase = new Map<Phase, KanbanCase[]>();
   for (const phase of PHASES) byPhase.set(phase.key, []);
@@ -201,12 +211,49 @@ export function CasesKanban({ cases, role }: { cases: KanbanCase[]; role: string
       {PHASES.map((phase) => {
         const phaseCases = byPhase.get(phase.key) ?? [];
         return (
-          <div key={phase.key} className={`rounded-xl border ${phase.color} flex flex-col min-h-[12rem]`}>
+          <div key={phase.key} className={`relative rounded-xl border ${phase.color} flex flex-col min-h-[12rem]`}>
             {/* Column header */}
             <div className={`flex items-center justify-between px-3 py-2 rounded-t-xl ${phase.headerColor}`}>
               <span className="text-sm font-bold">{phase.label}</span>
-              <span className="text-xs font-semibold opacity-70">{phaseCases.length}</span>
+              <button
+                type="button"
+                title="הצג רשימה מהירה"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewPhase(previewPhase === phase.key ? null : phase.key);
+                }}
+                disabled={phaseCases.length === 0}
+                className="text-xs font-semibold opacity-70 hover:opacity-100 disabled:hover:opacity-70 px-1.5 py-0.5 rounded hover:bg-black/10 transition-colors"
+              >
+                {phaseCases.length}
+              </button>
             </div>
+
+            {/* Quick preview popover: compact list of this column's cards */}
+            {previewPhase === phase.key && phaseCases.length > 0 && (
+              <div
+                dir="rtl"
+                onClick={(e) => e.stopPropagation()}
+                className="absolute top-full left-0 right-0 mt-1 z-40 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto"
+              >
+                {phaseCases.map((c) => (
+                  <button
+                    type="button"
+                    key={c.id}
+                    onClick={() => {
+                      setSelected(c);
+                      setPreviewPhase(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-right hover:bg-gray-50 border-b border-gray-100 last:border-0 transition-colors"
+                  >
+                    <LicensePlate plate={c.plate} size="sm" />
+                    <span className="text-xs font-semibold text-gray-700 truncate flex-1">
+                      {c.customer_name ?? c.case_key ?? '—'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Cards */}
             <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-20rem)]">

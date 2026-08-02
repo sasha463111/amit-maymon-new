@@ -46,6 +46,26 @@ function getIcon(type: string | null): string {
   return (type && TYPE_ICON[type]) ?? '🔔';
 }
 
+// Semantic color per notification type: red = blocked/rejected, amber = needs
+// your action, green = positive/done, blue = neutral update, gray = other.
+const TYPE_COLOR: Record<string, string> = {
+  BLOCKED_ACTION: 'bg-red-100 text-red-700',
+  CEO_REJECTED: 'bg-red-100 text-red-700',
+  PENDING_APPROVAL: 'bg-amber-100 text-amber-700',
+  PAINTER_REQUEST: 'bg-amber-100 text-amber-700',
+  APPROVAL_NEEDED: 'bg-amber-100 text-amber-700',
+  EXTRA_CREATED: 'bg-amber-100 text-amber-700',
+  READY_FOR_OFFICE: 'bg-green-100 text-green-700',
+  PAINTER_READY_FOR_RELEASE: 'bg-green-100 text-green-700',
+  FINAL_ESTIMATE_UPLOADED: 'bg-green-100 text-green-700',
+  WASH_STARTED: 'bg-blue-100 text-blue-700',
+  EXTRA_STATUS_CHANGED: 'bg-blue-100 text-blue-700',
+};
+
+function getTypeColor(type: string | null): string {
+  return (type && TYPE_COLOR[type]) ?? 'bg-gray-100 text-gray-500';
+}
+
 function formatDate(s: string): string {
   const d = new Date(s);
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
@@ -292,7 +312,9 @@ export function NotificationsBell({ userId }: { userId: string }) {
                           clickable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'
                         } ${!n.read ? 'bg-red-50/30' : ''}`}
                       >
-                        <div className="text-xl shrink-0 leading-none mt-0.5">{getIcon(n.type)}</div>
+                        <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-base leading-none ${getTypeColor(n.type)}`}>
+                          {getIcon(n.type)}
+                        </div>
                         <div className="flex-1 min-w-0">
                           {/* Plate badge + customer name + title */}
                           <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
