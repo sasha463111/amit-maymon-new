@@ -382,7 +382,7 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 - **Repository:** GitHub (sasha463111/amit-maymon-new)
 - **Branch:** `main`
 - **CI/CD:** GitHub Actions (`.github/workflows/deploy.yml`) → Vercel auto-deploy על כל push ל-main
-- **Vercel Region:** `fra1` (Frankfurt — הכי קרוב לישראל)
+- **Vercel Region:** `iad1` (הועבר מ-fra1 כדי לעקוף replica lag ישן של Supabase — ראה commit c26b715. אל תחזיר ל-fra1.)
 
 ---
 

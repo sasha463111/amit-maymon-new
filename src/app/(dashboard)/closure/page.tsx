@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'חלקים זמינים', color: 'text-green-700 bg-green-50 border-green-200' },
@@ -44,6 +45,7 @@ export default async function ClosurePage() {
       `
       id,
       case_key,
+      customer_name,
       closed_at,
       opened_at,
       parts_status,
@@ -101,6 +103,7 @@ export default async function ClosurePage() {
             const row = c as {
               id: string;
               case_key: string | null;
+              customer_name: string | null;
               opened_at: string | null;
               parts_status: string | null;
               insurance_type: string | null;
@@ -123,7 +126,7 @@ export default async function ClosurePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-bold text-gray-900 truncate">
-                          {row.case_key ?? car?.license_plate ?? row.id}
+                          {row.customer_name ?? row.case_key ?? car?.license_plate ?? row.id}
                         </h3>
                         {row.insurance_type && (
                           <span className="flex-shrink-0 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
@@ -134,9 +137,8 @@ export default async function ClosurePage() {
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                         {car?.license_plate && (
-                          <span className="flex items-center gap-1">
-                            <span>🚗</span>
-                            <span className="font-medium text-gray-700">{car.license_plate}</span>
+                          <span className="flex items-center gap-2">
+                            <LicensePlate plate={car.license_plate} size="sm" />
                             {car.make && <span>{car.make} {car.model}</span>}
                           </span>
                         )}

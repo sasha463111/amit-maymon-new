@@ -87,7 +87,7 @@ async function notifyCeosPendingApproval(
       action_url: `/approvals`,
       triggered_by: triggeredBy,
     } as never);
-    void sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
+    await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
   }
   void pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
 }
@@ -300,7 +300,7 @@ export async function createCase(input: CreateCaseInput) {
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
+      await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
     }
     void pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
   }
@@ -413,7 +413,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
+      await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
       });
@@ -471,7 +471,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/approvals`,
           triggered_by: user.id,
         } as never);
-        void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
+        await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
         });
@@ -489,7 +489,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/approvals`,
           triggered_by: user.id,
         } as never);
-        void sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
+        await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
         });
@@ -590,7 +590,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/closure/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
+      await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
     void pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
 
@@ -688,7 +688,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/painters/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
+      await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
     void pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
   }
@@ -717,7 +717,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
+      await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
     }
     void pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
   }

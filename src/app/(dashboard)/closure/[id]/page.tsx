@@ -29,7 +29,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('id, case_key, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, closure_checklist_state, cars(license_plate, make, model), branches(name)')
+    .select('id, case_key, customer_name, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, closure_checklist_state, cars(license_plate, make, model), branches(name)')
     .eq('id', id)
     .single();
 
@@ -47,13 +47,13 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const existingRun = runData as { id: string } | null;
   let runId: string;
-  let steps: { id: string; step_key: string; state: 'ACTIVE' | 'PENDING' | 'DONE' | 'SKIPPED'; order_index: number }[] = [];
+  let steps: { id: string; step_key: string; state: 'ACTIVE' | 'PENDING' | 'DONE' | 'SKIPPED'; order_index: number; completed_at: string | null }[] = [];
 
   if (existingRun?.id) {
     runId = existingRun.id;
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index')
+      .select('id, step_key, state, order_index, completed_at')
       .eq('run_id', runId)
       .order('order_index');
     steps = stepsData ?? [];
@@ -78,7 +78,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     }
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index')
+      .select('id, step_key, state, order_index, completed_at')
       .eq('run_id', runId)
       .order('order_index');
     steps = stepsData ?? [];
@@ -116,6 +116,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const row = caseRow as {
     case_key: string | null;
+    customer_name: string | null;
     opened_at: string | null;
     parts_status: string | null;
     insurance_type: string | null;
@@ -130,6 +131,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     <ClosureDetailClient
       caseId={id}
       caseKey={row.case_key}
+      customerName={row.customer_name}
       plate={car?.license_plate ?? '—'}
       carMake={car?.make ?? null}
       carModel={car?.model ?? null}

@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
+import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Loader2 } from 'lucide-react';
 import type { ClaimType, SubClaimType } from '@/types/database';
 
 interface Branch {
@@ -54,6 +55,27 @@ export function CreateCaseButton({
     branch_id: branchId ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
+  const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
+
+  async function handlePlateBlur() {
+    const digits = form.plate_number.replace(/\D/g, '');
+    if (!digits) {
+      setVehicleLookupState('idle');
+      return;
+    }
+    setVehicleLookupState('loading');
+    const res = await lookupVehicleByPlate(form.plate_number);
+    if (res.error || (!res.vehicle_type && !res.vehicle_year)) {
+      setVehicleLookupState('not-found');
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      vehicle_type: res.vehicle_type ?? f.vehicle_type,
+      vehicle_year: res.vehicle_year ? String(res.vehicle_year) : f.vehicle_year,
+    }));
+    setVehicleLookupState('found');
+  }
 
   // Calculate vehicle age from year
   const vehicleAge = form.vehicle_year
@@ -204,7 +226,11 @@ export function CreateCaseButton({
                       type="text"
                       required
                       value={form.plate_number}
-                      onChange={(e) => set('plate_number', e.target.value)}
+                      onChange={(e) => {
+                        set('plate_number', e.target.value);
+                        setVehicleLookupState('idle');
+                      }}
+                      onBlur={handlePlateBlur}
                       className={inputCls}
                       dir="ltr"
                       placeholder="12-345-67"
@@ -212,7 +238,17 @@ export function CreateCaseButton({
                     />
                   </div>
                   <div>
-                    <label className={labelCls}>סוג רכב</label>
+                    <label className={labelCls}>
+                      סוג רכב
+                      {vehicleLookupState === 'loading' && (
+                        <span className="mr-2 inline-flex items-center gap-1 text-xs font-normal text-gray-400">
+                          <Loader2 size={12} className="animate-spin" /> מאתר במשרד התחבורה...
+                        </span>
+                      )}
+                      {vehicleLookupState === 'not-found' && (
+                        <span className="mr-2 text-xs font-normal text-amber-600">לא נמצא ברשימת משרד התחבורה</span>
+                      )}
+                    </label>
                     <input
                       type="text"
                       value={form.vehicle_type}

@@ -22,6 +22,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
     .from('cases')
     .select(`
       id, case_key, customer_name, phone, painter_status, parts_arrived,
+      painter_entered_work_at, parts_arrived_at,
       opened_at,
       cars(license_plate, make, model, year),
       branches(name)
@@ -39,6 +40,8 @@ export default async function PainterCasePage({ params }: { params: { id: string
     phone: string | null;
     painter_status: string | null;
     parts_arrived: boolean | null;
+    painter_entered_work_at: string | null;
+    parts_arrived_at: string | null;
     opened_at: string | null;
     cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null } | null;
     branches: { name: string } | null;
@@ -103,6 +106,8 @@ export default async function PainterCasePage({ params }: { params: { id: string
       phone={c.phone}
       painterStatus={c.painter_status}
       partsArrived={c.parts_arrived ?? false}
+      enteredWorkAt={c.painter_entered_work_at}
+      partsArrivedAt={c.parts_arrived_at}
       openedAt={c.opened_at}
       licensePlate={car?.license_plate ?? null}
       carMake={car?.make ?? null}

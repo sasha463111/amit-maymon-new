@@ -25,12 +25,15 @@ export async function updatePainterChecklist(
   }
 
   // Map painter_entered_work → painter_status
+  const now = new Date().toISOString();
   const caseUpdates: Record<string, unknown> = {};
   if (updates.painter_entered_work !== undefined) {
     caseUpdates.painter_status = updates.painter_entered_work ? 'IN_WORK' : 'WAITING_PARTS';
+    caseUpdates.painter_entered_work_at = updates.painter_entered_work ? now : null;
   }
   if (updates.parts_arrived !== undefined) {
     caseUpdates.parts_arrived = updates.parts_arrived;
+    caseUpdates.parts_arrived_at = updates.parts_arrived ? now : null;
     if (updates.parts_arrived) caseUpdates.painter_status = 'PARTS_ARRIVED';
   }
 
@@ -71,14 +74,14 @@ export async function updatePainterChecklist(
         action_url: `/painters/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
+      await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
     }
     void pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
   }
 
   revalidatePath(`/painters/${caseId}`);
   revalidatePath(`/cases/${caseId}`);
-  return { ok: true, error: null };
+  return { ok: true, error: null, at: now };
 }
 
 /** Create a painter request (free text + optional images) and notify bodywork advisors */
@@ -164,7 +167,7 @@ export async function createPainterRequest(
       action_url: `/painters/${caseId}`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
+    await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
   }
   void pushToOverseers({ title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` }, user.id);
 
@@ -255,7 +258,7 @@ export async function updatePainterRequestStatus(
       action_url: `/painters/${req.case_id}`,
       triggered_by: user.id,
     } as never);
-    void sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
+    await sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
   }
 
   return { ok: true, error: null };

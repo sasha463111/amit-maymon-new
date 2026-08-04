@@ -1,33 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-
-const PAINTER_STATUS_LABELS: Record<string, string> = {
-  IN_WORK: 'בעבודה',
-  WAITING_PARTS: 'ממתין לחלקים',
-  PARTS_ARRIVED: 'הגיעו חלקים',
-  READY_FOR_RELEASE: 'מוכן לשחרור',
-};
-
-const PAINTER_STATUS_COLORS: Record<string, string> = {
-  IN_WORK: 'bg-blue-100 text-blue-800',
-  WAITING_PARTS: 'bg-yellow-100 text-yellow-800',
-  PARTS_ARRIVED: 'bg-purple-100 text-purple-800',
-  READY_FOR_RELEASE: 'bg-green-100 text-green-800',
-};
-
-const PAINTER_STATUS_BG: Record<string, string> = {
-  IN_WORK: 'bg-blue-100',
-  WAITING_PARTS: 'bg-yellow-100',
-  PARTS_ARRIVED: 'bg-purple-100',
-  READY_FOR_RELEASE: 'bg-green-100',
-};
-
-const PAINTER_STATUS_TEXT: Record<string, string> = {
-  IN_WORK: 'text-blue-700',
-  WAITING_PARTS: 'text-yellow-700',
-  PARTS_ARRIVED: 'text-purple-700',
-  READY_FOR_RELEASE: 'text-green-700',
-};
+import { PaintersBoard, type PainterRow } from './PaintersBoard';
 
 export default async function PaintersPage() {
   const supabase = await createClient();
@@ -61,7 +34,7 @@ export default async function PaintersPage() {
     .is('deleted_at', null)
     .order('opened_at', { ascending: false });
 
-  const rows = (cases ?? []) as {
+  const rawRows = (cases ?? []) as {
     id: string;
     case_key: string | null;
     customer_name: string | null;
@@ -72,25 +45,23 @@ export default async function PaintersPage() {
     branches: { name: string } | { name: string }[] | null;
   }[];
 
-  // Group by painter_status
-  const groups: Record<string, typeof rows> = {
-    READY_FOR_RELEASE: [],
-    PARTS_ARRIVED: [],
-    WAITING_PARTS: [],
-    IN_WORK: [],
-    '': [],
-  };
-
-  for (const row of rows) {
-    const key = row.painter_status ?? '';
-    if (groups[key] !== undefined) {
-      groups[key].push(row);
-    } else {
-      groups[''].push(row);
-    }
-  }
-
-  const statusOrder = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', ''];
+  const rows: PainterRow[] = rawRows.map((row) => {
+    const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
+    const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+    return {
+      id: row.id,
+      case_key: row.case_key,
+      customer_name: row.customer_name,
+      painter_status: row.painter_status,
+      appraiser_name: row.appraiser_name,
+      opened_at: row.opened_at,
+      license_plate: car?.license_plate ?? null,
+      car_make: car?.make ?? null,
+      car_model: car?.model ?? null,
+      car_year: car?.year ?? null,
+      branch_name: branch?.name ?? null,
+    };
+  });
 
   return (
     <div className="space-y-6" dir="rtl">
@@ -101,103 +72,7 @@ export default async function PaintersPage() {
         </div>
       </div>
 
-      {/* Summary badges */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {Object.entries(PAINTER_STATUS_LABELS).map(([key, label]) => {
-          const count = groups[key]?.length ?? 0;
-          return (
-            <div key={key} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 mb-1">{label}</p>
-                <p className={`text-2xl font-bold ${PAINTER_STATUS_TEXT[key] ?? 'text-gray-700'}`}>{count}</p>
-              </div>
-              <div className={`w-10 h-10 rounded-full ${PAINTER_STATUS_BG[key] ?? 'bg-gray-100'} flex items-center justify-center`}>
-                <span className={`text-lg font-black ${PAINTER_STATUS_TEXT[key] ?? 'text-gray-500'}`}>{count}</span>
-              </div>
-            </div>
-          );
-        })}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">ללא סטטוס</p>
-            <p className="text-2xl font-bold text-gray-500">{groups['']?.length ?? 0}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Groups */}
-      {statusOrder.map((statusKey) => {
-        const groupRows = groups[statusKey];
-        if (!groupRows || groupRows.length === 0) return null;
-        const label = statusKey ? PAINTER_STATUS_LABELS[statusKey] : 'ללא סטטוס פחח';
-        const colorCls = statusKey ? PAINTER_STATUS_COLORS[statusKey] : 'bg-gray-100 text-gray-600';
-
-        return (
-          <div key={statusKey} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className={`px-5 py-3 flex items-center gap-3 border-b border-gray-100`}>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold ${colorCls}`}>{label}</span>
-              <span className="text-sm text-gray-400">{groupRows.length} תיקים</span>
-            </div>
-            <div className="divide-y divide-gray-50">
-              {groupRows.map((row) => {
-                const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
-                const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
-                return (
-                  <a
-                    key={row.id}
-                    href={`/painters/${row.id}`}
-                    className="block px-4 py-3 sm:px-5 sm:py-4 hover:bg-gray-50 transition-colors"
-                  >
-                    {/* MOBILE: stacked card */}
-                    <div className="sm:hidden space-y-1.5">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-bold text-gray-900 text-base truncate" title={row.customer_name ?? ''}>
-                          {row.customer_name ?? '—'}
-                        </span>
-                        <span className="font-mono text-xs text-primary-container shrink-0" dir="ltr">
-                          {car?.license_plate ?? '—'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {[car?.make, car?.model, car?.year].filter(Boolean).join(' ') || '—'}
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-gray-400">
-                        <span>{row.appraiser_name ? `שמאי: ${row.appraiser_name}` : ''}</span>
-                        <span>
-                          {branch?.name && `${branch.name} · `}
-                          {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : ''}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* DESKTOP: row */}
-                    <div className="hidden sm:flex items-center gap-4">
-                      <span className="font-bold text-primary-container text-sm w-24 shrink-0" dir="ltr">
-                        {car?.license_plate ?? '—'}
-                      </span>
-                      <span className="text-sm font-semibold text-gray-800 w-36 shrink-0 truncate" title={row.customer_name ?? ''}>
-                        {row.customer_name ?? '—'}
-                      </span>
-                      <span className="text-sm text-gray-600 flex-1 font-medium">
-                        {[car?.make, car?.model, car?.year].filter(Boolean).join(' ')}
-                      </span>
-                      <span className="text-xs text-gray-400 w-24 shrink-0 truncate">
-                        {row.appraiser_name ?? '—'}
-                      </span>
-                      <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
-                        {branch?.name ?? '—'}
-                      </span>
-                      <span className="text-xs text-gray-400 w-20 shrink-0 text-left">
-                        {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : '—'}
-                      </span>
-                    </div>
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+      <PaintersBoard rows={rows} />
     </div>
   );
 }

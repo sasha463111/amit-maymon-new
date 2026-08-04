@@ -95,7 +95,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         action_url: `/cases/${approval.case_id}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
+      await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
     void pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
   } else if (input.status === 'APPROVED') {
@@ -114,7 +114,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         action_url: `/cases/${approval.case_id}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
+      await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
     void pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
   }

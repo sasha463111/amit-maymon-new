@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { restoreCase } from '@/app/actions/workflow';
 import { RotateCcw, FileText, Search, Clock, CheckCircle2, Trash2, ArrowUpDown } from 'lucide-react';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 export type ArchiveRow = {
   id: string;
@@ -213,9 +214,9 @@ export function ArchiveTabs({
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-base font-semibold text-gray-900 truncate">{r.customer}</p>
-                      <p className="text-xs text-gray-500 mt-0.5" dir="ltr">
-                        {r.plate}
-                        {r.claim !== '—' && <span className="text-gray-400"> · {r.claim}</span>}
+                      <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
+                        <LicensePlate plate={r.plate} size="sm" />
+                        {r.claim !== '—' && <span className="text-gray-400">· {r.claim}</span>}
                       </p>
                     </div>
                     {days !== null && (
@@ -298,7 +299,7 @@ export function ArchiveTabs({
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-gray-800 text-xs" dir="ltr">{r.plate}</td>
+                      <td className="px-4 py-3"><LicensePlate plate={r.plate} size="sm" /></td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{r.claim}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{r.insurance ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{r.branch_name}</td>

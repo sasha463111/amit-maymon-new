@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const STATUS_LABELS: Record<string, string> = {
   IN_TREATMENT: 'בטיפול',
@@ -140,7 +141,9 @@ export default async function ExtrasMinePage() {
                     <p className="font-bold text-gray-800 text-sm truncate">
                       {e.customer_name ?? e.case_key ?? e.plate}
                     </p>
-                    <p className="text-xs text-gray-500" dir="ltr">{e.plate}</p>
+                    {e.plate !== '—' && (
+                      <div className="mt-0.5"><LicensePlate plate={e.plate} size="sm" /></div>
+                    )}
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${STATUS_COLORS[e.status] ?? 'bg-gray-100 text-gray-700'}`}>
                     {STATUS_LABELS[e.status] ?? e.status}
