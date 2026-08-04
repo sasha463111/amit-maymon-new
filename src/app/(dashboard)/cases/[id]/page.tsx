@@ -360,11 +360,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_id, sees_all_branches')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const profile = profileData as { role: string; branch_id: string | null; sees_all_branches?: boolean } | null;
 
   // Case fetch — needed for access control and to pass data to CaseDetailData
   let caseRow: CaseRowMinimal | null = null;
@@ -397,7 +397,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
   if (!caseRow) notFound();
 
   const branchId = caseRow.branch_id;
-  if (profile?.role !== 'CEO' && profile?.branch_id !== branchId) notFound();
+  if (profile?.role !== 'CEO' && !profile?.sees_all_branches && profile?.branch_id !== branchId) notFound();
 
   return (
     <Suspense fallback={<CaseDetailSkeleton />}>

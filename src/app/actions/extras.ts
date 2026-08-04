@@ -1,7 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { branchRecipients } from '@/lib/recipients';
 import type { CreateExtraInput, UpdateExtraStatusInput } from '@/types/database';
 
 export async function createExtra(input: CreateExtraInput) {
@@ -41,14 +42,11 @@ export async function createExtra(input: CreateExtraInput) {
     .eq('id', input.case_id)
     .single();
   const branchId = (caseData as { branch_id: string } | null)?.branch_id;
-  const { data: managers } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('role', 'SERVICE_MANAGER')
-    .eq('branch_id', branchId ?? '');
+  const managers = (await branchRecipients(supabase, branchId))
+    .filter((p) => p.role === 'SERVICE_MANAGER');
   const extraTitle = 'תוספת חדשה';
   const extraBody = input.description;
-  for (const m of (managers ?? []) as { id: string }[]) {
+  for (const m of managers) {
     await supabase.from('notifications').insert({
       user_id: m.id,
       case_id: input.case_id,
@@ -60,6 +58,7 @@ export async function createExtra(input: CreateExtraInput) {
     } as never);
     void sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
   }
+  void pushToOverseers({ title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id);
 
   await supabase.from('audit_events').insert({
     entity_type: 'EXTRA',

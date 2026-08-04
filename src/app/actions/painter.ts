@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { branchRecipients } from '@/lib/recipients';
 
 /** Update painter checklist fields on the case */
 export async function updatePainterChecklist(
@@ -50,25 +51,15 @@ export async function updatePainterChecklist(
     const c = caseData as { branch_id: string; case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | null } | null;
     const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
     const customer = c?.customer_name?.trim() || plate;
-    const { data: painters } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('branch_id', c?.branch_id ?? '')
-      .eq('role', 'PAINTER')
-      .eq('is_active', true);
-    let recipients = (painters ?? []) as { id: string }[];
+    const branchUsers = await branchRecipients(supabase, c?.branch_id);
+    let recipients = branchUsers.filter((p) => p.role === 'PAINTER').map((p) => ({ id: p.id }));
     if (recipients.length === 0) {
-      const { data: fallbackStaff } = await supabase
-        .from('profiles')
-        .select('id, role, is_bodywork_advisor')
-        .eq('branch_id', c?.branch_id ?? '')
-        .eq('is_active', true);
-      recipients = ((fallbackStaff ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+      recipients = branchUsers
         .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
         .map((p) => ({ id: p.id }));
     }
     const title = 'חלקים הגיעו';
-    const body = `${customer} · ${plate} — אפשר להמשיך בעבודה`;
+    const body = `${customer} · ${plate} - אפשר להמשיך בעבודה`;
     for (const p of recipients) {
       if (p.id === user.id) continue;
       await supabase.from('notifications').insert({
@@ -82,6 +73,7 @@ export async function updatePainterChecklist(
       } as never);
       void sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
     }
+    void pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
   }
 
   revalidatePath(`/painters/${caseId}`);
@@ -154,16 +146,12 @@ export async function createPainterRequest(
   const c = caseData as { branch_id: string; case_key: string | null; cars: { license_plate: string | null } | null } | null;
   const plateLabel = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
 
-  const { data: branchUsers } = await supabase
-    .from('profiles')
-    .select('id, role, is_bodywork_advisor')
-    .eq('branch_id', c?.branch_id ?? '')
-    .eq('is_active', true);
-  const advisors = ((branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+  const branchUsers = await branchRecipients(supabase, c?.branch_id);
+  const advisors = branchUsers
     .filter((p) => p.is_bodywork_advisor === true || p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR');
 
   const typeLabel = requestType === 'WORK' ? 'עבודה' : 'חלקים';
-  const reqTitle = `בקשת פחח — ${typeLabel}`;
+  const reqTitle = `בקשת פחח - ${typeLabel}`;
   const reqBody = `רכב ${plateLabel}: ${description.trim()}`;
   for (const adv of advisors) {
     if (adv.id === user.id) continue;
@@ -178,6 +166,7 @@ export async function createPainterRequest(
     } as never);
     void sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
   }
+  void pushToOverseers({ title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` }, user.id);
 
   revalidatePath(`/painters/${caseId}`);
   return { ok: true, requestId: reqId, error: null };

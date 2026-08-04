@@ -1,11 +1,100 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   Tehila Bodyshop CRM — Design System tokens (from Claude Design handoff).
+   Warm paper neutrals (never pure white/black) + petrol functional accent +
+   brand-red identity + a 6-state semantic status system. OKLCH throughout.
+   These CSS vars back both direct usage (var(--accent)) and the Tailwind
+   palette remap in tailwind.config.ts.
+   =========================================================================== */
+:root {
+  /* Fonts (Heebo + JetBrains Mono are wired via next/font in layout.tsx) */
+  --font-sans: var(--font-heebo), "Heebo", "Assistant", "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", "SFMono-Regular", "Menlo", monospace;
+
+  /* Warm neutral ramp (paper / stone, hue ~50) */
+  --stone-50:  oklch(0.987 0.004 60);
+  --stone-100: oklch(0.972 0.005 58);
+  --stone-150: oklch(0.952 0.006 56);
+  --stone-200: oklch(0.925 0.007 54);
+  --stone-300: oklch(0.872 0.009 50);
+  --stone-400: oklch(0.745 0.010 46);
+  --stone-500: oklch(0.605 0.012 44);
+  --stone-600: oklch(0.505 0.013 42);
+  --stone-700: oklch(0.400 0.013 40);
+  --stone-800: oklch(0.305 0.013 38);
+  --stone-900: oklch(0.225 0.012 36);
+  --stone-950: oklch(0.165 0.011 34);
+
+  /* Brand red — תהילה identity (logo, wordmark, brand surfaces) */
+  --brand-red:        oklch(0.505 0.155 27);
+  --brand-red-strong: oklch(0.430 0.160 27);
+  --brand-red-soft:   oklch(0.945 0.030 30);
+  --brand-red-on:     oklch(0.985 0.006 40);
+
+  /* Accent — petrol (functional: primary action, active, links, focus) */
+  --accent:        oklch(0.480 0.088 218);
+  --accent-strong: oklch(0.415 0.092 220);
+  --accent-soft:   oklch(0.955 0.022 212);
+  --accent-text:   oklch(0.400 0.090 219);
+  --accent-on:     oklch(0.990 0.005 210);
+  --accent-ring:   oklch(0.480 0.088 218 / 0.40);
+
+  /* Semantic status system (core of the product) */
+  --status-done:       oklch(0.575 0.120 156);
+  --status-done-soft:  oklch(0.950 0.040 158);
+  --status-done-text:  oklch(0.430 0.105 156);
+  --status-active:      var(--accent);
+  --status-active-soft: var(--accent-soft);
+  --status-active-text: var(--accent-text);
+  --status-waiting:      oklch(0.745 0.125 78);
+  --status-waiting-soft: oklch(0.955 0.050 82);
+  --status-waiting-text: oklch(0.470 0.090 68);
+  --status-skipped:      oklch(0.660 0.013 48);
+  --status-skipped-soft: oklch(0.950 0.006 52);
+  --status-skipped-text: oklch(0.505 0.013 44);
+  --status-blocked:      oklch(0.640 0.150 50);
+  --status-blocked-soft: oklch(0.955 0.050 56);
+  --status-blocked-text: oklch(0.475 0.130 47);
+  --status-rejected:      oklch(0.555 0.190 25);
+  --status-rejected-soft: oklch(0.950 0.038 24);
+  --status-rejected-text: oklch(0.465 0.170 25);
+
+  /* Surface / text aliases */
+  --bg-app:         var(--stone-100);
+  --surface-card:   var(--stone-50);
+  --surface-sunk:   var(--stone-150);
+  --surface-raised: oklch(1 0 0);
+  --text-strong:    var(--stone-900);
+  --text-body:      var(--stone-700);
+  --text-muted:     var(--stone-500);
+  --text-faint:     var(--stone-400);
+  --border-hair:    var(--stone-200);
+  --border-default: var(--stone-300);
+  --border-strong:  var(--stone-400);
+  --focus-ring:     var(--accent-ring);
+
+  /* Radii, shadows, motion */
+  --radius-sm: 6px;  --radius-md: 10px;  --radius-lg: 14px;  --radius-xl: 18px;  --radius-pill: 999px;
+  --shadow-xs:  0 1px 2px oklch(0.3 0.02 40 / 0.06);
+  --shadow-sm:  0 1px 3px oklch(0.3 0.02 40 / 0.08), 0 1px 2px oklch(0.3 0.02 40 / 0.05);
+  --shadow-md:  0 4px 10px oklch(0.3 0.02 40 / 0.08), 0 1px 3px oklch(0.3 0.02 40 / 0.06);
+  --shadow-lg:  0 12px 28px oklch(0.3 0.02 40 / 0.12), 0 4px 8px oklch(0.3 0.02 40 / 0.06);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ls-plate: 0.06em;
+}
+
 @layer base {
   body {
     @apply antialiased;
+    background-color: var(--bg-app);
+    color: var(--text-body);
+    font-family: var(--font-sans);
   }
+  h1, h2, h3, h4 { color: var(--text-strong); }
   /* Respect EXIF orientation on uploaded photos. iPhone landscape shots
      have orientation metadata; without this they render sideways on
      iPad/desktop where other browsers ignore the EXIF tag. */
@@ -18,4 +107,7 @@
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+  /* Plate / catalog-number metrics */
+  .font-mono, .tabular { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+  .plate-track { letter-spacing: var(--ls-plate); }
 }

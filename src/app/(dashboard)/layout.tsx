@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
+import { PushEnableBanner } from '@/components/PushEnableBanner';
 import { SidebarNav } from '@/components/SidebarNav';
 import { LogOut, Eye } from 'lucide-react';
 import { getViewAsState } from '@/app/actions/users';
@@ -123,6 +124,9 @@ export default async function DashboardLayout({
           <StopViewAsButton />
         </div>
       )}
+
+      {/* Prominent push-enable nudge — shows for anyone not yet subscribed */}
+      {!isPreview && <PushEnableBanner />}
 
       {/* Top header with brand + nav + user */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">

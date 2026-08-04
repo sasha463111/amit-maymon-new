@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { branchRecipients } from '@/lib/recipients';
 import type { ApprovalDecisionInput } from '@/types/database';
 
 const APPROVAL_TYPE_LABELS: Record<string, string> = {
@@ -80,14 +81,11 @@ export async function decideApproval(input: ApprovalDecisionInput) {
   const approvalTypeLabel = APPROVAL_TYPE_LABELS[(approvalTypeRow as { approval_type: string } | null)?.approval_type ?? ''] ?? 'אישור';
 
   if (input.status === 'REJECTED') {
-    const { data: managers } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'SERVICE_MANAGER')
-      .eq('branch_id', branchId);
+    const managers = (await branchRecipients(supabase, branchId))
+      .filter((p) => p.role === 'SERVICE_MANAGER');
     const rejTitle = `${approvalTypeLabel} נדחה`;
-    const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} — עמית דחה את האישור`;
-    for (const m of (managers ?? []) as { id: string }[]) {
+    const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - עמית דחה את האישור`;
+    for (const m of managers) {
       await supabase.from('notifications').insert({
         user_id: m.id,
         case_id: approval.case_id,
@@ -99,16 +97,14 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       } as never);
       void sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
+    void pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
-    const { data: managers } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'SERVICE_MANAGER')
-      .eq('branch_id', branchId);
+    const managers = (await branchRecipients(supabase, branchId))
+      .filter((p) => p.role === 'SERVICE_MANAGER');
     const okTitle = `${approvalTypeLabel} אושר ✓`;
-    const okBody = `רכב ${plateLabel} — עמית אישר. אפשר להמשיך בטיפול.`;
-    for (const m of (managers ?? []) as { id: string }[]) {
+    const okBody = `רכב ${plateLabel} - עמית אישר. אפשר להמשיך בטיפול.`;
+    for (const m of managers) {
       await supabase.from('notifications').insert({
         user_id: m.id,
         case_id: approval.case_id,
@@ -120,6 +116,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       } as never);
       void sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
+    void pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
   }
 
   // Auto-complete READY_FOR_OFFICE when all required approvals are approved

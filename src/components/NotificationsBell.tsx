@@ -150,15 +150,35 @@ export function NotificationsBell({ userId }: { userId: string }) {
     }
   }
 
-  // Poll every 10s
+  // Real-time: fire the instant a notification for me is inserted/updated.
+  // Plus an immediate reload on app/tab focus (intervals are throttled while
+  // backgrounded — the main cause of the "big delay") and a slow backstop poll.
   useEffect(() => {
     if (!userId) return;
     void loadRows();
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
-    const id = setInterval(() => void loadRows(), 10000);
-    return () => clearInterval(id);
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`notif-${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, () => void loadRows())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, () => void loadRows())
+      .subscribe();
+
+    const onVisible = () => { if (document.visibilityState === 'visible') void loadRows(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    const id = setInterval(() => void loadRows(), 20000);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      void supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -193,9 +213,13 @@ export function NotificationsBell({ userId }: { userId: string }) {
         setUnreadCount((c) => c + 1);
       });
     }
-    // Navigate: prefer action_url; fall back to /cases/{id}
-    if (n.action_url) router.push(n.action_url);
-    else if (n.case_id) router.push(`/cases/${n.case_id}`);
+    // Navigate. For case-related notifications route through /go/{caseId},
+    // which forwards each role to a page it can actually open (painters → the
+    // painter view, everyone else → the case detail). A stored action_url like
+    // /painters/{id} is otherwise unreachable for a service advisor and bounced
+    // them off the case. Non-case notifications (e.g. /approvals) use action_url.
+    if (n.case_id) router.push(`/go/${n.case_id}`);
+    else if (n.action_url) router.push(n.action_url);
   }
 
   async function handleMarkAll() {

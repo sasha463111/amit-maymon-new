@@ -64,9 +64,14 @@ export function CreateCaseButton({
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  // Cross-branch staff (sees_all_branches → no fixed branch) and CEOs have no
+  // default branch, so they must pick one — otherwise branch_id is empty and
+  // createCase rejects it with "סניף לא תקין".
+  const needsBranchPicker = isCeo || !branchId;
+
   async function handleOpen() {
     setOpen(true);
-    if (isCeo && branches.length === 0) {
+    if (needsBranchPicker && branches.length === 0) {
       const supabase = createClient();
       const { data } = await supabase.from('branches').select('id, name');
       const loaded = (data ?? []) as Branch[];
@@ -354,8 +359,8 @@ export function CreateCaseButton({
                 </div>
               </div>
 
-              {/* ── סניף (CEO בלבד) ── */}
-              {isCeo && (
+              {/* ── סניף (CEO + צוות חוצה-סניפים) ── */}
+              {needsBranchPicker && (
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">סניף</p>
                   {branches.length > 0 ? (

@@ -1,7 +1,30 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 import webpush from 'web-push';
+
+/**
+ * A server-only Supabase client keyed with the service-role secret. It bypasses
+ * RLS — which is required to READ another user's push subscriptions.
+ *
+ * Why this is necessary: push_subscriptions RLS is `user_id = auth.uid() OR CEO`.
+ * When a non-CEO actor (a painter opening a request, a manager completing WASH)
+ * triggers a push to someone else, the RLS-bound client sees ZERO of the
+ * recipient's subscriptions, so no push is ever delivered — the recipient only
+ * notices when they next open the app. That was the "huge delay" in the field.
+ *
+ * The service key lives only in server env (Vercel), never NEXT_PUBLIC, so it is
+ * never shipped to the browser. Falls back to null if unset (older/local envs),
+ * in which case callers degrade to the RLS client.
+ */
+function getServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient<Database>(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
 let vapidConfigured = false;
 function configureVapid() {
@@ -182,12 +205,12 @@ export async function sendTestPushToSelf(): Promise<{ ok?: boolean; error?: stri
     .eq('user_id', user.id);
 
   if (!subs || subs.length === 0) {
-    return { error: 'אין הרשמת push פעילה — לחץ על "הפעל התראות" בפעמון תחילה' };
+    return { error: 'אין הרשמת push פעילה - לחץ על "הפעל התראות" בפעמון תחילה' };
   }
 
   const result = await sendPushToUser(user.id, {
     title: '✅ Push test',
-    body: 'אם הודעה זו הגיעה לטלפון שלך — הכל עובד.',
+    body: 'אם הודעה זו הגיעה לטלפון שלך - הכל עובד.',
     url: '/notifications',
     tag: 'test-push',
   });
@@ -207,13 +230,19 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
   configureVapid();
   if (!vapidConfigured) return { sent: 0, failed: 0 };
 
-  const supabase = await createClient();
-  const { data: subs } = await supabase
+  // Read subscriptions with the service-role client so we can see the
+  // RECIPIENT's subscriptions even when the acting user isn't them (and isn't a
+  // CEO). Falls back to the RLS client only if the service key is missing.
+  const db = getServiceClient() ?? (await createClient());
+  const { data: subs } = await db
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
     .eq('user_id', userId);
 
-  if (!subs || subs.length === 0) return { sent: 0, failed: 0 };
+  if (!subs || subs.length === 0) {
+    console.log('[push] no subscriptions for', userId);
+    return { sent: 0, failed: 0 };
+  }
 
   const body = JSON.stringify(payload);
   let sent = 0;
@@ -226,7 +255,10 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body,
-          { TTL: 60 * 60 * 24 }
+          // urgency:'high' → Apple's relay sets apns-priority 10 = "deliver
+          // immediately and trigger a user-visible alert" (banner/lock screen).
+          // The web-push default is 'normal', which can be delivered quietly.
+          { TTL: 60 * 60 * 24, urgency: 'high' }
         );
         sent++;
         console.log('[push] sent ok to', s.endpoint.slice(0, 60));
@@ -245,9 +277,35 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
   );
 
   if (expired.length > 0) {
-    await supabase.from('push_subscriptions').delete().in('id', expired);
+    await db.from('push_subscriptions').delete().in('id', expired);
   }
 
   console.log('[push] sendPushToUser done for', userId, '— sent:', sent, 'failed:', failed);
   return { sent, failed };
+}
+
+/**
+ * Push a notification to every active CEO and SERVICE_ADVISOR — the "overseers"
+ * who must be alerted about everything — except the user who triggered it.
+ *
+ * The in-app copies for these roles are created by the DB fan-out trigger
+ * (migration 031), but that trigger cannot send web push. This is the push side
+ * of that same guarantee, so the CEO and the service advisor get a push for
+ * every event, not just the ones their role is the direct target of. Reads the
+ * overseer list with the service client (bypasses RLS). Fire-and-forget.
+ */
+export async function pushToOverseers(
+  payload: { title: string; body?: string; url?: string; tag?: string },
+  excludeUserId?: string
+) {
+  const db = getServiceClient() ?? (await createClient());
+  const { data: overseers } = await db
+    .from('profiles')
+    .select('id')
+    .in('role', ['CEO', 'SERVICE_ADVISOR'])
+    .eq('is_active', true);
+  for (const o of (overseers ?? []) as { id: string }[]) {
+    if (o.id === excludeUserId) continue;
+    void sendPushToUser(o.id, payload);
+  }
 }

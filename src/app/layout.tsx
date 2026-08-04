@@ -1,11 +1,20 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Public_Sans } from 'next/font/google';
+import { Heebo, JetBrains_Mono } from 'next/font/google';
 
-const publicSans = Public_Sans({
-  subsets: ['latin'],
+// Design system (Tehila Bodyshop): Heebo is the Hebrew-first workhorse, with
+// JetBrains Mono reserved for catalog numbers / codes where digit clarity matters.
+const heebo = Heebo({
+  subsets: ['hebrew', 'latin'],
   weight: ['300', '400', '500', '600', '700', '800', '900'],
-  variable: '--font-public-sans',
+  variable: '--font-heebo',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-jetbrains-mono',
   display: 'swap',
 });
 
@@ -13,11 +22,18 @@ export const metadata: Metadata = {
   title: 'Tehila Bodyshop CRM',
   description: 'Bodyshop repair workflow management',
   manifest: '/manifest.json',
-  themeColor: '#3b82f6',
+  themeColor: '#B03C2F',
+  icons: {
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
-    title: 'Tehila CRM',
+    statusBarStyle: 'default',
+    title: 'תהילה',
   },
   viewport: {
     width: 'device-width',
@@ -72,11 +88,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="he" dir="rtl" className={publicSans.variable}>
+    <html lang="he" dir="rtl" className={`${heebo.variable} ${jetbrainsMono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SW_CLEANUP_SCRIPT }} />
       </head>
-      <body className={`antialiased ${publicSans.className}`}>{children}</body>
+      <body className={`antialiased ${heebo.className}`}>{children}</body>
     </html>
   );
 }

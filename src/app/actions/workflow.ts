@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { branchRecipients } from '@/lib/recipients';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
   type CreateCaseInput,
@@ -88,6 +89,7 @@ async function notifyCeosPendingApproval(
     } as never);
     void sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
   }
+  void pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,7 +113,7 @@ export async function createCase(input: CreateCaseInput) {
 
   const profile = profileData as { id: string; role: string; branch_id: string | null } | null;
   const role = profile?.role as UserRole | undefined;
-  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO') {
+  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') {
     return { error: 'אין הרשאה ליצירת תיק' };
   }
 
@@ -176,7 +178,16 @@ export async function createCase(input: CreateCaseInput) {
     .select('id')
     .single();
 
-  if (caseErr || !newCase) return { error: caseErr?.message ?? 'שגיאה ביצירת תיק' };
+  if (caseErr || !newCase) {
+    // Unique violation on (branch_id, case_key): a case for this plate+claim
+    // already exists in this branch. Return a clear message so the user opens
+    // the existing case instead of retrying in another branch (which created
+    // duplicate cases across branches).
+    if ((caseErr as { code?: string } | null)?.code === '23505') {
+      return { error: 'כבר קיים תיק פתוח לרכב הזה בסניף שבחרת. חפש אותו ברשימת התיקים במקום לפתוח חדש.' };
+    }
+    return { error: caseErr?.message ?? 'שגיאה ביצירת תיק' };
+  }
   const caseId = (newCase as { id: string }).id;
   if (!caseId) return { error: 'לא התקבל מזהה תיק' };
 
@@ -276,13 +287,9 @@ export async function createCase(input: CreateCaseInput) {
     const customerLabel = input.customer_name?.trim() || input.plate_number;
     const title = 'תיק חדש נפתח';
     const body = `${customerLabel} · ${input.plate_number}`;
-    const { data: branchStaff } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('branch_id', branchId)
-      .eq('is_active', true)
-      .in('role', ['SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE']);
-    for (const staff of (branchStaff ?? []) as { id: string; role: string }[]) {
+    const branchStaff = (await branchRecipients(supabase, branchId))
+      .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.role === 'OFFICE');
+    for (const staff of branchStaff) {
       if (staff.id === user.id) continue; // skip the creator
       await supabase.from('notifications').insert({
         user_id: staff.id,
@@ -295,6 +302,7 @@ export async function createCase(input: CreateCaseInput) {
       } as never);
       void sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
     }
+    void pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
   }
 
   return { caseId: String(caseId) };
@@ -309,10 +317,10 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('id, role, branch_id')
+    .select('id, role, branch_id, sees_all_branches')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { id: string; role: string; branch_id: string | null } | null;
+  const profile = profileData as { id: string; role: string; branch_id: string | null; sees_all_branches?: boolean } | null;
   const role = profile?.role as UserRole | undefined;
 
   const { data: caseData } = await supabase
@@ -326,7 +334,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   // Explicit branch check. RLS already prevents cross-branch writes, but
   // without this the action would silently no-op and return {ok:true} to a
   // manager acting on another branch's case. Fail loudly instead. CEO exempt.
-  if (role !== 'CEO' && profile?.branch_id !== caseRow.branch_id) {
+  if (role !== 'CEO' && !profile?.sees_all_branches && profile?.branch_id !== caseRow.branch_id) {
     return { error: 'אין הרשאה לתיק זה (סניף אחר)' };
   }
 
@@ -341,7 +349,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
 
   const isClosure = run.workflow_type === 'CLOSURE';
   if (isClosure && role !== 'OFFICE' && role !== 'CEO') return { error: 'רק משרד יכול להשלים שלבי סגירה' };
-  if (!isClosure && role !== 'SERVICE_MANAGER' && role !== 'CEO') return { error: 'רק מנהל שירות יכול להשלים שלב' };
+  if (!isClosure && role !== 'SERVICE_MANAGER' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') return { error: 'רק מנהל שירות או יועץ שירות יכול להשלים שלב' };
 
   let activeStep: { id: string; step_key: string; order_index: number } | null = null;
 
@@ -568,14 +576,11 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const plateLabel = (Array.isArray(caseNotif?.cars) ? caseNotif?.cars[0]?.license_plate : caseNotif?.cars?.license_plate) ?? caseNotif?.case_key ?? 'תיק';
 
     // Notify all OFFICE users of the same branch
-    const { data: officeUsers } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'OFFICE')
-      .eq('branch_id', caseNotif?.branch_id ?? '');
+    const officeUsers = (await branchRecipients(supabase, caseNotif?.branch_id))
+      .filter((p) => p.role === 'OFFICE');
     const officeTitle = 'תיק מוכן לסגירה';
     const officeBody = `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`;
-    for (const ou of (officeUsers ?? []) as { id: string }[]) {
+    for (const ou of officeUsers) {
       await supabase.from('notifications').insert({
         user_id: ou.id,
         case_id: caseId,
@@ -587,6 +592,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       void sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
+    void pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
     // index `uniq_case_workflow_runs_one_closure_per_case` so a concurrent
@@ -662,25 +668,15 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const ew = enterCaseData as { case_key: string | null; branch_id: string; customer_name: string | null; cars: { license_plate: string | null } | null } | null;
     const ewPlate = (Array.isArray(ew?.cars) ? ew?.cars[0]?.license_plate : ew?.cars?.license_plate) ?? ew?.case_key ?? 'תיק';
     const ewCustomer = ew?.customer_name?.trim() || ewPlate;
-    const { data: painters } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('branch_id', ew?.branch_id ?? '')
-      .eq('role', 'PAINTER')
-      .eq('is_active', true);
-    let recipients = (painters ?? []) as { id: string }[];
+    const ewBranchUsers = await branchRecipients(supabase, ew?.branch_id);
+    let recipients = ewBranchUsers.filter((p) => p.role === 'PAINTER').map((p) => ({ id: p.id }));
     if (recipients.length === 0) {
-      const { data: fallbackStaff } = await supabase
-        .from('profiles')
-        .select('id, role, is_bodywork_advisor')
-        .eq('branch_id', ew?.branch_id ?? '')
-        .eq('is_active', true);
-      recipients = ((fallbackStaff ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[])
+      recipients = ewBranchUsers
         .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
         .map((p) => ({ id: p.id }));
     }
     const ewTitle = 'רכב נכנס לעבודה';
-    const ewBody = `${ewCustomer} · ${ewPlate} — מוכן עבורך`;
+    const ewBody = `${ewCustomer} · ${ewPlate} - מוכן עבורך`;
     for (const p of recipients) {
       if (p.id === user.id) continue;
       await supabase.from('notifications').insert({
@@ -694,6 +690,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       void sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
+    void pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
   }
 
   // WASH step: notify SERVICE_MANAGER + SERVICE_ADVISOR (bodywork advisors) to start QC process
@@ -706,14 +703,11 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const washCase = washCaseData as { case_key: string | null; branch_id: string; cars: { license_plate: string | null } | null } | null;
     const washPlate = (Array.isArray(washCase?.cars) ? washCase?.cars[0]?.license_plate : washCase?.cars?.license_plate) ?? washCase?.case_key ?? 'תיק';
 
-    const { data: advisors } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('branch_id', washCase?.branch_id ?? '')
-      .eq('is_bodywork_advisor', true);
+    const advisors = (await branchRecipients(supabase, washCase?.branch_id))
+      .filter((p) => p.is_bodywork_advisor === true);
     const washTitle = 'רכב נשלח לשטיפה';
-    const washBody = `רכב ${washPlate} נשלח לשטיפה — התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
-    for (const adv of (advisors ?? []) as { id: string }[]) {
+    const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
+    for (const adv of advisors) {
       await supabase.from('notifications').insert({
         user_id: adv.id,
         case_id: caseId,
@@ -725,6 +719,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       void sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
     }
+    void pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
   }
 
   // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).
@@ -734,6 +729,41 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     await supabase.from('cases').update({ closed_at: now, general_status: 'COMPLETED' } as never).eq('id', caseId);
     await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
     await writeAudit(supabase, 'CASE', caseId, 'CASE_CLOSED', user.id);
+
+    // Notify on final closure: the case's branch management (service managers +
+    // office) and every CEO. CEOs are included explicitly here so they also get a
+    // push (the in-app fan-out trigger covers in-app only). The actor is skipped.
+    const { data: closeCaseData } = await supabase
+      .from('cases')
+      .select('case_key, branch_id, customer_name, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const cc = closeCaseData as { case_key: string | null; branch_id: string | null; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+    const ccPlate = (Array.isArray(cc?.cars) ? cc?.cars[0]?.license_plate : cc?.cars?.license_plate) ?? cc?.case_key ?? 'תיק';
+    const { data: ceoRows } = await supabase
+      .from('profiles').select('id').eq('role', 'CEO').eq('is_active', true);
+    const branchMgmt = (await branchRecipients(supabase, cc?.branch_id))
+      .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'OFFICE');
+    const closeRecipients = new Set<string>([
+      ...((ceoRows ?? []) as { id: string }[]).map((r) => r.id),
+      ...branchMgmt.map((r) => r.id),
+    ]);
+    closeRecipients.delete(user.id);
+    const closeTitle = 'תיק נסגר';
+    const closeBody = `התיק של ${cc?.customer_name ?? ''} (רכב ${ccPlate}) נסגר סופית`.replace('  ', ' ');
+    for (const rid of Array.from(closeRecipients)) {
+      await supabase.from('notifications').insert({
+        user_id: rid,
+        case_id: caseId,
+        type: 'CASE_CLOSED',
+        title: closeTitle,
+        body: closeBody,
+        action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      void sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
+    }
+    void pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
   }
 
   // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the

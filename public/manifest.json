@@ -1,11 +1,11 @@
 {
   "name": "Tehila Bodyshop CRM",
-  "short_name": "Tehila CRM",
+  "short_name": "תהילה",
   "description": "Bodyshop repair workflow management",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
+  "background_color": "#B03C2F",
+  "theme_color": "#B03C2F",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -19,6 +19,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

@@ -72,7 +72,7 @@ export async function uploadCaseDocument(formData: FormData) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('branch_id, role')
+    .select('branch_id, role, sees_all_branches')
     .eq('id', user.id)
     .single();
 
@@ -80,9 +80,11 @@ export async function uploadCaseDocument(formData: FormData) {
 
   const userBranchId = (profile as { branch_id: string | null }).branch_id;
   const userRole = (profile as { role: string }).role;
+  const userSeesAll = (profile as { sees_all_branches?: boolean }).sees_all_branches === true;
   const caseBranchId = (caseRow as { branch_id: string }).branch_id;
 
-  if (userRole !== 'CEO' && userBranchId !== caseBranchId) {
+  // CEO and cross-branch (sees_all_branches) staff may act on any branch's case.
+  if (userRole !== 'CEO' && !userSeesAll && userBranchId !== caseBranchId) {
     return { error: 'אין גישה לתיק זה' };
   }
 
@@ -169,7 +171,7 @@ export async function deleteCaseDocument(documentId: string) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('branch_id, role')
+    .select('branch_id, role, sees_all_branches')
     .eq('id', user.id)
     .single();
 
@@ -183,6 +185,7 @@ export async function deleteCaseDocument(documentId: string) {
   const canDelete = 
     docRow.uploaded_by === user.id ||
     (userRole === 'CEO') ||
+    ((profile as { sees_all_branches?: boolean }).sees_all_branches === true) ||
     (userBranchId === caseBranchId && (userRole === 'SERVICE_MANAGER' || userRole === 'OFFICE'));
 
   if (!canDelete) {

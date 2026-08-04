@@ -227,7 +227,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     [stepTemplates]
   );
 
-  const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO';
+  // SERVICE_ADVISOR is a full professional-workflow editor (same as a manager):
+  // create cases, upload files/links to steps, and advance steps. Keep the
+  // completeActiveStep backend gate in sync with this list.
+  const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR';
   const canEditDetails = role !== 'PAINTER' && role !== null;
 
   // Inline-edit state for "פרטי תיק" fields
@@ -1277,11 +1280,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               return (
                 <li key={s.id} className="space-y-2">
                   <div
-                    className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-shadow ${
                       isActive
                         ? isBlocked
-                          ? 'bg-yellow-50 border-yellow-300'
-                          : 'bg-blue-50 border-blue-300'
+                          ? 'bg-orange-50 border-orange-300'
+                          : 'bg-white border-accent shadow-md'
                         : isDone
                           ? 'bg-green-50 border-green-200'
                           : 'bg-gray-50 border-gray-100'
@@ -1295,8 +1298,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                             ? 'bg-gray-300 text-gray-500'
                             : isActive
                               ? isBlocked
-                                ? 'bg-yellow-500 text-white'
-                                : 'bg-blue-500 text-white'
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-blue-600 text-white shadow-sm'
                               : 'bg-gray-200 text-gray-500'
                       }`}
                     >
@@ -1310,15 +1313,17 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                             : isSkipped
                               ? 'text-gray-400'
                               : isBlocked
-                                ? 'text-yellow-800'
-                                : 'text-gray-700'
+                                ? 'text-orange-800'
+                                : isActive
+                                  ? 'text-stone-900 font-semibold'
+                                  : 'text-gray-700'
                         }`}
                       >
                         {label}
                       </span>
                       {isSkipped && <span className="mr-2 text-xs text-gray-400">(דולג)</span>}
                       {isBlocked && blockReason && (
-                        <span className="mr-2 text-xs text-yellow-700 font-normal">({blockReason})</span>
+                        <span className="mr-2 text-xs text-orange-700 font-normal">({blockReason})</span>
                       )}
                     </div>
 
@@ -1327,10 +1332,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         type="button"
                         disabled={isStepInFlight(s.id) || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
                         onClick={() => void handleComplete(s)}
-                        className={`px-3 py-1 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                        className={`rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
                           isBlocked
-                            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
+                            ? 'px-3 py-1.5 text-xs bg-orange-500 text-white hover:bg-orange-600'
+                            : isActive
+                              ? 'px-5 py-2.5 text-sm bg-accent text-accent-on hover:bg-accent-strong shadow-sm'
+                              : 'px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700'
                         }`}
                         title={isBlocked ? blockReason : undefined}
                       >
