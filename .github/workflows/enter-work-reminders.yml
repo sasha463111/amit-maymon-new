@@ -1,0 +1,29 @@
+name: Enter-work reminders
+
+# Pings the reminder endpoint every 30 min, all day, every day. The endpoint
+# itself decides whether to actually do anything — see the "why" comment at
+# the top of src/app/api/cron/enter-work-reminders/route.ts. This exists
+# because Vercel's Hobby plan only allows a once-daily cron trigger, nowhere
+# near the ~2h cadence the reminder needs; GitHub Actions has no such limit
+# and costs nothing for a job this light.
+#
+# Setup required (see the PR/commit that added this):
+#   1. Repo secret CRON_SECRET — must match the CRON_SECRET env var set on
+#      the Vercel project (Settings → Environment Variables).
+#   2. Repo secret PROD_APP_URL — the production URL to ping, e.g.
+#      https://amit-maymon-new.vercel.app (no trailing slash).
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {} # allows a manual "Run workflow" trigger for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reminder endpoint
+        run: |
+          curl -sS -f -X GET "${{ secrets.PROD_APP_URL }}/api/cron/enter-work-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"
