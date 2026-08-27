@@ -30,18 +30,32 @@ const REMINDER_INTERVAL_MS = 110 * 60 * 1000; // ~110 min: under 2h so drift nev
 const WORKDAY_START_HOUR = 9;
 const WORKDAY_END_HOUR = 17;
 
-// Extra closed dates beyond Fri/Sat (Israeli holidays, chol hamoed, etc.) —
-// 'YYYY-MM-DD' in Israel local time. Sourced from calendar.2net.co.il
-// (2026-08-27); only the near-term ones that came back unambiguous. 2027
-// dates (Passover etc.) weren't confident enough to bake in — add them
-// once confirmed rather than risk a wrong date silently.
+// Extra closed dates beyond Fri/Sat: major Jewish holidays (Israel
+// observance — Rosh Hashana is 2 days even in Israel, Shmini
+// Atzeret/Simchat Torah are ONE combined day in Israel vs two in the
+// diaspora) plus Yom HaAtzma'ut. 'YYYY-MM-DD' in Israel local time.
+//
+// SOURCE — Hebcal's public API, not a guess (a first attempt at this via a
+// web search was wrong and got corrected). Reproducible for future years:
+//   https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=on&nx=off&year=YYYY&month=x&ss=off&mf=off&c=off&geo=none&i=on
+// Take every item with "yomtov":true, plus the one titled "Yom HaAtzma'ut".
 const EXTRA_CLOSED_DATES: string[] = [
-  '2026-09-23', // ראש השנה (יום א')
-  '2026-09-24', // ראש השנה (יום ב')
-  '2026-10-02', // יום כיפור
-  '2026-10-07', // סוכות (יום א')
-  '2026-10-14', // שמיני עצרת
-  '2026-10-15', // שמחת תורה
+  // 2026 (from today onward)
+  '2026-09-12', // ראש השנה א׳
+  '2026-09-13', // ראש השנה ב׳
+  '2026-09-21', // יום כיפור
+  '2026-09-26', // סוכות א׳
+  '2026-10-03', // שמיני עצרת / שמחת תורה
+  // 2027
+  '2027-04-22', // פסח א׳
+  '2027-04-28', // פסח ז׳ (אחרון של פסח)
+  '2027-05-12', // יום העצמאות
+  '2027-06-11', // שבועות
+  '2027-10-02', // ראש השנה א׳
+  '2027-10-03', // ראש השנה ב׳
+  '2027-10-11', // יום כיפור
+  '2027-10-16', // סוכות א׳
+  '2027-10-23', // שמיני עצרת / שמחת תורה
 ];
 
 function getServiceClient() {
