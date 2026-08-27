@@ -67,7 +67,7 @@ export async function updatePainterChecklist(
       recipients
         .filter((p) => p.id !== user.id)
         .map(async (p) => {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: p.id,
             case_id: caseId,
             type: 'OTHER',
@@ -76,6 +76,7 @@ export async function updatePainterChecklist(
             action_url: `/painters/${caseId}`,
             triggered_by: user.id,
           } as never);
+          if (notifErr) console.error('[notifications] insert failed', notifErr);
           await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
         })
     );
@@ -163,7 +164,7 @@ export async function createPainterRequest(
     advisors
       .filter((adv) => adv.id !== user.id)
       .map(async (adv) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: adv.id,
           case_id: caseId,
           type: 'PAINTER_REQUEST',
@@ -172,6 +173,7 @@ export async function createPainterRequest(
           action_url: `/painters/${caseId}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
       })
   );
@@ -255,7 +257,7 @@ export async function updatePainterRequestStatus(
     };
     const title = `הבקשה שלך ${STATUS_LABELS[status] ?? status}`;
     const body = `${plate} · ${req.description.slice(0, 80)}`;
-    await supabase.from('notifications').insert({
+    const { error: notifErr } = await supabase.from('notifications').insert({
       user_id: req.created_by,
       case_id: req.case_id,
       type: 'OTHER',
@@ -264,6 +266,7 @@ export async function updatePainterRequestStatus(
       action_url: `/painters/${req.case_id}`,
       triggered_by: user.id,
     } as never);
+    if (notifErr) console.error('[notifications] insert failed', notifErr);
     await sendPushToUser(req.created_by, { title, body, url: `/painters/${req.case_id}`, tag: `req-status-${requestId}` });
   }
 

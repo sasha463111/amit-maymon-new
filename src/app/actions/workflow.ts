@@ -79,7 +79,7 @@ async function notifyCeosPendingApproval(
   const body = `רכב ${plate} ממתין לאישורך`;
   await Promise.all(
     ((ceos ?? []) as { id: string }[]).map(async (ceo) => {
-      await supabase.from('notifications').insert({
+      const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: ceo.id,
         case_id: caseId,
         type: 'PENDING_APPROVAL',
@@ -88,6 +88,7 @@ async function notifyCeosPendingApproval(
         action_url: `/approvals`,
         triggered_by: triggeredBy,
       } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
     })
   );
@@ -295,7 +296,7 @@ export async function createCase(input: CreateCaseInput) {
       branchStaff
         .filter((staff) => staff.id !== user.id) // skip the creator
         .map(async (staff) => {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: staff.id,
             case_id: caseId,
             type: 'OTHER',
@@ -304,6 +305,7 @@ export async function createCase(input: CreateCaseInput) {
             action_url: `/cases/${caseId}`,
             triggered_by: user.id,
           } as never);
+          if (notifErr) console.error('[notifications] insert failed', notifErr);
           await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
         })
     );
@@ -409,7 +411,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     if (extras && extras.length > 0) {
       const blockedTitle = 'פעולה חסומה';
       const blockedBody = 'קיימות תוספות בטיפול';
-      await supabase.from('notifications').insert({
+      const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: profile!.id,
         case_id: caseId,
         type: 'BLOCKED_ACTION',
@@ -418,6 +420,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
@@ -467,7 +470,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
         const blockedTitle = 'פעולה חסומה';
         const blockedBody = 'חסר או נדחה אישור CEO לאומדן';
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: profile!.id,
           case_id: caseId,
           type: 'BLOCKED_ACTION',
@@ -476,6 +479,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/approvals`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
@@ -485,7 +489,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (needsWheelsApproval && (!wheelsApproval || wheelsApproval.status !== 'APPROVED')) {
         const blockedTitle = 'פעולה חסומה';
         const blockedBody = 'חסר או נדחה אישור CEO לטפסי גלגלים';
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: profile!.id,
           case_id: caseId,
           type: 'BLOCKED_ACTION',
@@ -494,6 +498,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/approvals`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
         await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
           reason: 'ceo_approval_missing_or_rejected',
@@ -587,7 +592,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const officeBody = `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`;
     await Promise.all(
       officeUsers.map(async (ou) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: ou.id,
           case_id: caseId,
           type: 'READY_FOR_OFFICE',
@@ -596,6 +601,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/closure/${caseId}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
       })
     );
@@ -688,7 +694,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       recipients
         .filter((p) => p.id !== user.id)
         .map(async (p) => {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: p.id,
             case_id: caseId,
             type: 'OTHER',
@@ -697,6 +703,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
             action_url: `/painters/${caseId}`,
             triggered_by: user.id,
           } as never);
+          if (notifErr) console.error('[notifications] insert failed', notifErr);
           await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
         })
     );
@@ -719,7 +726,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
     await Promise.all(
       advisors.map(async (adv) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: adv.id,
           case_id: caseId,
           type: 'WASH_STARTED',
@@ -728,6 +735,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/cases/${caseId}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
       })
     );
@@ -765,7 +773,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const closeBody = `התיק של ${cc?.customer_name ?? ''} (רכב ${ccPlate}) נסגר סופית`.replace('  ', ' ');
     await Promise.all(
       Array.from(closeRecipients).map(async (rid) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: rid,
           case_id: caseId,
           type: 'CASE_CLOSED',
@@ -774,6 +782,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           action_url: `/cases/${caseId}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
       })
     );

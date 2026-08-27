@@ -1,11 +1,11 @@
 'use client';
 
 import { MapPin, ChevronLeft, Lock } from 'lucide-react';
-import { Plate } from './Plate';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatusBadge, type CaseStatus } from './StatusBadge';
 
 /** One repair case in the list rail. The ACTIVE STEP is the most prominent
- *  element (what a manager scans for). Composes Plate + StatusBadge. */
+ *  element (what a manager scans for). Composes LicensePlate + StatusBadge. */
 export function CaseRow({
   plate,
   customer,
@@ -50,7 +50,7 @@ export function CaseRow({
       </div>
 
       {/* plate */}
-      <Plate number={plate} size="md" />
+      <LicensePlate plate={plate} size="md" />
 
       {/* active step + branch */}
       <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-200">

@@ -48,7 +48,7 @@ export async function createExtra(input: CreateExtraInput) {
   const extraBody = input.description;
   await Promise.all(
     managers.map(async (m) => {
-      await supabase.from('notifications').insert({
+      const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: m.id,
         case_id: input.case_id,
         type: 'EXTRA_CREATED',
@@ -57,6 +57,7 @@ export async function createExtra(input: CreateExtraInput) {
         action_url: `/cases/${input.case_id}`,
         triggered_by: user.id,
       } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
     })
   );
@@ -131,7 +132,7 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
     };
     const title = `התוספת שלך ${STATUS_LABELS[input.status] ?? input.status}`;
     const body = `${customer} · ${plate}\n${extra.description.slice(0, 80)}`;
-    await supabase.from('notifications').insert({
+    const { error: notifErr } = await supabase.from('notifications').insert({
       user_id: extra.created_by,
       case_id: extra.case_id,
       type: 'EXTRA_STATUS_CHANGED',
@@ -140,6 +141,7 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
       action_url: `/extras/mine`,
       triggered_by: user.id,
     } as never);
+    if (notifErr) console.error('[notifications] insert failed', notifErr);
     await sendPushToUser(extra.created_by, {
       title,
       body,

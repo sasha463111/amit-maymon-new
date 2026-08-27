@@ -87,7 +87,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - עמית דחה את האישור`;
     await Promise.all(
       managers.map(async (m) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: m.id,
           case_id: approval.case_id,
           type: 'CEO_REJECTED',
@@ -96,6 +96,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
           action_url: `/cases/${approval.case_id}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
       })
     );
@@ -108,7 +109,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     const okBody = `רכב ${plateLabel} - עמית אישר. אפשר להמשיך בטיפול.`;
     await Promise.all(
       managers.map(async (m) => {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: m.id,
           case_id: approval.case_id,
           type: 'OTHER',
@@ -117,6 +118,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
           action_url: `/cases/${approval.case_id}`,
           triggered_by: user.id,
         } as never);
+        if (notifErr) console.error('[notifications] insert failed', notifErr);
         await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
       })
     );
