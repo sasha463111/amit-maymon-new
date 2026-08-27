@@ -251,8 +251,8 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
 
   await Promise.all(
     (subs as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>).map(async (s) => {
-      try {
-        await webpush.sendNotification(
+      const trySend = () =>
+        webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           body,
           // urgency:'high' → Apple's relay sets apns-priority 10 = "deliver
@@ -260,17 +260,30 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
           // The web-push default is 'normal', which can be delivered quietly.
           { TTL: 60 * 60 * 24, urgency: 'high' }
         );
+      try {
+        await trySend();
         sent++;
         console.log('[push] sent ok to', s.endpoint.slice(0, 60));
       } catch (err: unknown) {
-        failed++;
         const status = (err as { statusCode?: number } | null)?.statusCode;
-        // 404/410 = subscription is gone for good; clean it up
+        // 404/410 = subscription is gone for good; clean it up, no retry.
         if (status === 404 || status === 410) {
+          failed++;
           expired.push(s.id);
           console.warn('[push] removing expired sub', s.endpoint.slice(0, 60));
-        } else {
-          console.warn('[push] send failed', { endpoint: s.endpoint.slice(0, 60), status, err: (err as Error)?.message });
+          return;
+        }
+        // Anything else (5xx from the push service, network blip) is
+        // transient — one retry after a short delay catches those instead
+        // of just losing the notification silently.
+        await sleep(600);
+        try {
+          await trySend();
+          sent++;
+          console.log('[push] sent ok on retry to', s.endpoint.slice(0, 60));
+        } catch (err2: unknown) {
+          failed++;
+          console.warn('[push] send failed after retry', { endpoint: s.endpoint.slice(0, 60), status, err: (err2 as Error)?.message });
         }
       }
     })
