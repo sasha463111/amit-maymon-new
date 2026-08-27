@@ -142,7 +142,6 @@ export function CasesMasterDetail({
               key={c.id}
               plate={c.plate}
               customer={c.customer_name ?? ''}
-              branch={branchNameById[c.branch_id] ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
               onClick={() => router.push(`/cases/${c.id}`)}
