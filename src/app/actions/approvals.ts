@@ -97,7 +97,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       } as never);
       await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
-    void pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
+    await pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
     const managers = (await branchRecipients(supabase, branchId))
@@ -116,7 +116,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       } as never);
       await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
-    void pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
+    await pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
   }
 
   // Auto-complete READY_FOR_OFFICE when all required approvals are approved

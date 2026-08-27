@@ -304,8 +304,11 @@ export async function pushToOverseers(
     .select('id')
     .in('role', ['CEO', 'SERVICE_ADVISOR'])
     .eq('is_active', true);
-  for (const o of (overseers ?? []) as { id: string }[]) {
-    if (o.id === excludeUserId) continue;
-    void sendPushToUser(o.id, payload);
-  }
+  const targets = ((overseers ?? []) as { id: string }[]).filter((o) => o.id !== excludeUserId);
+  // Awaited (not fire-and-forget): on Vercel's serverless runtime, a promise
+  // left running after the server action returns can get frozen/killed before
+  // it ever sends — the same "huge delay" bug this file's docs already warn
+  // about for sendPushToUser. Parallelized across recipients so N overseers
+  // doesn't mean N sequential round-trips.
+  await Promise.all(targets.map((o) => sendPushToUser(o.id, payload)));
 }

@@ -89,7 +89,7 @@ async function notifyCeosPendingApproval(
     } as never);
     await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
   }
-  void pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
+  await pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -302,7 +302,7 @@ export async function createCase(input: CreateCaseInput) {
       } as never);
       await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
     }
-    void pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
+    await pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
   }
 
   return { caseId: String(caseId) };
@@ -592,7 +592,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
-    void pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
+    await pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
     // index `uniq_case_workflow_runs_one_closure_per_case` so a concurrent
@@ -690,7 +690,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
-    void pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
+    await pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
   }
 
   // WASH step: notify SERVICE_MANAGER + SERVICE_ADVISOR (bodywork advisors) to start QC process
@@ -719,7 +719,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       } as never);
       await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
     }
-    void pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
+    await pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
   }
 
   // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).
@@ -761,9 +761,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         action_url: `/cases/${caseId}`,
         triggered_by: user.id,
       } as never);
-      void sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
+      await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
     }
-    void pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
+    await pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
   }
 
   // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the

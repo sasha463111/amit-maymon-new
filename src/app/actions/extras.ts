@@ -58,7 +58,7 @@ export async function createExtra(input: CreateExtraInput) {
     } as never);
     await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
   }
-  void pushToOverseers({ title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id);
+  await pushToOverseers({ title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id);
 
   await supabase.from('audit_events').insert({
     entity_type: 'EXTRA',

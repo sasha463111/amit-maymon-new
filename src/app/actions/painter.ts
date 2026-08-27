@@ -76,7 +76,7 @@ export async function updatePainterChecklist(
       } as never);
       await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
     }
-    void pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
+    await pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
   }
 
   revalidatePath(`/painters/${caseId}`);
@@ -169,7 +169,7 @@ export async function createPainterRequest(
     } as never);
     await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
   }
-  void pushToOverseers({ title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` }, user.id);
+  await pushToOverseers({ title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` }, user.id);
 
   revalidatePath(`/painters/${caseId}`);
   return { ok: true, requestId: reqId, error: null };
