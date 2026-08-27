@@ -81,24 +81,24 @@ export default async function ClosurePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">תיקים לסגירה</h1>
-          <p className="text-sm text-gray-500 mt-1">תיקים שהעבודה הסתיימה ומחכים לטיפול משרדי</p>
+          <h1 className="text-2xl font-bold text-stone-900">תיקים לסגירה</h1>
+          <p className="text-sm text-stone-500 mt-1">תיקים שהעבודה הסתיימה ומחכים לטיפול משרדי</p>
         </div>
         {list.length > 0 && (
-          <span className="px-4 py-2 bg-indigo-100 text-indigo-800 rounded-full text-sm font-semibold">
+          <span className="px-4 py-2 bg-accent-soft text-accent-text rounded-full text-sm font-semibold">
             {list.length} תיקים ממתינים
           </span>
         )}
       </div>
 
       {list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 text-center bg-white rounded-xl border border-stone-200 shadow-sm">
           <div className="text-5xl mb-4">📭</div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-1">אין תיקים לסגירה</h3>
-          <p className="text-gray-400 text-sm">כשתיקים יסיימו את שלב העבודה הם יופיעו כאן</p>
+          <h3 className="text-lg font-semibold text-stone-700 mb-1">אין תיקים לסגירה</h3>
+          <p className="text-stone-400 text-sm">כשתיקים יסיימו את שלב העבודה הם יופיעו כאן</p>
         </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {list.map((c) => {
             const row = c as {
               id: string;
@@ -119,64 +119,44 @@ export default async function ClosurePage() {
               : null;
 
             return (
-              <Link key={row.id} href={`/closure/${row.id}`} className="block group">
-                <div className="bg-white rounded-xl border-2 border-gray-200 shadow-sm p-5 hover:border-indigo-300 hover:shadow-md transition-all group-hover:bg-indigo-50/30">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Main info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-bold text-gray-900 truncate">
-                          {row.customer_name ?? row.case_key ?? car?.license_plate ?? row.id}
-                        </h3>
-                        {row.insurance_type && (
-                          <span className="flex-shrink-0 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                            {INSURANCE_TYPE_LABELS[row.insurance_type] ?? row.insurance_type}
-                          </span>
-                        )}
-                      </div>
+              <Link key={row.id} href={`/closure/${row.id}`} className="block group h-full">
+                <div className="h-full flex flex-col gap-3 bg-white rounded-xl border-[1.5px] border-stone-200 shadow-xs p-4 hover:border-accent/50 hover:shadow-sm transition-all">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-base font-bold text-stone-900 truncate">
+                      {row.customer_name ?? row.case_key ?? car?.license_plate ?? row.id}
+                    </h3>
+                    {row.insurance_type && (
+                      <span className="shrink-0 px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[11px] font-medium">
+                        {INSURANCE_TYPE_LABELS[row.insurance_type] ?? row.insurance_type}
+                      </span>
+                    )}
+                  </div>
 
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-                        {car?.license_plate && (
-                          <span className="flex items-center gap-2">
-                            <LicensePlate plate={car.license_plate} size="sm" />
-                            {car.make && <span>{car.make} {car.model}</span>}
-                          </span>
-                        )}
-                        {branch?.name && (
-                          <span className="flex items-center gap-1">
-                            <span>📍</span>
-                            <span>{branch.name}</span>
-                          </span>
-                        )}
-                        {row.opened_at && (
-                          <span className="flex items-center gap-1">
-                            <span>📅</span>
-                            <span>נפתח {new Date(row.opened_at).toLocaleDateString('he-IL')}</span>
-                          </span>
-                        )}
-                        {daysOpen !== null && (
-                          <span className={`flex items-center gap-1 font-medium ${daysOpen > 14 ? 'text-red-600' : daysOpen > 7 ? 'text-amber-600' : 'text-gray-500'}`}>
-                            <span>⏱</span>
-                            <span>{daysOpen} ימים</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  {car?.license_plate && <LicensePlate plate={car.license_plate} size="sm" />}
 
-                    {/* Status badges */}
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-stone-500">
+                    {car?.make && <span>{car.make} {car.model}</span>}
+                    {branch?.name && <span>📍 {branch.name}</span>}
+                  </div>
+
+                  <div className="flex-1" />
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {parts && (
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${parts.color}`}>
+                        <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium border ${parts.color}`}>
                           {parts.label}
                         </span>
                       )}
-                      <span className="px-2.5 py-1 bg-green-100 text-green-800 border border-green-200 rounded-lg text-xs font-medium">
-                        ✓ מוכן למשרד
-                      </span>
-                      <span className="text-indigo-600 text-sm font-medium group-hover:text-indigo-700 flex items-center gap-1">
-                        פתח תיק <span className="group-hover:translate-x-[-2px] transition-transform">←</span>
-                      </span>
+                      {daysOpen !== null && (
+                        <span className={`text-[11px] font-medium ${daysOpen > 14 ? 'text-status-rejected-text' : daysOpen > 7 ? 'text-status-waiting-text' : 'text-stone-400'}`}>
+                          ⏱ {daysOpen} ימים
+                        </span>
+                      )}
                     </div>
+                    <span className="text-accent-text text-[12.5px] font-semibold group-hover:underline shrink-0">
+                      פתח ←
+                    </span>
                   </div>
                 </div>
               </Link>

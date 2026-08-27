@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
+import { uploadCaseDocument } from '@/app/actions/documents';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const STEP_LABELS: Record<string, string> = {
@@ -155,6 +156,38 @@ export function ClosureDetailClient({
 
   const [checklistSaveError, setChecklistSaveError] = useState<string | null>(null);
   const [checklistSavedAt, setChecklistSavedAt] = useState<number | null>(null);
+
+  // Photo/document upload for the paperwork checklist — several documents
+  // at once (insurance forms are rarely just one page), so it's a single
+  // multi-select instead of repeating the picker per page.
+  const [docsUploading, setDocsUploading] = useState(false);
+  const [docsUploadError, setDocsUploadError] = useState<string | null>(null);
+  const [docsUploadedCount, setDocsUploadedCount] = useState(0);
+
+  async function uploadClosureDocs(files: File[]) {
+    if (files.length === 0) return;
+    setDocsUploadError(null);
+    setDocsUploading(true);
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('case_id', caseId);
+        formData.append('file', file);
+        return uploadCaseDocument(formData);
+      })
+    );
+    const errors = results.filter((r) => r?.error).map((r) => r!.error as string);
+    const succeeded = results.length - errors.length;
+    if (succeeded > 0) setDocsUploadedCount((c) => c + succeeded);
+    if (errors.length > 0) {
+      setDocsUploadError(
+        errors.length === results.length
+          ? errors[0]
+          : `${succeeded}/${results.length} קבצים הועלו בהצלחה. שגיאה: ${errors[0]}`
+      );
+    }
+    setDocsUploading(false);
+  }
 
   const saveChecklistState = useCallback(async (state: boolean[]) => {
     const supabase = (await import('@/lib/supabase/client')).createClient();
@@ -610,6 +643,50 @@ export function ClosureDetailClient({
                         )}
                       </div>
                     )}
+
+                    {/* Attach the paperwork itself — several pages/photos at once */}
+                    <div className="pt-2 flex items-center gap-2 flex-wrap">
+                      <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          multiple
+                          className="hidden"
+                          disabled={docsUploading}
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) return;
+                            await uploadClosureDocs(Array.from(files));
+                            e.target.value = '';
+                          }}
+                        />
+                        📁 {docsUploading ? 'מעלה...' : 'בחר קבצים'}
+                      </label>
+                      <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          multiple
+                          className="hidden"
+                          disabled={docsUploading}
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) return;
+                            await uploadClosureDocs(Array.from(files));
+                            e.target.value = '';
+                          }}
+                        />
+                        📷 {docsUploading ? 'מעלה...' : 'צלם'}
+                      </label>
+                      {docsUploadedCount > 0 && !docsUploadError && (
+                        <span className="text-xs text-green-600">✓ הועלו {docsUploadedCount} קבצים</span>
+                      )}
+                      {docsUploadError && <span className="text-xs text-red-600">⚠️ {docsUploadError}</span>}
+                      <Link href={`/cases/${caseId}`} className="text-xs text-brand-red underline">
+                        לצפייה בכל המסמכים →
+                      </Link>
+                    </div>
                   </div>
                 )}
               </li>

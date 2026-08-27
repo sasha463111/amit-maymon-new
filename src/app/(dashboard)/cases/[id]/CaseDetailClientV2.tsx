@@ -470,6 +470,39 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     };
   }, [localDocuments]);
 
+  // Uploads any number of files at once (parallel, not one-at-a-time) — a
+  // selfie's worth of insurance paperwork is easily 4-5 photos, and making
+  // someone repeat the file/camera picker for each one is exactly the kind
+  // of friction that gets a task skipped or done later "when there's time".
+  async function uploadDocuments(files: File[]) {
+    setDocumentError(null);
+    setUploadingDocument(true);
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('case_id', caseId);
+        formData.append('file', file);
+        return uploadCaseDocument(formData);
+      })
+    );
+    const errors = results.filter((r) => r?.error).map((r) => r!.error as string);
+    if (errors.length > 0) {
+      setDocumentError(
+        errors.length === results.length
+          ? errors[0]
+          : `${results.length - errors.length}/${results.length} קבצים הועלו בהצלחה. שגיאה: ${errors[0]}`
+      );
+    }
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('case_documents')
+      .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+      .eq('case_id', caseId)
+      .order('created_at', { ascending: false });
+    if (data) setLocalDocuments(data as typeof documents);
+    setUploadingDocument(false);
+  }
+
   const initRef = useRef<string | null>(null);
 
   // Seed fixcar link
@@ -1869,66 +1902,34 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                 <input
                   type="file"
                   accept="image/*,application/pdf"
+                  multiple
                   className="hidden"
                   onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setDocumentError(null);
-                    setUploadingDocument(true);
-                    const formData = new FormData();
-                    formData.append('case_id', caseId);
-                    formData.append('file', file);
-                    const res = await uploadCaseDocument(formData);
-                    if (res?.error) {
-                      setDocumentError(res.error);
-                    } else {
-                      const supabase = createClient();
-                      const { data } = await supabase
-                        .from('case_documents')
-                        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
-                        .eq('case_id', caseId)
-                        .order('created_at', { ascending: false });
-                      if (data) setLocalDocuments(data as typeof documents);
-                      e.target.value = '';
-                    }
-                    setUploadingDocument(false);
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+                    await uploadDocuments(Array.from(files));
+                    e.target.value = '';
                   }}
                   disabled={uploadingDocument}
                 />
-                📁 {uploadingDocument ? 'מעלה...' : 'בחר קובץ'}
+                📁 {uploadingDocument ? 'מעלה...' : 'בחר קבצים'}
               </label>
               <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  multiple
                   className="hidden"
                   onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setDocumentError(null);
-                    setUploadingDocument(true);
-                    const formData = new FormData();
-                    formData.append('case_id', caseId);
-                    formData.append('file', file);
-                    const res = await uploadCaseDocument(formData);
-                    if (res?.error) {
-                      setDocumentError(res.error);
-                    } else {
-                      const supabase = createClient();
-                      const { data } = await supabase
-                        .from('case_documents')
-                        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
-                        .eq('case_id', caseId)
-                        .order('created_at', { ascending: false });
-                      if (data) setLocalDocuments(data as typeof documents);
-                      e.target.value = '';
-                    }
-                    setUploadingDocument(false);
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+                    await uploadDocuments(Array.from(files));
+                    e.target.value = '';
                   }}
                   disabled={uploadingDocument}
                 />
-                📷 צלם
+                📷 {uploadingDocument ? 'מעלה...' : 'צלם'}
               </label>
             </div>
           )}
