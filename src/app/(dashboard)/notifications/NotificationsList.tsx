@@ -171,9 +171,15 @@ export function NotificationsList({
       await markRead(n.id);
       router.refresh();
     }
-    // Prefer per-type deep link; fall back to /cases/{id}
-    if (n.action_url) router.push(n.action_url);
-    else if (n.case_id) router.push(`/cases/${n.case_id}`);
+    // A per-case action_url (/cases/{id}, /painters/{id}) needs role-aware
+    // forwarding — a painter hitting /cases/{id} directly gets bounced, same
+    // problem /go/{id} exists to solve (see its own comment). Anything else
+    // (e.g. /approvals) is a general page every recipient can open, so it
+    // wins outright — that's the whole point of an approval notification.
+    const isPerCaseUrl = n.action_url && (n.action_url.startsWith('/cases/') || n.action_url.startsWith('/painters/'));
+    if (n.action_url && !isPerCaseUrl) router.push(n.action_url);
+    else if (n.case_id) router.push(`/go/${n.case_id}`);
+    else if (n.action_url) router.push(n.action_url);
   }
 
   async function handleMarkRead(id: string) {
@@ -227,7 +233,7 @@ export function NotificationsList({
               className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${
                 hasUnread ? 'bg-red-50/30 border-b border-brand-red/10' : 'bg-gray-50 border-b border-gray-100'
               }`}
-              onClick={() => router.push(`/cases/${caseId}`)}
+              onClick={() => router.push(`/go/${caseId}`)}
             >
               {group.plate ? (
                 <LicensePlate plate={group.plate} size="sm" />

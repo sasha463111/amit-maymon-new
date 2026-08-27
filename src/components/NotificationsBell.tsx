@@ -213,12 +213,17 @@ export function NotificationsBell({ userId }: { userId: string }) {
         setUnreadCount((c) => c + 1);
       });
     }
-    // Navigate. For case-related notifications route through /go/{caseId},
-    // which forwards each role to a page it can actually open (painters → the
-    // painter view, everyone else → the case detail). A stored action_url like
-    // /painters/{id} is otherwise unreachable for a service advisor and bounced
-    // them off the case. Non-case notifications (e.g. /approvals) use action_url.
-    if (n.case_id) router.push(`/go/${n.case_id}`);
+    // Navigate. Approval-type notifications (and anything else with an
+    // action_url that isn't itself a per-case deep link) go straight to that
+    // URL — that's the whole point of clicking "אישור נדרש": land on the
+    // approve/reject controls, not inside the case having to go find them.
+    // Everything else routes through /go/{caseId}, which forwards each role
+    // to a page it can actually open (painters → the painter view, everyone
+    // else → the case detail) — a stored /painters/{id} is otherwise
+    // unreachable for a service advisor and bounces them off the case.
+    const isPerCaseUrl = n.action_url && (n.action_url.startsWith('/cases/') || n.action_url.startsWith('/painters/'));
+    if (n.action_url && !isPerCaseUrl) router.push(n.action_url);
+    else if (n.case_id) router.push(`/go/${n.case_id}`);
     else if (n.action_url) router.push(n.action_url);
   }
 
