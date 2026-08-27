@@ -703,11 +703,11 @@ CREATE TRIGGER case_documents_updated_at
 
 
 -- =============================================================================
--- 005_verification_gaps.sql
+-- 005b_verification_gaps.sql
 -- =============================================================================
 -- =====================================================
 -- Tehila Bodyshop CRM - Verification plan gaps
--- Migration: 005_verification_gaps.sql
+-- Migration: 005b_verification_gaps.sql
 -- Run after 003_schema_align.sql
 -- =====================================================
 
@@ -977,7 +977,7 @@ CREATE POLICY cases_insert ON cases FOR INSERT TO authenticated
   );
 
 -- =============================================================================
--- 010_rls_case_workflow_fixes.sql
+-- 010b_rls_case_workflow_fixes.sql
 -- =============================================================================
 -- Migration 010: RLS fixes for case creation and workflow step completion
 -- 1) Allow inserting case_workflow_runs when the case was just created by the current user

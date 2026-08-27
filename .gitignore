@@ -30,4 +30,6 @@ Thumbs.db
 # TypeScript
 next-env.d.ts
 .vercel
-.env*
+
+# Local dev server output
+dev.log
