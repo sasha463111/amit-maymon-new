@@ -126,22 +126,27 @@ export async function createPainterRequest(
   if (reqError) return { error: reqError.message };
   const reqId = (reqData as { id: string }).id;
 
-  // Upload images if provided
+  // Upload images if provided. Parallelized across files, so each path needs
+  // to be unique on its own — a bare `Date.now()` per iteration isn't safe
+  // once uploads race each other (two fast uploads can land in the same
+  // millisecond and overwrite one another). Index makes each path unique
+  // regardless of timing.
   if (imageFiles) {
-    const files = imageFiles.getAll('images') as File[];
-    for (const file of files) {
-      if (!(file instanceof File)) continue;
-      const ext = file.name.split('.').pop() ?? 'jpg';
-      const path = `${caseId}/${reqId}/${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from('painter-images')
-        .upload(path, file, { contentType: file.type });
-      if (!uploadErr) {
-        await supabase
-          .from('painter_request_images')
-          .insert({ request_id: reqId, image_path: path } as never);
-      }
-    }
+    const files = (imageFiles.getAll('images') as File[]).filter((f) => f instanceof File);
+    await Promise.all(
+      files.map(async (file, i) => {
+        const ext = file.name.split('.').pop() ?? 'jpg';
+        const path = `${caseId}/${reqId}/${Date.now()}-${i}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('painter-images')
+          .upload(path, file, { contentType: file.type });
+        if (!uploadErr) {
+          await supabase
+            .from('painter_request_images')
+            .insert({ request_id: reqId, image_path: path } as never);
+        }
+      })
+    );
   }
 
   // Notify bodywork advisors of this branch
