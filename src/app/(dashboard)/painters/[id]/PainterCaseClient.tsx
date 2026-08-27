@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
+import { uploadCaseDocument } from '@/app/actions/documents';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
 type PainterRequest = {
@@ -48,6 +49,8 @@ interface Props {
   partsArrived: boolean;
   enteredWorkAt: string | null;
   partsArrivedAt: string | null;
+  enterWorkCompletedAt: string | null;
+  enterWorkCompletedByName: string | null;
   openedAt: string | null;
   licensePlate: string | null;
   carMake: string | null;
@@ -168,6 +171,8 @@ export function PainterCaseClient({
   partsArrived,
   enteredWorkAt,
   partsArrivedAt,
+  enterWorkCompletedAt,
+  enterWorkCompletedByName,
   openedAt,
   licensePlate,
   carMake,
@@ -188,6 +193,37 @@ export function PainterCaseClient({
   const [partsArrivedAtLocal, setPartsArrivedAtLocal] = useState(partsArrivedAt);
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [checklistError, setChecklistError] = useState<string | null>(null);
+
+  // Document upload (multi-file) — attach documentation for this case
+  // directly from the painter's own view.
+  const [docsUploading, setDocsUploading] = useState(false);
+  const [docsUploadError, setDocsUploadError] = useState<string | null>(null);
+  const [docsUploadedCount, setDocsUploadedCount] = useState(0);
+
+  async function uploadCaseDocs(files: File[]) {
+    if (files.length === 0) return;
+    setDocsUploadError(null);
+    setDocsUploading(true);
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const formData = new FormData();
+        formData.append('case_id', caseId);
+        formData.append('file', file);
+        return uploadCaseDocument(formData);
+      })
+    );
+    const errors = results.filter((r) => r?.error).map((r) => r!.error as string);
+    const succeeded = results.length - errors.length;
+    if (succeeded > 0) setDocsUploadedCount((c) => c + succeeded);
+    if (errors.length > 0) {
+      setDocsUploadError(
+        errors.length === results.length
+          ? errors[0]
+          : `${succeeded}/${results.length} קבצים הועלו בהצלחה. שגיאה: ${errors[0]}`
+      );
+    }
+    setDocsUploading(false);
+  }
 
   // Requests
   const [requests, setRequests] = useState<PainterRequest[]>(initialRequests);
@@ -345,6 +381,61 @@ export function PainterCaseClient({
               <p className="font-medium text-gray-700">{new Date(openedAt).toLocaleDateString('he-IL')}</p>
             </div>
           )}
+        </div>
+
+        {/* Who marked the case as entered work + when — the action that just
+            triggered the notification, so it's not just "a car is ready"
+            with no context of who to ask if something's unclear. */}
+        {enterWorkCompletedAt && (
+          <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+            🔧 סומן &quot;נכנס לעבודה&quot; ע&quot;י{' '}
+            <span className="font-semibold text-gray-700">{enterWorkCompletedByName ?? 'לא ידוע'}</span>
+            {' · '}
+            {new Date(enterWorkCompletedAt).toLocaleDateString('he-IL')},{' '}
+            {new Date(enterWorkCompletedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        )}
+
+        {/* Attach documentation for this case (multi-file, same pattern as
+            the case detail and closure screens) */}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+          <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+            <input
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              className="hidden"
+              disabled={docsUploading}
+              onChange={async (e) => {
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
+                await uploadCaseDocs(Array.from(files));
+                e.target.value = '';
+              }}
+            />
+            📁 {docsUploading ? 'מעלה...' : 'הוסף מסמך'}
+          </label>
+          <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              className="hidden"
+              disabled={docsUploading}
+              onChange={async (e) => {
+                const files = e.target.files;
+                if (!files || files.length === 0) return;
+                await uploadCaseDocs(Array.from(files));
+                e.target.value = '';
+              }}
+            />
+            📷 צלם
+          </label>
+          {docsUploadedCount > 0 && !docsUploadError && (
+            <span className="text-xs text-green-600">✓ הועלו {docsUploadedCount} קבצים</span>
+          )}
+          {docsUploadError && <span className="text-xs text-red-600">⚠️ {docsUploadError}</span>}
         </div>
       </div>
 

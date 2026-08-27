@@ -54,6 +54,7 @@ type StepRow = {
   order_index: number;
   completed_at?: string | null;
   completed_by?: string | null;
+  activated_at?: string | null;
 };
 
 type StepTemplate = {
@@ -534,7 +535,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
       const { data: stepsData } = await supabase
         .from('case_workflow_steps')
-        .select('id, step_key, state, order_index, completed_at, completed_by')
+        .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
         .in('run_id', runIds)
         .order('order_index');
 
@@ -651,7 +652,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     if (!runIds.length) return;
     const { data } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index, completed_at, completed_by')
+      .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
       .in('run_id', runIds)
       .order('order_index');
     // Only apply if this is still the latest reload
@@ -1323,6 +1324,26 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                 }
               }
 
+              // Requested: WHEELS_CHECK gets a time-based urgency color while
+              // it's the active step — green under 2h, yellow 2-4h, red past
+              // 4h since it became active, so a stalled wheels-form sitting
+              // untouched is visible without opening the step.
+              let wheelsAgeTier: 'green' | 'yellow' | 'red' | null = null;
+              if (s.step_key === 'WHEELS_CHECK' && isActive && s.activated_at) {
+                const hoursSinceActive = (Date.now() - new Date(s.activated_at).getTime()) / 3_600_000;
+                wheelsAgeTier = hoursSinceActive >= 4 ? 'red' : hoursSinceActive >= 2 ? 'yellow' : 'green';
+              }
+              const WHEELS_AGE_RING: Record<'green' | 'yellow' | 'red', string> = {
+                green: 'ring-2 ring-status-done/50',
+                yellow: 'ring-2 ring-status-waiting/60',
+                red: 'ring-2 ring-status-rejected/60',
+              };
+              const WHEELS_AGE_DOT: Record<'green' | 'yellow' | 'red', string> = {
+                green: 'bg-status-done',
+                yellow: 'bg-status-waiting',
+                red: 'bg-status-rejected',
+              };
+
               const isWheelsPanel = wheelsCheckPanelStepId === s.id;
               const isLinkPanel = editingLinkStepId === s.id;
 
@@ -1337,7 +1358,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         : isDone
                           ? 'bg-green-50 border-green-200'
                           : 'bg-gray-50 border-gray-100'
-                    }`}
+                    } ${wheelsAgeTier ? WHEELS_AGE_RING[wheelsAgeTier] : ''}`}
                   >
                     <div
                       className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
@@ -1373,6 +1394,12 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                       {isSkipped && <span className="mr-2 text-xs text-gray-400">(דולג)</span>}
                       {isBlocked && blockReason && (
                         <span className="mr-2 text-xs text-orange-700 font-normal">({blockReason})</span>
+                      )}
+                      {wheelsAgeTier && (
+                        <span className="mr-2 inline-flex items-center gap-1 text-xs font-medium text-stone-500">
+                          <span className={`w-2 h-2 rounded-full ${WHEELS_AGE_DOT[wheelsAgeTier]}`} />
+                          {Math.floor((Date.now() - new Date(s.activated_at!).getTime()) / 3_600_000)} שעות ממתין
+                        </span>
                       )}
                     </div>
 

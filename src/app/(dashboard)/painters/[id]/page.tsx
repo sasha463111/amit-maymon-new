@@ -50,6 +50,43 @@ export default async function PainterCasePage({ params }: { params: { id: string
   const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
   const branch = Array.isArray(c.branches) ? c.branches[0] : c.branches;
 
+  // "מי לחץ + מתי" for the ENTER_WORK workflow step (the manager's action
+  // that triggers the "רכב נכנס לעבודה" notification the painter just got) —
+  // requested context so the painter isn't just told a car is ready, they
+  // can see who marked it and when.
+  let enterWorkCompletedAt: string | null = null;
+  let enterWorkCompletedByName: string | null = null;
+  {
+    const { data: runData } = await supabase
+      .from('case_workflow_runs')
+      .select('id')
+      .eq('case_id', params.id)
+      .eq('workflow_type', 'PROFESSIONAL')
+      .maybeSingle();
+    const run = runData as { id: string } | null;
+    if (run) {
+      const { data: stepData } = await supabase
+        .from('case_workflow_steps')
+        .select('completed_at, completed_by')
+        .eq('run_id', run.id)
+        .eq('step_key', 'ENTER_WORK')
+        .eq('state', 'DONE')
+        .maybeSingle();
+      const step = stepData as { completed_at: string | null; completed_by: string | null } | null;
+      if (step?.completed_at) {
+        enterWorkCompletedAt = step.completed_at;
+        if (step.completed_by) {
+          const { data: byProfile } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', step.completed_by)
+            .maybeSingle();
+          enterWorkCompletedByName = (byProfile as { full_name: string | null } | null)?.full_name ?? null;
+        }
+      }
+    }
+  }
+
   // Load existing painter requests + their images
   const { data: requestsData } = await supabase
     .from('painter_requests')
@@ -108,6 +145,8 @@ export default async function PainterCasePage({ params }: { params: { id: string
       partsArrived={c.parts_arrived ?? false}
       enteredWorkAt={c.painter_entered_work_at}
       partsArrivedAt={c.parts_arrived_at}
+      enterWorkCompletedAt={enterWorkCompletedAt}
+      enterWorkCompletedByName={enterWorkCompletedByName}
       openedAt={c.opened_at}
       licensePlate={car?.license_plate ?? null}
       carMake={car?.make ?? null}

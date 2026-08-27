@@ -99,13 +99,13 @@ async function CaseDetailData({
   ]);
   const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
 
-  let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null }[] = [];
+  let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null; activated_at?: string | null }[] = [];
 
   if (allRuns && allRuns.length > 0) {
     const runIds = allRuns.map((r) => (r as { id: string }).id);
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index, completed_at, completed_by')
+      .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
       .in('run_id', runIds)
       .order('order_index');
     steps = stepsData ?? [];
@@ -142,7 +142,7 @@ async function CaseDetailData({
   if (actualRun && steps.length === 0) {
     const { data: stepsData } = await supabase
       .from('case_workflow_steps')
-      .select('id, step_key, state, order_index, completed_at, completed_by')
+      .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
       .eq('run_id', actualRun.id)
       .order('order_index');
     steps = stepsData ?? [];
@@ -192,7 +192,7 @@ async function CaseDetailData({
 
       const { data: newStepsData } = await supabase
         .from('case_workflow_steps')
-        .select('id, step_key, state, order_index, completed_at, completed_by')
+        .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
         .eq('run_id', actualRun.id)
         .order('order_index');
       steps = newStepsData ?? [];
