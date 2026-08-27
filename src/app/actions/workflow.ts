@@ -662,15 +662,23 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         .maybeSingle();
       const rfo = rfoStep as { id: string; state: string } | null;
       if (rfo && rfo.state !== 'DONE' && rfo.state !== 'SKIPPED') {
-        await supabase
+        // Guard the write itself (not just the read above) so a duplicate
+        // call — double-click, retry — can't both pass the read and both
+        // log a completion event for the same step.
+        const { data: updated } = await supabase
           .from('case_workflow_steps')
           .update({ state: 'DONE', completed_at: now, completed_by: user.id } as never)
-          .eq('id', rfo.id);
-        await writeAudit(supabase, 'WORKFLOW_STEP', rfo.id, 'STEP_COMPLETED', user.id, {
-          step_key: 'READY_FOR_OFFICE',
-          auto_completed: true,
-          reason: 'auto_after_send_completion_photos',
-        });
+          .eq('id', rfo.id)
+          .neq('state', 'DONE')
+          .neq('state', 'SKIPPED')
+          .select('id');
+        if (updated && updated.length > 0) {
+          await writeAudit(supabase, 'WORKFLOW_STEP', rfo.id, 'STEP_COMPLETED', user.id, {
+            step_key: 'READY_FOR_OFFICE',
+            auto_completed: true,
+            reason: 'auto_after_send_completion_photos',
+          });
+        }
       }
       // Mark professional run as completed
       await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);

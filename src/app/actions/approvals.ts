@@ -168,17 +168,27 @@ export async function decideApproval(input: ApprovalDecisionInput) {
           const step = readyStep as { id: string; state: string } | null;
           if (step?.state === 'ACTIVE') {
             const now = new Date().toISOString();
-            await supabase
+            // Guard the write itself with .eq('state', 'ACTIVE') — not just the
+            // read above — so two concurrent approvals (e.g. approving
+            // ESTIMATE_AND_DETAILS and WHEELS_CHECK from two tabs) can't both
+            // see ACTIVE, both write DONE, and both log a completion event.
+            // Only the call whose UPDATE actually matched a row (still ACTIVE
+            // at write time) logs the audit event.
+            const { data: updated } = await supabase
               .from('case_workflow_steps')
               .update({ state: 'DONE', completed_at: now, completed_by: user.id } as never)
-              .eq('id', step.id);
-            await supabase.from('audit_events').insert({
-              entity_type: 'WORKFLOW_STEP',
-              entity_id: step.id,
-              action: 'STEP_COMPLETED',
-              user_id: user.id,
-              payload: { step_key: 'READY_FOR_OFFICE', auto_completed: true },
-            } as never);
+              .eq('id', step.id)
+              .eq('state', 'ACTIVE')
+              .select('id');
+            if (updated && updated.length > 0) {
+              await supabase.from('audit_events').insert({
+                entity_type: 'WORKFLOW_STEP',
+                entity_id: step.id,
+                action: 'STEP_COMPLETED',
+                user_id: user.id,
+                payload: { step_key: 'READY_FOR_OFFICE', auto_completed: true },
+              } as never);
+            }
           }
         }
       }
