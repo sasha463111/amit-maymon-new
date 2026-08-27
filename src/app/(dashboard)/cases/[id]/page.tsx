@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import type { PartsStatus, GeneralStatus } from '@/types/database';
 import { PROFESSIONAL_WORKFLOW_STEPS } from '@/types/database';
 import { CaseDetailClientV2 } from './CaseDetailClientV2';
+import { SkeletonPanel } from '@/components/ui/Skeleton';
 
 type StepTemplate = {
   step_key: string;
@@ -18,12 +19,12 @@ type StepTemplate = {
 
 function CaseDetailSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-100 h-96" />
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 h-96" />
+        <SkeletonPanel className="lg:col-span-1 h-96" />
+        <SkeletonPanel className="lg:col-span-2 h-96" />
       </div>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 h-48" />
+      <SkeletonPanel className="h-48" />
     </div>
   );
 }
