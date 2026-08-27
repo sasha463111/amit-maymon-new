@@ -63,19 +63,22 @@ export async function updatePainterChecklist(
     }
     const title = 'חלקים הגיעו';
     const body = `${customer} · ${plate} - אפשר להמשיך בעבודה`;
-    for (const p of recipients) {
-      if (p.id === user.id) continue;
-      await supabase.from('notifications').insert({
-        user_id: p.id,
-        case_id: caseId,
-        type: 'OTHER',
-        title,
-        body,
-        action_url: `/painters/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
-    }
+    await Promise.all(
+      recipients
+        .filter((p) => p.id !== user.id)
+        .map(async (p) => {
+          await supabase.from('notifications').insert({
+            user_id: p.id,
+            case_id: caseId,
+            type: 'OTHER',
+            title,
+            body,
+            action_url: `/painters/${caseId}`,
+            triggered_by: user.id,
+          } as never);
+          await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
+        })
+    );
     await pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
   }
 
@@ -156,19 +159,22 @@ export async function createPainterRequest(
   const typeLabel = requestType === 'WORK' ? 'עבודה' : 'חלקים';
   const reqTitle = `בקשת פחח - ${typeLabel}`;
   const reqBody = `רכב ${plateLabel}: ${description.trim()}`;
-  for (const adv of advisors) {
-    if (adv.id === user.id) continue;
-    await supabase.from('notifications').insert({
-      user_id: adv.id,
-      case_id: caseId,
-      type: 'PAINTER_REQUEST',
-      title: reqTitle,
-      body: reqBody,
-      action_url: `/painters/${caseId}`,
-      triggered_by: user.id,
-    } as never);
-    await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
-  }
+  await Promise.all(
+    advisors
+      .filter((adv) => adv.id !== user.id)
+      .map(async (adv) => {
+        await supabase.from('notifications').insert({
+          user_id: adv.id,
+          case_id: caseId,
+          type: 'PAINTER_REQUEST',
+          title: reqTitle,
+          body: reqBody,
+          action_url: `/painters/${caseId}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` });
+      })
+  );
   await pushToOverseers({ title: reqTitle, body: reqBody, url: `/painters/${caseId}`, tag: `painter-${caseId}` }, user.id);
 
   revalidatePath(`/painters/${caseId}`);

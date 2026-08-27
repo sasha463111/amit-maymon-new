@@ -77,18 +77,20 @@ async function notifyCeosPendingApproval(
   const label = APPROVAL_TYPE_LABELS[approvalType] ?? approvalType;
   const title = `אישור ${label} ממתין`;
   const body = `רכב ${plate} ממתין לאישורך`;
-  for (const ceo of (ceos ?? []) as { id: string }[]) {
-    await supabase.from('notifications').insert({
-      user_id: ceo.id,
-      case_id: caseId,
-      type: 'PENDING_APPROVAL',
-      title,
-      body,
-      action_url: `/approvals`,
-      triggered_by: triggeredBy,
-    } as never);
-    await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
-  }
+  await Promise.all(
+    ((ceos ?? []) as { id: string }[]).map(async (ceo) => {
+      await supabase.from('notifications').insert({
+        user_id: ceo.id,
+        case_id: caseId,
+        type: 'PENDING_APPROVAL',
+        title,
+        body,
+        action_url: `/approvals`,
+        triggered_by: triggeredBy,
+      } as never);
+      await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
+    })
+  );
   await pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
 }
 
@@ -289,19 +291,22 @@ export async function createCase(input: CreateCaseInput) {
     const body = `${customerLabel} · ${input.plate_number}`;
     const branchStaff = (await branchRecipients(supabase, branchId))
       .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.role === 'OFFICE');
-    for (const staff of branchStaff) {
-      if (staff.id === user.id) continue; // skip the creator
-      await supabase.from('notifications').insert({
-        user_id: staff.id,
-        case_id: caseId,
-        type: 'OTHER',
-        title,
-        body,
-        action_url: `/cases/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
-    }
+    await Promise.all(
+      branchStaff
+        .filter((staff) => staff.id !== user.id) // skip the creator
+        .map(async (staff) => {
+          await supabase.from('notifications').insert({
+            user_id: staff.id,
+            case_id: caseId,
+            type: 'OTHER',
+            title,
+            body,
+            action_url: `/cases/${caseId}`,
+            triggered_by: user.id,
+          } as never);
+          await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
+        })
+    );
     await pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
   }
 
@@ -580,18 +585,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .filter((p) => p.role === 'OFFICE');
     const officeTitle = 'תיק מוכן לסגירה';
     const officeBody = `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`;
-    for (const ou of officeUsers) {
-      await supabase.from('notifications').insert({
-        user_id: ou.id,
-        case_id: caseId,
-        type: 'READY_FOR_OFFICE',
-        title: officeTitle,
-        body: officeBody,
-        action_url: `/closure/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
-    }
+    await Promise.all(
+      officeUsers.map(async (ou) => {
+        await supabase.from('notifications').insert({
+          user_id: ou.id,
+          case_id: caseId,
+          type: 'READY_FOR_OFFICE',
+          title: officeTitle,
+          body: officeBody,
+          action_url: `/closure/${caseId}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
+      })
+    );
     await pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
@@ -677,19 +684,22 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     }
     const ewTitle = 'רכב נכנס לעבודה';
     const ewBody = `${ewCustomer} · ${ewPlate} - מוכן עבורך`;
-    for (const p of recipients) {
-      if (p.id === user.id) continue;
-      await supabase.from('notifications').insert({
-        user_id: p.id,
-        case_id: caseId,
-        type: 'OTHER',
-        title: ewTitle,
-        body: ewBody,
-        action_url: `/painters/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
-    }
+    await Promise.all(
+      recipients
+        .filter((p) => p.id !== user.id)
+        .map(async (p) => {
+          await supabase.from('notifications').insert({
+            user_id: p.id,
+            case_id: caseId,
+            type: 'OTHER',
+            title: ewTitle,
+            body: ewBody,
+            action_url: `/painters/${caseId}`,
+            triggered_by: user.id,
+          } as never);
+          await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
+        })
+    );
     await pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
   }
 
@@ -707,18 +717,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .filter((p) => p.is_bodywork_advisor === true);
     const washTitle = 'רכב נשלח לשטיפה';
     const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
-    for (const adv of advisors) {
-      await supabase.from('notifications').insert({
-        user_id: adv.id,
-        case_id: caseId,
-        type: 'WASH_STARTED',
-        title: washTitle,
-        body: washBody,
-        action_url: `/cases/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
-    }
+    await Promise.all(
+      advisors.map(async (adv) => {
+        await supabase.from('notifications').insert({
+          user_id: adv.id,
+          case_id: caseId,
+          type: 'WASH_STARTED',
+          title: washTitle,
+          body: washBody,
+          action_url: `/cases/${caseId}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
+      })
+    );
     await pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
   }
 
@@ -751,18 +763,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     closeRecipients.delete(user.id);
     const closeTitle = 'תיק נסגר';
     const closeBody = `התיק של ${cc?.customer_name ?? ''} (רכב ${ccPlate}) נסגר סופית`.replace('  ', ' ');
-    for (const rid of Array.from(closeRecipients)) {
-      await supabase.from('notifications').insert({
-        user_id: rid,
-        case_id: caseId,
-        type: 'CASE_CLOSED',
-        title: closeTitle,
-        body: closeBody,
-        action_url: `/cases/${caseId}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
-    }
+    await Promise.all(
+      Array.from(closeRecipients).map(async (rid) => {
+        await supabase.from('notifications').insert({
+          user_id: rid,
+          case_id: caseId,
+          type: 'CASE_CLOSED',
+          title: closeTitle,
+          body: closeBody,
+          action_url: `/cases/${caseId}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
+      })
+    );
     await pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
   }
 

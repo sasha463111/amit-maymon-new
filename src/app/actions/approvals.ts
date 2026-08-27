@@ -85,18 +85,20 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const rejTitle = `${approvalTypeLabel} נדחה`;
     const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - עמית דחה את האישור`;
-    for (const m of managers) {
-      await supabase.from('notifications').insert({
-        user_id: m.id,
-        case_id: approval.case_id,
-        type: 'CEO_REJECTED',
-        title: rejTitle,
-        body: rejBody,
-        action_url: `/cases/${approval.case_id}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
-    }
+    await Promise.all(
+      managers.map(async (m) => {
+        await supabase.from('notifications').insert({
+          user_id: m.id,
+          case_id: approval.case_id,
+          type: 'CEO_REJECTED',
+          title: rejTitle,
+          body: rejBody,
+          action_url: `/cases/${approval.case_id}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
+      })
+    );
     await pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
@@ -104,18 +106,20 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const okTitle = `${approvalTypeLabel} אושר ✓`;
     const okBody = `רכב ${plateLabel} - עמית אישר. אפשר להמשיך בטיפול.`;
-    for (const m of managers) {
-      await supabase.from('notifications').insert({
-        user_id: m.id,
-        case_id: approval.case_id,
-        type: 'OTHER',
-        title: okTitle,
-        body: okBody,
-        action_url: `/cases/${approval.case_id}`,
-        triggered_by: user.id,
-      } as never);
-      await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
-    }
+    await Promise.all(
+      managers.map(async (m) => {
+        await supabase.from('notifications').insert({
+          user_id: m.id,
+          case_id: approval.case_id,
+          type: 'OTHER',
+          title: okTitle,
+          body: okBody,
+          action_url: `/cases/${approval.case_id}`,
+          triggered_by: user.id,
+        } as never);
+        await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
+      })
+    );
     await pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
   }
 

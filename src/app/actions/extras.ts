@@ -46,18 +46,20 @@ export async function createExtra(input: CreateExtraInput) {
     .filter((p) => p.role === 'SERVICE_MANAGER');
   const extraTitle = 'תוספת חדשה';
   const extraBody = input.description;
-  for (const m of managers) {
-    await supabase.from('notifications').insert({
-      user_id: m.id,
-      case_id: input.case_id,
-      type: 'EXTRA_CREATED',
-      title: extraTitle,
-      body: extraBody,
-      action_url: `/cases/${input.case_id}`,
-      triggered_by: user.id,
-    } as never);
-    await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
-  }
+  await Promise.all(
+    managers.map(async (m) => {
+      await supabase.from('notifications').insert({
+        user_id: m.id,
+        case_id: input.case_id,
+        type: 'EXTRA_CREATED',
+        title: extraTitle,
+        body: extraBody,
+        action_url: `/cases/${input.case_id}`,
+        triggered_by: user.id,
+      } as never);
+      await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
+    })
+  );
   await pushToOverseers({ title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id);
 
   await supabase.from('audit_events').insert({
