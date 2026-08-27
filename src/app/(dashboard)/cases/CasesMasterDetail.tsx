@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { CaseRow } from '@/components/design/CaseRow';
+import { CompactCaseRow } from '@/components/design/CompactCaseRow';
 import { CasesTable } from '@/components/design/CasesTable';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { SearchField } from '@/components/design/SearchField';
@@ -128,18 +129,19 @@ export function CasesMasterDetail({
         </div>
 
         {/* Table needs real width to be readable (6 columns) — on a phone
-            that means horizontal scrolling, worse than the card list Amit
-            already uses there. So: cards on mobile, table from md: up. */}
-        <div className="md:hidden flex flex-col gap-2.5">
+            that means horizontal scrolling. Compact one-line rows instead —
+            same urgency-sort and colors, condensed for a small screen rather
+            than the full multi-line card, which meant just as much scrolling
+            as the table would have. Table stays for md: and up. */}
+        <div className="md:hidden flex flex-col gap-2">
           {filtered.length === 0 && (
             <div className="py-12 text-center text-stone-500 text-sm">לא נמצאו תיקים תואמים</div>
           )}
           {filtered.map((c) => (
-            <CaseRow
+            <CompactCaseRow
               key={c.id}
               plate={c.plate}
               customer={c.customer_name ?? ''}
-              insurer={c.insurer ?? ''}
               branch={branchNameById[c.branch_id] ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
