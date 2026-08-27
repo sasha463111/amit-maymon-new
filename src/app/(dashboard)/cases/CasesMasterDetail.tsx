@@ -17,10 +17,15 @@ export interface RailCase {
   nextStep: string | null;
   approvalBlocked: boolean;
   hasExtrasInTreatment: boolean;
+  hasCeoRejection: boolean;
 }
 
 function caseStatus(c: RailCase): CaseStatus {
   if (!c.nextStep) return 'done';
+  // A CEO rejection is a distinct, more urgent state than "still waiting on
+  // approval" — it needs someone to actually act (fix and resubmit), not just
+  // wait. Checked before the generic approvalBlocked so it wins the color.
+  if (c.hasCeoRejection) return 'rejected';
   if (c.approvalBlocked || c.hasExtrasInTreatment) return 'blocked';
   return 'active';
 }

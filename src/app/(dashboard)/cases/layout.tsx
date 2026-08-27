@@ -61,8 +61,14 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   const extrasSet = new Set((extrasData ?? []).map((e) => (e as { case_id: string }).case_id));
   const approvalBlocked = new Set<string>();
+  const ceoRejected = new Set<string>();
   for (const a of (approvalsData ?? []) as { case_id: string; status: string }[]) {
     if (a.status !== 'APPROVED') approvalBlocked.add(a.case_id);
+    // There's exactly one ceo_approvals row per (case, approval_type) — decideApproval
+    // updates it in place rather than inserting a new one — so a plain status check
+    // here (no "latest per type" dedup needed) reflects the CEO's current decision:
+    // if they later flip REJECTED → APPROVED on the same row, this clears on its own.
+    if (a.status === 'REJECTED') ceoRejected.add(a.case_id);
   }
   const runIdToCaseId = new Map((runsData ?? []).map((r) => [(r as { id: string; case_id: string }).id, (r as { id: string; case_id: string }).case_id]));
   const runIds = Array.from(runIdToCaseId.keys());
@@ -94,6 +100,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       nextStep: caseIdToNextStep.get(row.id) ?? null,
       approvalBlocked: approvalBlocked.has(row.id),
       hasExtrasInTreatment: extrasSet.has(row.id),
+      hasCeoRejection: ceoRejected.has(row.id),
     };
   });
 
