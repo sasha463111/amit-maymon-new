@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
@@ -201,7 +201,14 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 
 export function ApprovalsList({ approvals: initialApprovals }: { approvals: ApprovalRow[] }) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState<string | null>(initialApprovals[0]?.id ?? null);
+  // Arriving from a "אישור נדרש" notification (?highlight=<approval_id>)
+  // opens straight on that specific approval instead of whichever happens
+  // to be first — with several pending, "first" was rarely the right one.
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+  const [selectedId, setSelectedId] = useState<string | null>(
+    (highlightId && initialApprovals.some((a) => a.id === highlightId) ? highlightId : null) ?? initialApprovals[0]?.id ?? null
+  );
   const [rejectNote, setRejectNote] = useState('');
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -217,6 +224,15 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
   const [stepsLoading, setStepsLoading] = useState(false);
   const [extras, setExtras] = useState<BodyworkExtra[]>([]);
   const [extrasLoading, setExtrasLoading] = useState(false);
+
+  // Bring the highlighted item into view on the mobile horizontal scroller
+  // (desktop's vertical list is short enough it's rarely off-screen, but
+  // this covers it too if the list ever grows).
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`approval-item-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // In PREVIEW: reload approvals from DB on mount
   useEffect(() => {
@@ -403,13 +419,13 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
         {/* Horizontal scroller on mobile (lg+ becomes vertical list via space-y) */}
         <ul className="flex lg:block gap-2 lg:space-y-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-3 lg:mx-0 px-3 lg:px-0">
           {localApprovals.map((a) => (
-            <li key={a.id} className="shrink-0 lg:shrink min-w-[240px] lg:min-w-0">
+            <li key={a.id} id={`approval-item-${a.id}`} className="shrink-0 lg:shrink min-w-[240px] lg:min-w-0">
               <button
                 type="button"
                 onClick={() => { setSelectedId(a.id); setActiveTab('approval'); }}
                 className={`w-full text-right p-3 rounded-xl border-2 transition-all ${
                   selectedId === a.id
-                    ? 'border-indigo-400 bg-indigo-50 shadow-md'
+                    ? `border-indigo-400 bg-indigo-50 shadow-md ${a.id === highlightId ? 'ring-2 ring-brand-red ring-offset-2' : ''}`
                     : 'border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50'
                 }`}
               >

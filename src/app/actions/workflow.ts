@@ -58,12 +58,17 @@ const APPROVAL_TYPE_LABELS: Record<string, string> = {
   WHEELS_CHECK: 'טפסי גלגלים',
 };
 
-// Notify all CEOs that a new approval is pending for them.
+// Notify all CEOs that a new approval is pending for them. `approvalId`
+// (the ceo_approvals row) is threaded into the URL so the click lands
+// scrolled-to and highlighted on that exact approval, not just "somewhere
+// on the approvals screen" — with several pending, that was the actual
+// complaint (see NotificationsBell.tsx's per-case-url comment).
 async function notifyCeosPendingApproval(
   supabase: Awaited<ReturnType<typeof createClient>>,
   caseId: string,
   approvalType: string,
-  triggeredBy: string
+  triggeredBy: string,
+  approvalId: string
 ) {
   const { data: caseData } = await supabase
     .from('cases')
@@ -77,6 +82,7 @@ async function notifyCeosPendingApproval(
   const label = APPROVAL_TYPE_LABELS[approvalType] ?? approvalType;
   const title = `אישור ${label} ממתין`;
   const body = `רכב ${plate} ממתין לאישורך`;
+  const url = `/approvals?highlight=${approvalId}`;
   await Promise.all(
     ((ceos ?? []) as { id: string }[]).map(async (ceo) => {
       const { error: notifErr } = await supabase.from('notifications').insert({
@@ -85,14 +91,14 @@ async function notifyCeosPendingApproval(
         type: 'PENDING_APPROVAL',
         title,
         body,
-        action_url: `/approvals`,
+        action_url: url,
         triggered_by: triggeredBy,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(ceo.id, { title, body, url: '/approvals', tag: `approval-${caseId}` });
+      await sendPushToUser(ceo.id, { title, body, url, tag: `approval-${caseId}` });
     })
   );
-  await pushToOverseers({ title, body, url: '/approvals', tag: `approval-${caseId}` }, triggeredBy);
+  await pushToOverseers({ title, body, url, tag: `approval-${caseId}` }, triggeredBy);
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -534,12 +540,17 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       const existing = latestApprovalsByType(approvalsArr).get(approvalType) ?? null;
 
       if (!existing) {
-        await supabase.from('ceo_approvals').insert({
-          case_id: caseId,
-          approval_type: approvalType,
-          status: 'PENDING',
-        } as never);
-        await notifyCeosPendingApproval(supabase, caseId, approvalType, user.id);
+        const { data: newApproval } = await supabase
+          .from('ceo_approvals')
+          .insert({
+            case_id: caseId,
+            approval_type: approvalType,
+            status: 'PENDING',
+          } as never)
+          .select('id')
+          .single();
+        const newApprovalId = (newApproval as { id: string } | null)?.id;
+        if (newApprovalId) await notifyCeosPendingApproval(supabase, caseId, approvalType, user.id, newApprovalId);
         if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
           const typeKeys = new Set(Array.from(latestApprovalsByType(approvalsArr).keys()));
           const { data: wheelsStep } = await supabase
@@ -550,12 +561,17 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
             .eq('state', 'DONE')
             .maybeSingle();
           if (wheelsStep && !typeKeys.has('WHEELS_CHECK')) {
-            await supabase.from('ceo_approvals').insert({
-              case_id: caseId,
-              approval_type: 'WHEELS_CHECK',
-              status: 'PENDING',
-            } as never);
-            await notifyCeosPendingApproval(supabase, caseId, 'WHEELS_CHECK', user.id);
+            const { data: newWheelsApproval } = await supabase
+              .from('ceo_approvals')
+              .insert({
+                case_id: caseId,
+                approval_type: 'WHEELS_CHECK',
+                status: 'PENDING',
+              } as never)
+              .select('id')
+              .single();
+            const newWheelsApprovalId = (newWheelsApproval as { id: string } | null)?.id;
+            if (newWheelsApprovalId) await notifyCeosPendingApproval(supabase, caseId, 'WHEELS_CHECK', user.id, newWheelsApprovalId);
           }
         }
       }
