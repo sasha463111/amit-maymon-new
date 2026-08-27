@@ -232,7 +232,10 @@ export async function createCase(input: CreateCaseInput) {
     .filter(({ step_key: stepKey }) => stepKey !== 'OPEN_CASE' && !(stepKey === 'WHEELS_CHECK' && skipWheels))
     .sort((a, b) => a.order_index - b.order_index)[0]?.order_index ?? null;
 
-  for (const { step_key: stepKey, order_index } of stepsToCreate) {
+  // Each row is independent (no cross-step dependency at insert time — the
+  // ordering is carried in order_index, not insertion order), so this is one
+  // batch insert instead of N round-trips to build a single new case's steps.
+  const stepRows = stepsToCreate.map(({ step_key: stepKey, order_index }) => {
     let state: 'PENDING' | 'ACTIVE' | 'DONE' | 'SKIPPED' = 'ACTIVE';
     let completedAt: string | null = null;
     let activatedAt: string | null = openedAt;
@@ -255,15 +258,18 @@ export async function createCase(input: CreateCaseInput) {
       completedAt = null;
     }
 
-    await supabase.from('case_workflow_steps').insert({
+    return {
       run_id: runId,
       step_key: stepKey,
       state,
       order_index,
       activated_at: activatedAt,
       completed_at: completedAt,
-    } as never);
-  }
+    };
+  });
+
+  const { error: stepsErr } = await supabase.from('case_workflow_steps').insert(stepRows as never);
+  if (stepsErr) console.error('[createCase] workflow step insert failed', stepsErr);
 
   revalidatePath('/cases');
   await writeAudit(supabase, 'CASE', caseId, 'CASE_CREATED', user.id, { case_key: caseKey });
