@@ -21,7 +21,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
   const { data: caseData } = await supabase
     .from('cases')
     .select(`
-      id, case_key, customer_name, phone, painter_status, parts_arrived,
+      id, case_key, customer_name, phone, painter_status, painter_status_other_text, parts_arrived,
       painter_entered_work_at, parts_arrived_at,
       opened_at,
       cars(license_plate, make, model, year),
@@ -39,6 +39,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
     customer_name: string | null;
     phone: string | null;
     painter_status: string | null;
+    painter_status_other_text: string | null;
     parts_arrived: boolean | null;
     painter_entered_work_at: string | null;
     parts_arrived_at: string | null;
@@ -142,6 +143,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
       customerName={c.customer_name}
       phone={c.phone}
       painterStatus={c.painter_status}
+      painterStatusOtherText={c.painter_status_other_text}
       partsArrived={c.parts_arrived ?? false}
       enteredWorkAt={c.painter_entered_work_at}
       partsArrivedAt={c.parts_arrived_at}

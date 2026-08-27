@@ -58,6 +58,7 @@ type CaseRowMinimal = {
   qc_assignee?: string | null;
   estimate_link?: string | null;
   painter_status?: string | null;
+  painter_status_other_text?: string | null;
   appraiser_status?: string | null;
   // Added migration 020 (Session 6)
   enter_work_checklist_state?: string[] | null;
@@ -336,6 +337,7 @@ async function CaseDetailData({
       qcAssignee={caseRow.qc_assignee ?? null}
       estimateLink={caseRow.estimate_link ?? null}
       painterStatus={caseRow.painter_status ?? null}
+      painterStatusOtherText={caseRow.painter_status_other_text ?? null}
       appraiserStatus={caseRow.appraiser_status ?? null}
       carAgeYears={carAgeYears}
       bodyworkAdvisors={bodyworkAdvisors}
@@ -373,7 +375,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     const { data, error } = await supabase
       .from('cases')
       .select(
-        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,appraiser_status,enter_work_checklist_state,catalog_numbers_assignee,parts_discounts_assignee,completion_photos_assignee,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
+        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,painter_status_other_text,appraiser_status,enter_work_checklist_state,catalog_numbers_assignee,parts_discounts_assignee,completion_photos_assignee,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
       )
       .eq('id', id)
       .single();
@@ -385,7 +387,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
       const { data: basicData } = await supabase
         .from('cases')
         .select(
-          'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,appraiser_status,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
+          'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,painter_status_other_text,appraiser_status,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
         )
         .eq('id', id)
         .single();

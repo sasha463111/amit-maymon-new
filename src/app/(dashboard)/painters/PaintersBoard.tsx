@@ -9,6 +9,7 @@ export interface PainterRow {
   case_key: string | null;
   customer_name: string | null;
   painter_status: string | null;
+  painter_status_other_text: string | null;
   appraiser_name: string | null;
   opened_at: string | null;
   license_plate: string | null;
@@ -23,6 +24,7 @@ const PAINTER_STATUS_LABELS: Record<string, string> = {
   WAITING_PARTS: 'ממתין לחלקים',
   PARTS_ARRIVED: 'הגיעו חלקים',
   READY_FOR_RELEASE: 'מוכן לשחרור',
+  OTHER: 'אחר',
 };
 
 const PAINTER_STATUS_ICON: Record<string, string> = {
@@ -30,6 +32,7 @@ const PAINTER_STATUS_ICON: Record<string, string> = {
   WAITING_PARTS: '⏳',
   PARTS_ARRIVED: '🎨',
   READY_FOR_RELEASE: '✅',
+  OTHER: '❓',
 };
 
 // Column header: colored fill + a bottom border in the deeper shade of the same hue.
@@ -38,9 +41,10 @@ const PAINTER_STATUS_COLUMN_HEAD: Record<string, string> = {
   WAITING_PARTS: 'bg-yellow-100 border-yellow-400 text-yellow-800',
   PARTS_ARRIVED: 'bg-purple-100 border-purple-400 text-purple-800',
   READY_FOR_RELEASE: 'bg-green-100 border-green-400 text-green-800',
+  OTHER: 'bg-stone-200 border-stone-400 text-stone-700',
 };
 
-const STATUS_ORDER = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', ''];
+const STATUS_ORDER = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', 'OTHER', ''];
 
 function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => void }) {
   useEffect(() => {
@@ -52,7 +56,11 @@ function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => vo
   }, [onClose]);
 
   const carLine = [row.car_make, row.car_model, row.car_year].filter(Boolean).join(' ');
-  const statusLabel = row.painter_status ? PAINTER_STATUS_LABELS[row.painter_status] : 'ללא סטטוס פחח';
+  const statusLabel = row.painter_status === 'OTHER'
+    ? (row.painter_status_other_text?.trim() || 'אחר')
+    : row.painter_status
+      ? PAINTER_STATUS_LABELS[row.painter_status]
+      : 'ללא סטטוס פחח';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -126,7 +134,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
   const [selected, setSelected] = useState<PainterRow | null>(null);
 
   const groups: Record<string, PainterRow[]> = {
-    READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], '': [],
+    READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], OTHER: [], '': [],
   };
   for (const row of rows) {
     const key = row.painter_status ?? '';

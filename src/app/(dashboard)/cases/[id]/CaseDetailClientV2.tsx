@@ -104,6 +104,7 @@ interface CaseDetailClientProps {
   qcAssignee: string | null;
   estimateLink: string | null;
   painterStatus: string | null;
+  painterStatusOtherText: string | null;
   appraiserStatus: string | null;
   carAgeYears: number | null;
   bodyworkAdvisors: { id: string; full_name: string }[];
@@ -198,6 +199,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     qcAssignee: initialQcAssignee,
     estimateLink: initialEstimateLink,
     painterStatus: initialPainterStatus,
+    painterStatusOtherText: initialPainterStatusOtherText,
     appraiserStatus: initialAppraiserStatus,
     carAgeYears,
     bodyworkAdvisors,
@@ -321,6 +323,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   const [painterStatus, setPainterStatus] = useState<PainterStatus | ''>(
     (initialPainterStatus as PainterStatus | null) ?? ''
   );
+  const [painterStatusOtherText, setPainterStatusOtherText] = useState(initialPainterStatusOtherText ?? '');
+  const [painterStatusOtherSaving, setPainterStatusOtherSaving] = useState(false);
   const [appraiserStatus, setAppraiserStatus] = useState<string>(initialAppraiserStatus ?? '');
 
   async function saveAppraiserStatus(val: string) {
@@ -359,8 +363,31 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
   async function savePainterStatus(val: PainterStatus | '') {
     setPainterStatus(val);
+    // Clear the custom text the moment we leave OTHER — otherwise it lingers
+    // in the DB and could resurface if the status is switched back to OTHER
+    // later showing stale wording nobody typed just now.
+    if (val !== 'OTHER') setPainterStatusOtherText('');
     const supabase = (await import('@/lib/supabase/client')).createClient();
-    await supabase.from('cases').update({ painter_status: val || null } as never).eq('id', caseId);
+    const { error } = await supabase
+      .from('cases')
+      .update({
+        painter_status: val || null,
+        ...(val !== 'OTHER' ? { painter_status_other_text: null } : {}),
+      } as never)
+      .eq('id', caseId);
+    if (error) console.error('[savePainterStatus] failed', error);
+  }
+
+  async function savePainterStatusOtherText(text: string) {
+    setPainterStatusOtherText(text);
+    setPainterStatusOtherSaving(true);
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { error } = await supabase
+      .from('cases')
+      .update({ painter_status_other_text: text || null } as never)
+      .eq('id', caseId);
+    if (error) console.error('[savePainterStatusOtherText] failed', error);
+    setPainterStatusOtherSaving(false);
   }
 
   const [partsValue, setPartsValue] = useState<PartsStatus>(partsStatus);
@@ -1236,6 +1263,19 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
             </select>
             {painterStatus === 'READY_FOR_RELEASE' && (
               <span className="mr-3 text-sm font-medium text-green-700">✓ מוכן לשחרור</span>
+            )}
+            {painterStatus === 'OTHER' && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  value={painterStatusOtherText}
+                  onChange={(e) => setPainterStatusOtherText(e.target.value)}
+                  onBlur={() => void savePainterStatusOtherText(painterStatusOtherText)}
+                  placeholder="פירוט הסטטוס..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand-red outline-none"
+                />
+                {painterStatusOtherSaving && <span className="text-xs text-gray-400">שומר...</span>}
+              </div>
             )}
           </div>
         )}

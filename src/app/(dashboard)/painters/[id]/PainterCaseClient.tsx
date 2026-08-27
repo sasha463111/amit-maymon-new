@@ -31,6 +31,7 @@ const PAINTER_STATUS_LABELS: Record<string, string> = {
   WAITING_PARTS: 'ממתין לחלקים',
   PARTS_ARRIVED: 'הגיעו חלקים',
   READY_FOR_RELEASE: 'מוכן לשחרור',
+  OTHER: 'אחר',
 };
 
 function formatCheckedAt(iso: string): string {
@@ -46,6 +47,7 @@ interface Props {
   customerName: string | null;
   phone: string | null;
   painterStatus: string | null;
+  painterStatusOtherText: string | null;
   partsArrived: boolean;
   enteredWorkAt: string | null;
   partsArrivedAt: string | null;
@@ -168,6 +170,7 @@ export function PainterCaseClient({
   customerName,
   phone,
   painterStatus,
+  painterStatusOtherText,
   partsArrived,
   enteredWorkAt,
   partsArrivedAt,
@@ -351,7 +354,9 @@ export function PainterCaseClient({
           </div>
           {painterStatus && (
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-              {PAINTER_STATUS_LABELS[painterStatus] ?? painterStatus}
+              {painterStatus === 'OTHER'
+                ? (painterStatusOtherText?.trim() || 'אחר')
+                : PAINTER_STATUS_LABELS[painterStatus] ?? painterStatus}
             </span>
           )}
         </div>

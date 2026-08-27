@@ -25,6 +25,7 @@ export default async function PaintersPage() {
       case_key,
       customer_name,
       painter_status,
+      painter_status_other_text,
       appraiser_name,
       opened_at,
       cars(license_plate, make, model, year),
@@ -39,6 +40,7 @@ export default async function PaintersPage() {
     case_key: string | null;
     customer_name: string | null;
     painter_status: string | null;
+    painter_status_other_text: string | null;
     appraiser_name: string | null;
     opened_at: string | null;
     cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null } | { license_plate: string | null; make: string | null; model: string | null; year: number | null }[] | null;
@@ -53,6 +55,7 @@ export default async function PaintersPage() {
       case_key: row.case_key,
       customer_name: row.customer_name,
       painter_status: row.painter_status,
+      painter_status_other_text: row.painter_status_other_text,
       appraiser_name: row.appraiser_name,
       opened_at: row.opened_at,
       license_plate: car?.license_plate ?? null,

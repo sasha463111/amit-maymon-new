@@ -42,13 +42,14 @@ export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type ExtraStatus = 'IN_TREATMENT' | 'REJECTED' | 'DONE';
 
-export type PainterStatus = 'IN_WORK' | 'WAITING_PARTS' | 'PARTS_ARRIVED' | 'READY_FOR_RELEASE';
+export type PainterStatus = 'IN_WORK' | 'WAITING_PARTS' | 'PARTS_ARRIVED' | 'READY_FOR_RELEASE' | 'OTHER';
 
 export const PAINTER_STATUS_LABELS: Record<PainterStatus, string> = {
   IN_WORK: 'בעבודה',
   WAITING_PARTS: 'ממתין לחלקים',
   PARTS_ARRIVED: 'הגיעו חלקים',
   READY_FOR_RELEASE: 'מוכן לשחרור',
+  OTHER: 'אחר',
 };
 
 export type AuditEntityType =
@@ -115,6 +116,8 @@ export interface Case {
   // Added in migration 013
   notes: string | null;
   painter_status: PainterStatus | null;
+  // Added in migration 034
+  painter_status_other_text: string | null;
   parts_ordered: boolean | null;
   parts_arrived: boolean | null;
   qc_assignee: string | null;
