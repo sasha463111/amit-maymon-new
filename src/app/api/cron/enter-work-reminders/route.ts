@@ -31,9 +31,17 @@ const WORKDAY_START_HOUR = 9;
 const WORKDAY_END_HOUR = 17;
 
 // Extra closed dates beyond Fri/Sat (Israeli holidays, chol hamoed, etc.) —
-// 'YYYY-MM-DD' in Israel local time. Empty until filled in; add as needed.
+// 'YYYY-MM-DD' in Israel local time. Sourced from calendar.2net.co.il
+// (2026-08-27); only the near-term ones that came back unambiguous. 2027
+// dates (Passover etc.) weren't confident enough to bake in — add them
+// once confirmed rather than risk a wrong date silently.
 const EXTRA_CLOSED_DATES: string[] = [
-  // '2026-09-13', // example: Rosh Hashanah eve
+  '2026-09-23', // ראש השנה (יום א')
+  '2026-09-24', // ראש השנה (יום ב')
+  '2026-10-02', // יום כיפור
+  '2026-10-07', // סוכות (יום א')
+  '2026-10-14', // שמיני עצרת
+  '2026-10-15', // שמחת תורה
 ];
 
 function getServiceClient() {
