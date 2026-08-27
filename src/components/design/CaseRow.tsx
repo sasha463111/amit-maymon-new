@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, ChevronLeft, Lock, X } from 'lucide-react';
+import { MapPin, ChevronLeft, Lock, X, Clock } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatusBadge, type CaseStatus } from './StatusBadge';
 
@@ -27,13 +27,22 @@ export function CaseRow({
 }) {
   const done = status === 'done';
   const rejected = status === 'rejected';
+  const waiting = status === 'waiting';
   const blocked = status === 'blocked';
   const pillTone = rejected
     ? 'bg-status-rejected-soft text-status-rejected-text'
-    : blocked
-      ? 'bg-status-blocked-soft text-status-blocked-text'
-      : 'bg-accent-soft text-accent-text';
-  const pillDot = rejected ? 'bg-status-rejected' : blocked ? 'bg-status-blocked' : 'bg-accent';
+    : waiting
+      ? 'bg-status-waiting-soft text-status-waiting-text'
+      : blocked
+        ? 'bg-status-blocked-soft text-status-blocked-text'
+        : 'bg-accent-soft text-accent-text';
+  const pillDot = rejected
+    ? 'bg-status-rejected'
+    : waiting
+      ? 'bg-status-waiting'
+      : blocked
+        ? 'bg-status-blocked'
+        : 'bg-accent';
 
   return (
     <button
@@ -44,7 +53,9 @@ export function CaseRow({
           ? 'bg-accent-soft border-accent shadow-md'
           : rejected
             ? 'bg-status-rejected-soft/40 border-status-rejected/50 hover:border-status-rejected shadow-xs hover:shadow-sm'
-            : 'bg-white border-stone-200 hover:border-stone-300 shadow-xs hover:shadow-sm'
+            : waiting
+              ? 'bg-status-waiting-soft/40 border-status-waiting/50 hover:border-status-waiting shadow-xs hover:shadow-sm'
+              : 'bg-white border-stone-200 hover:border-stone-300 shadow-xs hover:shadow-sm'
       }`}
     >
       {/* identity + status */}
@@ -68,6 +79,8 @@ export function CaseRow({
             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-accent-on shrink-0 ${pillDot}`}>
               {rejected ? (
                 <X size={13} strokeWidth={2.5} />
+              ) : waiting ? (
+                <Clock size={12} strokeWidth={2.25} />
               ) : blocked ? (
                 <Lock size={12} strokeWidth={2.25} />
               ) : (

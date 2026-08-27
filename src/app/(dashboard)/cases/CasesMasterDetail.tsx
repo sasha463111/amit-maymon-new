@@ -18,15 +18,22 @@ export interface RailCase {
   approvalBlocked: boolean;
   hasExtrasInTreatment: boolean;
   hasCeoRejection: boolean;
+  notifSeverity: 'red' | 'yellow' | null;
 }
 
 function caseStatus(c: RailCase): CaseStatus {
   if (!c.nextStep) return 'done';
   // A CEO rejection is a distinct, more urgent state than "still waiting on
   // approval" — it needs someone to actually act (fix and resubmit), not just
-  // wait. Checked before the generic approvalBlocked so it wins the color.
-  if (c.hasCeoRejection) return 'rejected';
+  // wait. A red-tier unread notification (e.g. BLOCKED_ACTION) is treated the
+  // same way even without a formal rejection row. Checked first so it wins.
+  if (c.hasCeoRejection || c.notifSeverity === 'red') return 'rejected';
   if (c.approvalBlocked || c.hasExtrasInTreatment) return 'blocked';
+  // An unread amber-tier notification (painter request, approval needed, a
+  // new extra) with nothing more urgent going on — flag it as "waiting" so
+  // it's visible in the list without opening the notifications bell. Personal
+  // per user: clears once you read the notification, even if others haven't.
+  if (c.notifSeverity === 'yellow') return 'waiting';
   return 'active';
 }
 

@@ -53,11 +53,28 @@ export default async function CasesLayout({ children }: { children: React.ReactN
   const caseIds = openCases.map((c) => (c as { id: string }).id);
   const safeIds = caseIds.length > 0 ? caseIds : ['00000000-0000-0000-0000-000000000000'];
 
-  const [{ data: extrasData }, { data: approvalsData }, { data: runsData }] = await Promise.all([
+  const [{ data: extrasData }, { data: approvalsData }, { data: runsData }, { data: notifData }] = await Promise.all([
     supabase.from('bodywork_extras').select('case_id').eq('status', 'IN_TREATMENT').in('case_id', safeIds),
     supabase.from('ceo_approvals').select('case_id, status').in('case_id', safeIds),
     supabase.from('case_workflow_runs').select('id, case_id').in('case_id', safeIds).eq('workflow_type', 'PROFESSIONAL').eq('status', 'ACTIVE'),
+    supabase.from('notifications').select('case_id, type').eq('user_id', user.id).eq('read', false).in('case_id', safeIds),
   ]);
+
+  // Same red/amber tiers as the notifications bell (NotificationsList.tsx's
+  // TYPE_COLOR) — red = blocked/rejected, amber = needs your action. Personal
+  // per-user, from unread notifications only: read one, its case stops being
+  // flagged for you specifically, even if it's still flagged for someone else
+  // who hasn't read theirs yet.
+  const RED_TYPES = new Set(['BLOCKER', 'BLOCKED_ACTION', 'CEO_REJECTED']);
+  const AMBER_TYPES = new Set(['PENDING_APPROVAL', 'PAINTER_REQUEST', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'EXTRA_CREATED']);
+  const notifSeverityByCase = new Map<string, 'red' | 'yellow'>();
+  for (const n of (notifData ?? []) as { case_id: string | null; type: string | null }[]) {
+    if (!n.case_id) continue;
+    const current = notifSeverityByCase.get(n.case_id);
+    if (current === 'red') continue; // red already wins, nothing to upgrade
+    if (n.type && RED_TYPES.has(n.type)) notifSeverityByCase.set(n.case_id, 'red');
+    else if (n.type && AMBER_TYPES.has(n.type)) notifSeverityByCase.set(n.case_id, 'yellow');
+  }
 
   const extrasSet = new Set((extrasData ?? []).map((e) => (e as { case_id: string }).case_id));
   const approvalBlocked = new Set<string>();
@@ -101,6 +118,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       approvalBlocked: approvalBlocked.has(row.id),
       hasExtrasInTreatment: extrasSet.has(row.id),
       hasCeoRejection: ceoRejected.has(row.id),
+      notifSeverity: notifSeverityByCase.get(row.id) ?? null,
     };
   });
 
