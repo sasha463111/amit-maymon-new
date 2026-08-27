@@ -408,8 +408,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
   // PREP_ESTIMATE file upload panel state
   const [estimatePanelStepId, setEstimatePanelStepId] = useState<string | null>(null);
+  // Holds the file only once it's actually been uploaded (not just picked) —
+  // see uploadEstimateFileNow.
   const [estimateFile, setEstimateFile] = useState<File | null>(null);
   const [estimateUploading, setEstimateUploading] = useState(false);
+  const [estimateUploadError, setEstimateUploadError] = useState<string | null>(null);
 
   // QUALITY_CONTROL: select bodywork advisor popup
   const [qcPopupStepId, setQcPopupStepId] = useState<string | null>(null);
@@ -857,41 +860,53 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     }
   }
 
-  async function handleEstimateConfirm(step: StepRow) {
-    setStepError(null);
+  // Uploads immediately on pick/capture/paste, instead of waiting for the
+  // later "אישור והשלמת שלב" click. Why: capturing a photo backgrounds the
+  // page for the OS camera app, and mobile browsers (iOS Safari especially,
+  // more so as an installed PWA) can reload the page on return under memory
+  // pressure — silently wiping the in-memory File the old flow held until
+  // confirm. That's the "doesn't save consistently" report: the photo was
+  // taken, the state holding it just didn't survive to the confirm click.
+  // Uploading the moment the file exists means there's nothing left to lose.
+  async function uploadEstimateFileNow(file: File) {
+    setEstimateUploadError(null);
     setEstimateUploading(true);
     try {
-      if (estimateFile) {
-        const { uploadCaseDocument: uploadDoc } = await import('@/app/actions/documents');
-        const formData = new FormData();
-        formData.append('case_id', caseId);
-        formData.append('file', estimateFile);
-        formData.append('document_type', 'ESTIMATE');
-        const uploadRes = await uploadDoc(formData);
-        if (uploadRes?.error) {
-          showUploadError(uploadRes.error);
-          setStepError(uploadRes.error);
-          setEstimateUploading(false);
-          return;
-        }
-        // Refresh documents list
-        const supabase = (await import('@/lib/supabase/client')).createClient();
-        const { data: docsData } = await supabase
-          .from('case_documents')
-          .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
-          .eq('case_id', caseId)
-          .order('created_at', { ascending: false });
-        if (docsData) setLocalDocuments(docsData as typeof documents);
+      const { uploadCaseDocument: uploadDoc } = await import('@/app/actions/documents');
+      const formData = new FormData();
+      formData.append('case_id', caseId);
+      formData.append('file', file);
+      formData.append('document_type', 'ESTIMATE');
+      const uploadRes = await uploadDoc(formData);
+      if (uploadRes?.error) {
+        setEstimateUploadError(uploadRes.error);
+        showUploadError(uploadRes.error);
+        return;
       }
-      setEstimatePanelStepId(null);
-      setEstimateFile(null);
-      await performComplete(step);
+      setEstimateFile(file);
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data: docsData } = await supabase
+        .from('case_documents')
+        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+        .eq('case_id', caseId)
+        .order('created_at', { ascending: false });
+      if (docsData) setLocalDocuments(docsData as typeof documents);
     } catch (e) {
-      console.error('[handleEstimateConfirm] error', e);
-      showUploadError(e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה');
+      console.error('[uploadEstimateFileNow] error', e);
+      const msg = e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה';
+      setEstimateUploadError(msg);
+      showUploadError(msg);
     } finally {
       setEstimateUploading(false);
     }
+  }
+
+  async function handleEstimateConfirm(step: StepRow) {
+    setStepError(null);
+    setEstimatePanelStepId(null);
+    setEstimateFile(null);
+    setEstimateUploadError(null);
+    await performComplete(step);
   }
 
   // Capture pasted screenshots (Ctrl+V) inside the PREP_ESTIMATE panel.
@@ -905,7 +920,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     // Rename to a friendlier name with a timestamp
     const ext = file.type.split('/')[1] || 'png';
     const renamed = new File([file], `estimate-paste-${Date.now()}.${ext}`, { type: file.type });
-    setEstimateFile(renamed);
+    void uploadEstimateFileNow(renamed);
   }
 
   // ── Session 6 — by-whom popup confirm ──
@@ -1676,33 +1691,37 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                       onPaste={handleEstimatePaste}
                     >
                       <p className="text-xs font-semibold text-orange-700 mb-1">📄 העלה קובץ אומדן (אופציונלי)</p>
-                      <p className="text-xs text-gray-500 mb-2">ניתן להמשיך גם ללא קובץ. הדבק תמונה (Ctrl+V) או בחר קובץ ↓</p>
+                      <p className="text-xs text-gray-500 mb-2">ניתן להמשיך גם ללא קובץ. הדבק תמונה (Ctrl+V) או בחר קובץ — עולה מיד ↓</p>
                       <div className="grid grid-cols-2 gap-2 mb-2">
-                        <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
+                        <label className={`flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-50 ${estimateUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
                           📁 בחר קובץ
                           <input
                             type="file"
                             accept="image/*,application/pdf"
-                            onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
+                            disabled={estimateUploading}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadEstimateFileNow(f); e.target.value = ''; }}
                             className="hidden"
                           />
                         </label>
-                        <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-orange-100 border border-orange-300 text-orange-700 rounded-md text-xs font-medium cursor-pointer hover:bg-orange-200">
+                        <label className={`flex items-center justify-center gap-1.5 px-2 py-1.5 bg-orange-100 border border-orange-300 text-orange-700 rounded-md text-xs font-medium hover:bg-orange-200 ${estimateUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
                           📷 צלם
                           <input
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            onChange={(e) => setEstimateFile(e.target.files?.[0] ?? null)}
+                            disabled={estimateUploading}
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadEstimateFileNow(f); e.target.value = ''; }}
                             className="hidden"
                           />
                         </label>
                       </div>
-                      {estimateFile && (
+                      {estimateUploading && <p className="text-xs text-gray-500 mb-3">⏳ מעלה...</p>}
+                      {estimateFile && !estimateUploading && (
                         <p className="text-xs text-green-700 mb-3">
-                          ✓ נבחר: <span className="font-semibold">{estimateFile.name}</span> ({(estimateFile.size / 1024).toFixed(0)} KB)
+                          ✓ הועלה: <span className="font-semibold">{estimateFile.name}</span> ({(estimateFile.size / 1024).toFixed(0)} KB)
                         </p>
                       )}
+                      {estimateUploadError && <p className="text-xs text-red-600 mb-3">⚠️ {estimateUploadError}</p>}
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -1714,7 +1733,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setEstimatePanelStepId(null); setEstimateFile(null); }}
+                          onClick={() => { setEstimatePanelStepId(null); setEstimateFile(null); setEstimateUploadError(null); }}
                           className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
                         >
                           ✕ ביטול
