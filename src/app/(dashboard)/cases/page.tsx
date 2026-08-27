@@ -1,7 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { SystemMessageBanner } from './SystemMessageBanner';
-import { FolderOpen } from 'lucide-react';
 
+// Rendered as CasesMasterDetail's `children` on the /cases index route.
+// The "pick a case" placeholder that used to live here is gone — browsing
+// now shows the dense table directly instead of an empty detail pane, so
+// this component's only job left is the system-wide announcement banner.
 export default async function CasesIndexPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,16 +20,6 @@ export default async function CasesIndexPage() {
     sysMessage = (sysMessages ?? [])[0] as { id: string; message: string } | undefined;
   }
 
-  return (
-    <div className="h-full flex flex-col p-4 sm:p-6">
-      <SystemMessageBanner message={sysMessage?.message ?? null} messageId={sysMessage?.id ?? null} isCeo={isCeo} />
-      <div className="flex-1 flex flex-col items-center justify-center text-center text-stone-400 gap-3 py-16">
-        <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center">
-          <FolderOpen size={28} className="text-stone-400" />
-        </div>
-        <p className="text-stone-500 font-medium">בחר תיק מהרשימה כדי לראות את הפרטים</p>
-        <p className="text-stone-400 text-sm">או פתח תיק חדש</p>
-      </div>
-    </div>
-  );
+  if (!sysMessage && !isCeo) return null;
+  return <SystemMessageBanner message={sysMessage?.message ?? null} messageId={sysMessage?.id ?? null} isCeo={isCeo} />;
 }
