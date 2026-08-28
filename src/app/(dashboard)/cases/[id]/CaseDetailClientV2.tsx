@@ -329,8 +329,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
   async function saveAppraiserStatus(val: string) {
     setAppraiserStatus(val);
-    const supabase = (await import('@/lib/supabase/client')).createClient();
-    await supabase.from('cases').update({ appraiser_status: val || null } as never).eq('id', caseId);
+    const res = await updateCaseDetails(caseId, { appraiser_status: val || null });
+    if (res?.error) console.error('[saveAppraiserStatus] failed', res.error);
   }
 
   async function saveNotes() {
@@ -367,26 +367,18 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     // in the DB and could resurface if the status is switched back to OTHER
     // later showing stale wording nobody typed just now.
     if (val !== 'OTHER') setPainterStatusOtherText('');
-    const supabase = (await import('@/lib/supabase/client')).createClient();
-    const { error } = await supabase
-      .from('cases')
-      .update({
-        painter_status: val || null,
-        ...(val !== 'OTHER' ? { painter_status_other_text: null } : {}),
-      } as never)
-      .eq('id', caseId);
-    if (error) console.error('[savePainterStatus] failed', error);
+    const res = await updateCaseDetails(caseId, {
+      painter_status: val || null,
+      ...(val !== 'OTHER' ? { painter_status_other_text: null } : {}),
+    });
+    if (res?.error) console.error('[savePainterStatus] failed', res.error);
   }
 
   async function savePainterStatusOtherText(text: string) {
     setPainterStatusOtherText(text);
     setPainterStatusOtherSaving(true);
-    const supabase = (await import('@/lib/supabase/client')).createClient();
-    const { error } = await supabase
-      .from('cases')
-      .update({ painter_status_other_text: text || null } as never)
-      .eq('id', caseId);
-    if (error) console.error('[savePainterStatusOtherText] failed', error);
+    const res = await updateCaseDetails(caseId, { painter_status_other_text: text || null });
+    if (res?.error) console.error('[savePainterStatusOtherText] failed', res.error);
     setPainterStatusOtherSaving(false);
   }
 
@@ -655,9 +647,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setPartsValue(v);
     setUpdatingParts(true);
     try {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      await supabase.from('cases').update({ parts_status: v } as never).eq('id', caseId);
-      if (oldValue !== v) {
+      const res = await updateCaseDetails(caseId, { parts_status: v });
+      if (res?.error) {
+        console.error('[savePartsStatus] failed', res.error);
+      } else if (oldValue !== v) {
         setPartsStatusMessage(`סטטוס חלקים עודכן: ${PARTS_STATUS_LABELS[v]}`);
         setTimeout(() => setPartsStatusMessage(null), 5000);
       }
@@ -715,8 +708,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       } else {
         // Save FIXCAR link if provided
         if (step.step_key === 'FIXCAR_PHOTOS' && link) {
-          const supabase = (await import('@/lib/supabase/client')).createClient();
-          await supabase.from('cases').update({ fixcar_link: link } as never).eq('id', caseId);
+          const linkRes = await updateCaseDetails(caseId, { fixcar_link: link });
+          if (linkRes?.error) console.error('[handleComplete] fixcar_link save failed', linkRes.error);
           setFixcarValue(link);
         }
       }
@@ -814,8 +807,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setEditingLinkStepId(null);
     // Save fixcar link first
     if (step.step_key === 'FIXCAR_PHOTOS') {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      await supabase.from('cases').update({ fixcar_link: link } as never).eq('id', caseId);
+      const linkRes = await updateCaseDetails(caseId, { fixcar_link: link });
+      if (linkRes?.error) console.error('[handleSaveLinkAndComplete] fixcar_link save failed', linkRes.error);
       setFixcarValue(link);
       setStepLinks((prev) => ({ ...prev, [step.id]: link }));
     }
@@ -832,9 +825,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         const raw = wheelsLinkValue.trim();
         if (!raw) { setStepError('נדרש קישור'); setWheelsUploading(false); return; }
         const link = normalizeUrl(raw);
-        const { error } = await supabase.from('cases').update({ wheels_check_link: link } as never).eq('id', caseId);
-        if (error) {
-          showUploadError(`שמירת הקישור נכשלה: ${error.message}`);
+        const linkRes = await updateCaseDetails(caseId, { wheels_check_link: link });
+        if (linkRes?.error) {
+          showUploadError(`שמירת הקישור נכשלה: ${linkRes.error}`);
           setWheelsUploading(false);
           return;
         }
@@ -878,8 +871,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     if (!qcSelectedAdvisor) { setStepError('נדרש לבחור יועץ פחח'); return; }
     setStepError(null);
     try {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      await supabase.from('cases').update({ qc_assignee: qcSelectedAdvisor } as never).eq('id', caseId);
+      const res = await updateCaseDetails(caseId, { qc_assignee: qcSelectedAdvisor });
+      if (res?.error) { setStepError('שגיאה בשמירת יועץ בקרת האיכות'); return; }
       setQcPopupStepId(null);
       setQcSelectedAdvisor('');
       await performComplete(step);
@@ -982,9 +975,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   }
 
   // ── Session 6 — toggle ENTER_WORK sub-checklist item ──
-  // Optimistic, with revert + visible error on failure. Direct supabase update would
-  // silently 4xx if RLS or schema is off; this surfaces those instead of letting the
-  // checkbox "unstick" on next reload without explanation.
+  // Optimistic, with revert + visible error on failure — checked explicitly
+  // rather than assumed, so an RLS/schema problem surfaces here instead of
+  // letting the checkbox "unstick" on next reload without explanation.
   const [enterWorkSaveError, setEnterWorkSaveError] = useState<string | null>(null);
   async function toggleEnterWorkItem(item: string) {
     const prev = enterWorkChecklist;
@@ -994,15 +987,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setEnterWorkChecklist(next);
     setEnterWorkSaveError(null);
     try {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      const { error } = await supabase
-        .from('cases')
-        .update({ enter_work_checklist_state: next } as never)
-        .eq('id', caseId);
-      if (error) {
+      const res = await updateCaseDetails(caseId, { enter_work_checklist_state: next });
+      if (res?.error) {
         setEnterWorkChecklist(prev);
-        setEnterWorkSaveError(error.message);
-        console.error('[toggleEnterWorkItem] update failed', error);
+        setEnterWorkSaveError(res.error);
+        console.error('[toggleEnterWorkItem] update failed', res.error);
       }
     } catch (e) {
       setEnterWorkChecklist(prev);

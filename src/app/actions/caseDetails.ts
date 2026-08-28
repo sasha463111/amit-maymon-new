@@ -13,17 +13,24 @@ const ALLOWED_CASE_COLS = new Set([
   'claim_number', 'sub_claim_type', 'insurance_type', 'claim_type',
   'fixcar_link', 'wheels_check_link', 'estimate_link', 'notes',
   'parts_status', 'parts_ordered', 'parts_arrived', 'painter_status',
+  'painter_status_other_text',
   'appraiser_status', 'qc_assignee',
   'enter_work_checklist_state', 'catalog_numbers_assignee',
   'parts_discounts_assignee', 'completion_photos_assignee',
+  'closure_checklist_state',
 ]);
 const ALLOWED_CAR_COLS = new Set([
   'license_plate', 'make', 'model', 'year', 'vin', 'vehicle_type', 'first_registration_date',
 ]);
+// PAINTER is otherwise blocked from this action entirely (see below) — these
+// three are the exception, the fields their own screens let them set on
+// themselves (painter status + the enter-work checklist), never anything
+// about the case's actual details.
+const PAINTER_ALLOWED_COLS = new Set(['painter_status', 'painter_status_other_text', 'enter_work_checklist_state']);
 
 export async function updateCaseDetails(
   caseId: string,
-  caseUpdates: Record<string, string | number | boolean | null>,
+  caseUpdates: Record<string, string | number | boolean | string[] | Record<string, boolean> | null>,
   carUpdates?: Record<string, string | number | null>
 ) {
   const supabase = await createClient();
@@ -38,14 +45,20 @@ export async function updateCaseDetails(
     .eq('id', user.id)
     .single();
   const role = (profileData as { role: string } | null)?.role;
-  if (role === 'PAINTER') return { error: 'אין הרשאה לעדכן פרטי תיק' };
-
-  // Strip any column not on the allow-list.
-  const safeCaseUpdates: Record<string, string | number | boolean | null> = {};
-  for (const [k, v] of Object.entries(caseUpdates)) {
-    if (ALLOWED_CASE_COLS.has(k)) safeCaseUpdates[k] = v;
+  const isPainter = role === 'PAINTER';
+  // A painter may only touch their own status/checklist columns — never the
+  // rest of the case's details. Non-painter roles use the full allow-list.
+  const effectiveAllowedCols = isPainter ? PAINTER_ALLOWED_COLS : ALLOWED_CASE_COLS;
+  if (isPainter && carUpdates && Object.keys(carUpdates).length > 0) {
+    return { error: 'אין הרשאה לעדכן פרטי רכב' };
   }
-  const rejectedCase = Object.keys(caseUpdates).filter((k) => !ALLOWED_CASE_COLS.has(k));
+
+  // Strip any column not on the (role-appropriate) allow-list.
+  const safeCaseUpdates: Record<string, string | number | boolean | string[] | Record<string, boolean> | null> = {};
+  for (const [k, v] of Object.entries(caseUpdates)) {
+    if (effectiveAllowedCols.has(k)) safeCaseUpdates[k] = v;
+  }
+  const rejectedCase = Object.keys(caseUpdates).filter((k) => !effectiveAllowedCols.has(k));
   if (rejectedCase.length > 0) {
     console.warn('[updateCaseDetails] rejected non-editable case columns', rejectedCase);
   }

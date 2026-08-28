@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
 import { uploadCaseDocument } from '@/app/actions/documents';
+import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
 const STEP_LABELS: Record<string, string> = {
@@ -190,16 +191,12 @@ export function ClosureDetailClient({
   }
 
   const saveChecklistState = useCallback(async (state: boolean[]) => {
-    const supabase = (await import('@/lib/supabase/client')).createClient();
     const jsonState: Record<string, boolean> = {};
     state.forEach((v, i) => { if (v) jsonState[String(i)] = true; });
-    const { error: saveErr } = await supabase
-      .from('cases')
-      .update({ closure_checklist_state: jsonState } as never)
-      .eq('id', caseId);
-    if (saveErr) {
-      setChecklistSaveError(saveErr.message);
-      console.error('[saveChecklistState] failed', saveErr);
+    const res = await updateCaseDetails(caseId, { closure_checklist_state: jsonState });
+    if (res?.error) {
+      setChecklistSaveError(res.error);
+      console.error('[saveChecklistState] failed', res.error);
     } else {
       setChecklistSaveError(null);
       setChecklistSavedAt(Date.now());
