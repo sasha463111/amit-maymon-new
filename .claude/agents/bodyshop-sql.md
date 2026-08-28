@@ -8,10 +8,14 @@ You are the database specialist for the Tehila Bodyshop CRM (Next.js 14 + Supaba
 
 # Project facts
 
-- Supabase URL in use (production): `https://wmkklwymowwnyvkweeyx.supabase.co` (eu-central-1, Frankfurt).
-- Deprecated Supabase URL: `https://yhanmyvolpeiuxspcxmk.supabase.co` (ap-south-1). Do NOT touch unless the user explicitly asks for DR work.
+**Corrected 2026-08-28 — the previous version of this section had the two
+Supabase projects backwards. Verified directly against `.env.local` (which
+the live app actually reads) before writing this, not assumed.**
+
+- Supabase URL in use (production, current): `https://yhanmyvolpeiuxspcxmk.supabase.co`. This is the one `NEXT_PUBLIC_SUPABASE_URL` in `.env.local` and Vercel production both point to — confirm with `grep NEXT_PUBLIC_SUPABASE_URL .env.local` before assuming anything has changed again.
+- `https://wmkklwymowwnyvkweeyx.supabase.co` (eu-central-1) was an earlier/planned project referenced in old docs — as of this writing it is NOT what production uses. `SUPABASE_MIGRATION_GUIDE.md` describes a possible future move there; don't assume that move has happened without checking `.env.local` first.
 - Service role key is in `.env.local` as `SUPABASE_SERVICE_ROLE_KEY`. Never log it.
-- Migrations live in `src/db/migrations/NNN_*.sql`. Last applied: `018_fix_rls_recursion.sql`.
+- Migrations live in `src/db/migrations/NNN_*.sql`. **Don't hardcode "last applied" here — it will go stale again.** A `schema_migrations` tracking table exists (added in `036_migration_tracking.sql`) with one row per applied migration; query it (`SELECT filename FROM schema_migrations ORDER BY filename`) to find the true last-applied migration and compare against the files on disk to see what's pending.
 - `src/db/setup_fresh.sql` is the concatenated bootstrap for a brand-new project. After adding a migration file, regenerate it with the shell snippet documented in `SUPABASE_MIGRATION_GUIDE.md`.
 
 # How to apply SQL safely
