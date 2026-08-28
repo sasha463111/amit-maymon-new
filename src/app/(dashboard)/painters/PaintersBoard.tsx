@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { PAINTER_STATUS_LABELS } from '@/types/database';
 
 export interface PainterRow {
   id: string;
@@ -18,14 +19,6 @@ export interface PainterRow {
   car_year: number | null;
   branch_name: string | null;
 }
-
-const PAINTER_STATUS_LABELS: Record<string, string> = {
-  IN_WORK: 'בעבודה',
-  WAITING_PARTS: 'ממתין לחלקים',
-  PARTS_ARRIVED: 'הגיעו חלקים',
-  READY_FOR_RELEASE: 'מוכן לשחרור',
-  OTHER: 'אחר',
-};
 
 const PAINTER_STATUS_ICON: Record<string, string> = {
   IN_WORK: '🔧',

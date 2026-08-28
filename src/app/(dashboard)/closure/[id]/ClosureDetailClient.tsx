@@ -6,8 +6,12 @@ import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
+import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
+// Closure-specific step keys/labels — a genuinely different domain from the
+// professional-workflow STEP_LABELS (types/database.ts's
+// PROFESSIONAL_STEP_LABELS), not a duplicate despite the similar name.
 const STEP_LABELS: Record<string, string> = {
   CLOSURE_VERIFY_DETAILS_DOCS: 'אימות פרטים ומסמכים',
   CLOSURE_PROFORMA_IF_NEEDED: 'פרופורמה במידת הצורך',
@@ -20,21 +24,6 @@ const STEP_ICONS: Record<string, string> = {
   CLOSURE_PROFORMA_IF_NEEDED: '🧾',
   CLOSURE_PREPARE_CLOSING_FORMS: '📝',
   CLOSE_CASE: '🔒',
-};
-
-const SUB_CLAIM_LABELS: Record<string, string> = {
-  POLICY: 'פוליסה',
-  THIRD_PARTY: "צד ג'",
-  THIRD_PARTY_SETTLEMENT: "הסדר ג'",
-  PRIVATE_REPAIR: 'תיקון פרטי',
-  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
-  SHLOMO_THIRD_PARTY: "מוקד שלמה צד ג'",
-};
-
-const CLAIM_TYPE_LABELS: Record<string, string> = {
-  PRIVATE: 'פרטי',
-  ACCIDENT: 'תאונה',
-  FLOOD: 'הצפה',
 };
 
 // Dynamic checklist per sub_claim_type

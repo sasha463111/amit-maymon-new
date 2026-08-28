@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { PROFESSIONAL_STEP_LABELS as STEP_LABELS, SUB_CLAIM_LABELS } from '@/types/database';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -39,32 +40,6 @@ const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'זמינים ✅', color: 'text-green-600' },
   ORDERED: { label: 'הוזמנו ⏳', color: 'text-yellow-600' },
   NO_PARTS: { label: 'אין חלקים ❌', color: 'text-red-600' },
-};
-
-const STEP_LABELS: Record<string, string> = {
-  OPEN_CASE: 'פתיחת תיק',
-  FIXCAR_PHOTOS: 'צילום FixCar',
-  WHEELS_CHECK: 'טפסי גלגלים',
-  PREP_ESTIMATE: 'אומדן',
-  SUMMARIZE_ESTIMATE: 'סיכום אומדן',
-  SEND_TO_APPRAISER: 'שליחה לשמאי',
-  WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
-  ENTER_WORK: 'כניסה לעבודה',
-  ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
-  PARTS_DISCOUNTS: 'הנחות חלקים ועבודות',
-  QUALITY_CONTROL: 'בקרת איכות',
-  WASH: 'שטיפה',
-  SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
-  READY_FOR_OFFICE: 'מוכן למשרד',
-};
-
-const SUB_CLAIM_LABELS: Record<string, string> = {
-  POLICY: 'פוליסה',
-  THIRD_PARTY: "צד ג'",
-  THIRD_PARTY_SETTLEMENT: "הסדר ג'",
-  PRIVATE_REPAIR: 'תיקון פרטי',
-  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
-  SHLOMO_THIRD_PARTY: "מוקד שלמה צד ג'",
 };
 
 const EXTRAS_STATUS_LABELS: Record<string, { label: string; color: string }> = {

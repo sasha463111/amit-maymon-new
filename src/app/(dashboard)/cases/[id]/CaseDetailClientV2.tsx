@@ -8,25 +8,11 @@ import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument, getSignedFileUrls } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus, PainterStatus } from '@/types/database';
-import { PARTS_STATUS_LABELS, PAINTER_STATUS_LABELS } from '@/types/database';
+import {
+  PARTS_STATUS_LABELS, PAINTER_STATUS_LABELS, PROFESSIONAL_STEP_LABELS as DEFAULT_STEP_LABELS,
+  SUB_CLAIM_LABELS, INSURANCE_TYPE_LABELS, CLAIM_TYPE_LABELS,
+} from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
-
-const DEFAULT_STEP_LABELS: Record<string, string> = {
-  OPEN_CASE: 'פתיחת תיק',
-  FIXCAR_PHOTOS: 'צילום FixCar',
-  WHEELS_CHECK: 'טפסי גלגלים',
-  PREP_ESTIMATE: 'אומדן',
-  SUMMARIZE_ESTIMATE: 'סיכום אומדן',
-  SEND_TO_APPRAISER: 'שליחה לשמאי',
-  WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
-  ENTER_WORK: 'כניסה לעבודה',
-  ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
-  PARTS_DISCOUNTS: 'הנחות חלקים ועבודות',
-  QUALITY_CONTROL: 'בקרת איכות',
-  WASH: 'שטיפה',
-  SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
-  READY_FOR_OFFICE: 'מוכן למשרד',
-};
 
 // Steps that ask "by whom?" before completing.
 const ASSIGNEE_FIELD_BY_STEP: Record<string, 'catalog_numbers_assignee' | 'parts_discounts_assignee' | 'completion_photos_assignee'> = {
@@ -117,28 +103,6 @@ interface CaseDetailClientProps {
   treatmentFinishedAt?: string | null;
   closedAt?: string | null;
 }
-
-const SUB_CLAIM_LABELS: Record<string, string> = {
-  POLICY: 'פוליסה',
-  THIRD_PARTY: 'צד ג\'',
-  THIRD_PARTY_SETTLEMENT: 'הסדר ג\'',
-  PRIVATE_REPAIR: 'תיקון פרטי',
-  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
-  SHLOMO_THIRD_PARTY: 'מוקד שלמה צד ג\'',
-};
-
-const INSURANCE_TYPE_LABELS: Record<string, string> = {
-  COMPREHENSIVE: 'מקיף',
-  THIRD_PARTY: 'צד ג׳',
-  PRIVATE: 'פרטי',
-  OTHER: 'אחר',
-};
-
-const CLAIM_TYPE_LABELS: Record<string, string> = {
-  PRIVATE: 'פרטי',
-  ACCIDENT: 'תאונה',
-  FLOOD: 'הצפה',
-};
 
 const CASE_FIELD_MAP: Record<string, string> = {
   customerName: 'customer_name',

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
+import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 
 type PainterRequest = {
@@ -24,14 +25,6 @@ const REQUEST_STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
   IN_PROGRESS: 'bg-blue-100 text-blue-800',
   DONE: 'bg-green-100 text-green-800',
-};
-
-const PAINTER_STATUS_LABELS: Record<string, string> = {
-  IN_WORK: 'בעבודה',
-  WAITING_PARTS: 'ממתין לחלקים',
-  PARTS_ARRIVED: 'הגיעו חלקים',
-  READY_FOR_RELEASE: 'מוכן לשחרור',
-  OTHER: 'אחר',
 };
 
 function formatCheckedAt(iso: string): string {

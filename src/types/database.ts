@@ -20,7 +20,24 @@ export type InsuranceType =
   | 'PRIVATE'
   | 'OTHER';
 
+// Was duplicated in CaseDetailClientV2.tsx and closure/page.tsx, with drift:
+// closure/page.tsx's copy was missing OTHER, so a case with insurance_type
+// 'OTHER' showed the raw key there instead of "אחר".
+export const INSURANCE_TYPE_LABELS: Record<string, string> = {
+  PRIVATE: 'פרטי',
+  COMPREHENSIVE: 'מקיף',
+  THIRD_PARTY: 'צד ג׳',
+  OTHER: 'אחר',
+};
+
 export type ClaimType = 'PRIVATE' | 'ACCIDENT' | 'FLOOD';
+
+// Was duplicated identically in CaseDetailClientV2.tsx and ClosureDetailClient.tsx.
+export const CLAIM_TYPE_LABELS: Record<string, string> = {
+  PRIVATE: 'פרטי',
+  ACCIDENT: 'תאונה',
+  FLOOD: 'הצפה',
+};
 
 export type SubClaimType =
   | 'POLICY'
@@ -30,6 +47,17 @@ export type SubClaimType =
   | 'SHLOMO_POLICY'
   | 'SHLOMO_THIRD_PARTY';
 
+// Was duplicated identically in ApprovalsList.tsx, CaseDetailClientV2.tsx,
+// and ClosureDetailClient.tsx.
+export const SUB_CLAIM_LABELS: Record<string, string> = {
+  POLICY: 'פוליסה',
+  THIRD_PARTY: "צד ג'",
+  THIRD_PARTY_SETTLEMENT: "הסדר ג'",
+  PRIVATE_REPAIR: 'תיקון פרטי',
+  SHLOMO_POLICY: 'מוקד שלמה פוליסה',
+  SHLOMO_THIRD_PARTY: "מוקד שלמה צד ג'",
+};
+
 export type WorkflowType = 'PROFESSIONAL' | 'CLOSURE';
 
 export type WorkflowRunStatus = 'ACTIVE' | 'COMPLETED';
@@ -38,13 +66,25 @@ export type StepState = 'PENDING' | 'ACTIVE' | 'DONE' | 'SKIPPED';
 
 export type ApprovalType = 'ESTIMATE_AND_DETAILS' | 'WHEELS_CHECK' | 'CASE_CLOSURE';
 
+// Short labels used to compose notification/push title+body text (e.g.
+// "אישור ${label} ממתין"). Was duplicated identically in actions/approvals.ts
+// and actions/workflow.ts. Deliberately separate from ApprovalsList.tsx's own
+// APPROVAL_TYPE_LABELS — that one is full "אישור X" phrasing for a UI header,
+// a different (if overlapping) purpose, not a true duplicate of this one.
+export const APPROVAL_NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  ESTIMATE_AND_DETAILS: 'אומדן ופרטי תיק',
+  WHEELS_CHECK: 'טפסי גלגלים',
+};
+
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type ExtraStatus = 'IN_TREATMENT' | 'REJECTED' | 'DONE';
 
 export type PainterStatus = 'IN_WORK' | 'WAITING_PARTS' | 'PARTS_ARRIVED' | 'READY_FOR_RELEASE' | 'OTHER';
 
-export const PAINTER_STATUS_LABELS: Record<PainterStatus, string> = {
+// Record<string, ...>, same reasoning as PROFESSIONAL_STEP_LABELS above —
+// callers index with a plain string off a DB row.
+export const PAINTER_STATUS_LABELS: Record<string, string> = {
   IN_WORK: 'בעבודה',
   WAITING_PARTS: 'ממתין לחלקים',
   PARTS_ARRIVED: 'הגיעו חלקים',
@@ -272,6 +312,30 @@ export const PROFESSIONAL_WORKFLOW_STEPS = [
 ] as const;
 
 export type ProfessionalStepKey = (typeof PROFESSIONAL_WORKFLOW_STEPS)[number];
+
+// Canonical Hebrew labels for the professional workflow steps — was
+// duplicated (with drift: two copies still carried SUMMARIZE_ESTIMATE, a
+// step key removed from the workflow entirely by migration 008 and absent
+// from PROFESSIONAL_WORKFLOW_STEPS above; a third copy was missing it
+// instead, so its case list showed the raw key for the real ones).
+// Record<string, ...> (not Record<ProfessionalStepKey, ...>) — callers index
+// it with a step_key straight off a DB row (plain string, not narrowed to
+// the union), same as the three local copies this replaces already did.
+export const PROFESSIONAL_STEP_LABELS: Record<string, string> = {
+  OPEN_CASE: 'פתיחת תיק',
+  FIXCAR_PHOTOS: 'צילום FixCar',
+  WHEELS_CHECK: 'טפסי גלגלים',
+  PREP_ESTIMATE: 'אומדן',
+  SEND_TO_APPRAISER: 'שליחה לשמאי',
+  WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
+  ENTER_WORK: 'כניסה לעבודה',
+  ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
+  PARTS_DISCOUNTS: 'הנחות חלקים ועבודות',
+  QUALITY_CONTROL: 'בקרת איכות',
+  WASH: 'שטיפה',
+  SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
+  READY_FOR_OFFICE: 'מוכן למשרד',
+};
 
 // Step keys for closure workflow
 export const CLOSURE_WORKFLOW_STEPS = [

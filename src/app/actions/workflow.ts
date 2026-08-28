@@ -6,6 +6,7 @@ import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
+  APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS,
   type CreateCaseInput,
   type UserRole,
   type AuditEntityType,
@@ -52,11 +53,6 @@ function latestApprovalsByType(
   }
   return map;
 }
-
-const APPROVAL_TYPE_LABELS: Record<string, string> = {
-  ESTIMATE_AND_DETAILS: 'אומדן ופרטי תיק',
-  WHEELS_CHECK: 'טפסי גלגלים',
-};
 
 // Notify all CEOs that a new approval is pending for them. `approvalId`
 // (the ceo_approvals row) is threaded into the URL so the click lands

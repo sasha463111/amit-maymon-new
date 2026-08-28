@@ -5,11 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import type { ApprovalDecisionInput } from '@/types/database';
-
-const APPROVAL_TYPE_LABELS: Record<string, string> = {
-  ESTIMATE_AND_DETAILS: 'אומדן ופרטי תיק',
-  WHEELS_CHECK: 'טפסי גלגלים',
-};
+import { APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS } from '@/types/database';
 
 export async function decideApproval(input: ApprovalDecisionInput) {
   const supabase = await createClient();

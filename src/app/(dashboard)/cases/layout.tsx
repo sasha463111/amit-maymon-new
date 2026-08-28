@@ -1,22 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { CasesMasterDetail, type RailCase } from './CasesMasterDetail';
-
-const STEP_LABELS: Record<string, string> = {
-  OPEN_CASE: 'פתיחת תיק',
-  FIXCAR_PHOTOS: 'צילום FixCar',
-  WHEELS_CHECK: 'טפסי גלגלים',
-  PREP_ESTIMATE: 'אומדן',
-  SEND_TO_APPRAISER: 'שליחה לשמאי',
-  WAIT_APPRAISER_APPROVAL: 'המתנה לאישור שמאי',
-  ENTER_WORK: 'כניסה לעבודה',
-  ISSUE_CATALOG_NUMBERS: 'ניפוק מק"טים',
-  PARTS_DISCOUNTS: 'הנחות חלקים ועבודות',
-  QUALITY_CONTROL: 'בקרת איכות',
-  WASH: 'שטיפה',
-  SEND_COMPLETION_PHOTOS: 'שליחת תמונות לשמאי גמר תיקון',
-  READY_FOR_OFFICE: 'מוכן למשרד',
-};
+import { PROFESSIONAL_STEP_LABELS as STEP_LABELS } from '@/types/database';
 
 export default async function CasesLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();

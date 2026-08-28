@@ -2,17 +2,12 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { INSURANCE_TYPE_LABELS } from '@/types/database';
 
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'חלקים זמינים', color: 'text-green-700 bg-green-50 border-green-200' },
   ORDERED: { label: 'חלקים הוזמנו', color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
   NO_PARTS: { label: 'אין חלקים', color: 'text-red-700 bg-red-50 border-red-200' },
-};
-
-const INSURANCE_TYPE_LABELS: Record<string, string> = {
-  PRIVATE: 'פרטי',
-  COMPREHENSIVE: 'מקיף',
-  THIRD_PARTY: 'צד ג׳',
 };
 
 export default async function ClosurePage() {
