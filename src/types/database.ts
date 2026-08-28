@@ -363,7 +363,10 @@ export type AuditActionType =
   | 'BLOCKED_ACTION'
   | 'RETURNED_TO_ESTIMATE';
 
-// Labels for parts status
+// Labels for parts status. NOTE: ApprovalsList.tsx and closure/page.tsx each
+// keep their own local {label,color} badge version of this (different visual
+// styling per page) rather than importing this plain-string one — deliberate,
+// not drift; see the comments there.
 export const PARTS_STATUS_LABELS: Record<PartsStatus, string> = {
   NO_PARTS: 'אין חלקים',
   ORDERED: 'הוזמנו',

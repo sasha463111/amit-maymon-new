@@ -36,10 +36,15 @@ function getApprovalLabel(type: string): string {
   return APPROVAL_TYPE_LABELS[type] ?? `אישור שלב: ${type}`;
 }
 
+// Kept local (not merged into types/database.ts's plain-string PARTS_STATUS_LABELS)
+// because this panel needs the {label,color} shape with its own emoji/color
+// scheme — closure/page.tsx has a visually distinct badge version of the
+// same idea, so a shared constant would have to compromise one or the other.
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'זמינים ✅', color: 'text-green-600' },
   ORDERED: { label: 'הוזמנו ⏳', color: 'text-yellow-600' },
   NO_PARTS: { label: 'אין חלקים ❌', color: 'text-red-600' },
+  AIRMAIL_PENDING: { label: 'ממתין לדואר אוויר ✈️', color: 'text-blue-600' },
 };
 
 const EXTRAS_STATUS_LABELS: Record<string, { label: string; color: string }> = {

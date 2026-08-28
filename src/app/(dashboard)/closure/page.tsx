@@ -4,10 +4,17 @@ import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { INSURANCE_TYPE_LABELS } from '@/types/database';
 
+// Kept local (not merged into types/database.ts's plain-string PARTS_STATUS_LABELS)
+// because this list needs the {label,color} badge shape with its own color
+// scheme — ApprovalsList.tsx has a visually distinct emoji version of the
+// same idea, so a shared constant would have to compromise one or the other.
+// AIRMAIL_PENDING was missing here (real bug — a case with that parts_status
+// simply showed no badge at all on the closure list, unlike every other status).
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'חלקים זמינים', color: 'text-green-700 bg-green-50 border-green-200' },
   ORDERED: { label: 'חלקים הוזמנו', color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
   NO_PARTS: { label: 'אין חלקים', color: 'text-red-700 bg-red-50 border-red-200' },
+  AIRMAIL_PENDING: { label: 'ממתין לדואר אוויר', color: 'text-blue-700 bg-blue-50 border-blue-200' },
 };
 
 export default async function ClosurePage() {
