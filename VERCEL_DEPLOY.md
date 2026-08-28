@@ -1,31 +1,44 @@
-# פריסה ב-Vercel – איך לראות את האפליקציה ב-Vercel
+# פריסה ב-Vercel – מצב נוכחי (עודכן 27–28.08.2026)
 
-## 1. חיבור הפרויקט ל-Vercel
+## המצב בפועל
 
-1. היכנס ל־**[vercel.com](https://vercel.com)** והתחבר עם חשבון GitHub.
-2. לחץ **Add New…** → **Project**.
-3. בחר **Import Git Repository** ובחר את הריפו:
-   - **https://github.com/Di-biz/Amit_maymon** או  
-   - **https://github.com/sasha463111/amit-maymon**  
-   (לפי הריפו שמחובר אצלך ל־Vercel).
-4. אשר את הפרויקט (Framework Preset: **Next.js** יזוהה אוטומטית).
+- **הריפו:** `https://github.com/sasha463111/amit-maymon-new`
+- **הענף החי:** `main` (לא `master`) — כל push ל-`main` מפעיל דיפלוי אוטומטי, בלי GitHub Action (הוסר, היה מיותר וכשל תמיד עם טוקן ישן — ראה commit `1ac3d0b`).
+- **שני פרויקטי Production נפרדים, אותו מסד נתונים Supabase:**
+  - `amit-maymon-new` → `amit-maymon-new.vercel.app`
+  - `amit-maymon-new-iyub` → `amit-maymon-new-iyub.vercel.app`
+  - שניהם מחוברים ל-Git integration של אותו ריפו, ושניהם מתעדכנים אוטומטית מאותו push ל-`main`.
 
-## 2. משתני סביבה (חובה)
+## חיבור פרויקט חדש (אם צריך מהתחלה)
 
-ב־Vercel: **Project → Settings → Environment Variables** הוסף:
+1. **[vercel.com](https://vercel.com)** → התחבר עם GitHub.
+2. **Add New…** → **Project** → **Import Git Repository** → `sasha463111/amit-maymon-new`.
+3. Framework Preset: **Next.js** (מזוהה אוטומטית).
 
-| Name | Value |
-|------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | ה-URL של פרויקט Supabase שלך |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ה-Anon Key של Supabase |
+## משתני סביבה (Production) — הרשימה המלאה
 
-שמור, ואז הפעל **Redeploy** ל־Production (או שהדחיפה הבאה ל־master תעשה deploy אוטומטי).
+ב-Settings → Environments → Production:
 
-## 3. אחרי ה-Deploy
+| Name | הערה |
+|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | כתובת פרויקט Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | מפתח ציבורי |
+| `SUPABASE_SERVICE_ROLE_KEY` | **סודי** — עוקף RLS, לעולם לא בצד לקוח |
+| `EMAIL_ONLY_LOGIN_PASSWORD` | **סודי** — הסיסמה המשותפת מאחורי כניסה-באימייל-בלבד; חייב להיות זהה **בשני** הפרויקטים |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | מפתח ציבורי להתראות push |
+| `VAPID_PRIVATE_KEY` | **סודי** — זוג עם המפתח הציבורי; לעולם לא לייצר זוג חדש (כל מכשיר רשום יפסיק לקבל התראות) |
+| `VAPID_SUBJECT` | `mailto:...` |
+| `CRON_SECRET` | **סודי** — מגן על `/api/cron/enter-work-reminders`; חייב להיות זהה למה שמוגדר כ-secret ב-GitHub Actions |
+| `NEXT_PUBLIC_PREVIEW_MODE` | להשאיר כבוי ב-production (לא להגדיר, או `false`) |
 
-- הדומיין יופיע ב־**Deployments** (למשל `tehila-bodyshop-crm-xxx.vercel.app`).
-- כל דחיפה ל־**master** ב־GitHub תפעיל פריסה חדשה אוטומטית.
+**חשוב:** `EMAIL_ONLY_LOGIN_PASSWORD` ומפתחות VAPID חייבים להיות **זהים בשני הפרויקטים** — לא לייצר ערכים שונים לכל אחד.
 
-## אם הריפו כבר מחובר ל־Vercel
+## אחרי ה-Deploy
 
-אם הפרויקט כבר קיים ב־Vercel ומחובר ל־GitHub, דחיפה ל־`master` (למשל ל־`vercel` remote) אמורה להפעיל deploy אוטומטי. בדוק ב־**Vercel Dashboard → Deployments** שהדחיפה האחרונה הסתיימה בהצלחה.
+- Push ל-`main` = דיפלוי אוטומטי לשני הפרויקטים.
+- בדוק ב-**Vercel Dashboard → Deployments** שהוא הסתיים ב-Ready (לא רק שה-push עבר).
+- שינוי משתנה סביבה **לא** נכנס לתוקף אוטומטית — צריך **Redeploy** ידני אחרי כל שינוי כזה.
+
+## מיגרציות DB — נפרד לגמרי מהדיפלוי
+
+Push ל-`main` **לא** מריץ שום דבר במסד הנתונים. כל קובץ חדש תחת `src/db/migrations/` צריך להיות מורץ ידנית ב-Supabase Dashboard → SQL Editor, בנפרד מהדיפלוי של הקוד.

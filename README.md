@@ -17,15 +17,13 @@ Next.js + Supabase CRM for bodyshop repair workflow (intake to closure).
 
 ### 2. Environment
 
-Copy `.env.example` to `.env.local` and set:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
+Copy `.env.example` to `.env.local` and fill in every value there — it's kept
+up to date as the source of truth for what's actually required (see
+`VERCEL_DEPLOY.md` for the full production list, including secrets).
 
 - **anon key** is safe for client-side (browser). Use it in Next.js for Supabase client.
 - **service_role key**: only for server-side admin tasks if needed; do not expose to the client.
+- Push notifications and email-only login won't work locally without the VAPID keys / `EMAIL_ONLY_LOGIN_PASSWORD` — ask whoever manages prod for the current values.
 
 ### 3. Install and run
 
