@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PainterCaseClient } from './PainterCaseClient';
@@ -137,26 +138,28 @@ export default async function PainterCasePage({ params }: { params: { id: string
   }));
 
   return (
-    <PainterCaseClient
-      caseId={c.id}
-      caseKey={c.case_key}
-      customerName={c.customer_name}
-      phone={c.phone}
-      painterStatus={c.painter_status}
-      painterStatusOtherText={c.painter_status_other_text}
-      partsArrived={c.parts_arrived ?? false}
-      enteredWorkAt={c.painter_entered_work_at}
-      partsArrivedAt={c.parts_arrived_at}
-      enterWorkCompletedAt={enterWorkCompletedAt}
-      enterWorkCompletedByName={enterWorkCompletedByName}
-      openedAt={c.opened_at}
-      licensePlate={car?.license_plate ?? null}
-      carMake={car?.make ?? null}
-      carModel={car?.model ?? null}
-      carYear={car?.year ?? null}
-      branchName={branch?.name ?? null}
-      role={profile.role}
-      initialRequests={enrichedRequests}
-    />
+    <Suspense fallback={null}>
+      <PainterCaseClient
+        caseId={c.id}
+        caseKey={c.case_key}
+        customerName={c.customer_name}
+        phone={c.phone}
+        painterStatus={c.painter_status}
+        painterStatusOtherText={c.painter_status_other_text}
+        partsArrived={c.parts_arrived ?? false}
+        enteredWorkAt={c.painter_entered_work_at}
+        partsArrivedAt={c.parts_arrived_at}
+        enterWorkCompletedAt={enterWorkCompletedAt}
+        enterWorkCompletedByName={enterWorkCompletedByName}
+        openedAt={c.opened_at}
+        licensePlate={car?.license_plate ?? null}
+        carMake={car?.make ?? null}
+        carModel={car?.model ?? null}
+        carYear={car?.year ?? null}
+        branchName={branch?.name ?? null}
+        role={profile.role}
+        initialRequests={enrichedRequests}
+      />
+    </Suspense>
   );
 }

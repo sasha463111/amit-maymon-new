@@ -178,8 +178,13 @@ export function NotificationsList({
     // wins outright — that's the whole point of an approval notification.
     const isPerCaseUrl = n.action_url && (n.action_url.startsWith('/cases/') || n.action_url.startsWith('/painters/'));
     if (n.action_url && !isPerCaseUrl) router.push(n.action_url);
-    else if (n.case_id) router.push(`/go/${n.case_id}`);
-    else if (n.action_url) router.push(n.action_url);
+    else if (n.case_id) {
+      // Preserve a query string (e.g. ?highlight=<id>) from the stored
+      // per-case action_url through /go/'s role-forwarding.
+      const qIndex = n.action_url?.indexOf('?') ?? -1;
+      const qs = qIndex >= 0 ? n.action_url!.slice(qIndex) : '';
+      router.push(`/go/${n.case_id}${qs}`);
+    } else if (n.action_url) router.push(n.action_url);
   }
 
   async function handleMarkRead(id: string) {

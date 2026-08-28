@@ -419,17 +419,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     if (extras && extras.length > 0) {
       const blockedTitle = 'פעולה חסומה';
       const blockedBody = 'קיימות תוספות בטיפול';
+      // Highlight the step that's actually blocked so the recipient doesn't
+      // have to scan the whole list to find it.
+      const blockedUrl = `/cases/${caseId}?highlight=${stepKey}`;
       const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: profile!.id,
         case_id: caseId,
         type: 'BLOCKED_ACTION',
         title: blockedTitle,
         body: blockedBody,
-        action_url: `/cases/${caseId}`,
+        action_url: blockedUrl,
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: `/cases/${caseId}`, tag: `blocked-extras-${caseId}` });
+      await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: blockedUrl, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
       });
@@ -750,6 +753,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .filter((p) => p.is_bodywork_advisor === true);
     const washTitle = 'רכב נשלח לשטיפה';
     const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
+    // Body text points advisors straight at QUALITY_CONTROL — highlight it so
+    // they land scrolled to the right step instead of scanning the list.
+    const washUrl = `/cases/${caseId}?highlight=QUALITY_CONTROL`;
     await Promise.all(
       advisors.map(async (adv) => {
         const { error: notifErr } = await supabase.from('notifications').insert({
@@ -758,14 +764,14 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           type: 'WASH_STARTED',
           title: washTitle,
           body: washBody,
-          action_url: `/cases/${caseId}`,
+          action_url: washUrl,
           triggered_by: user.id,
         } as never);
         if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` });
+        await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` });
       })
     );
-    await pushToOverseers({ title: washTitle, body: washBody, url: `/cases/${caseId}`, tag: `wash-${caseId}` }, user.id);
+    await pushToOverseers({ title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` }, user.id);
   }
 
   // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).

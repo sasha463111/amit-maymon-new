@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { completeActiveStep, returnToEstimate, deleteCase } from '@/app/actions/workflow';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument, getSignedFileUrls } from '@/app/actions/documents';
@@ -174,6 +174,17 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   } = props;
 
   const router = useRouter();
+  // ?highlight=<step_key> — set on notification action_urls that point at a
+  // specific workflow step (e.g. the blocked step or the step whose
+  // completion just fired the notification) so the recipient lands scrolled
+  // to it instead of having to scan the whole step list.
+  const searchParams = useSearchParams();
+  const highlightStepKey = searchParams.get('highlight');
+  useEffect(() => {
+    if (!highlightStepKey) return;
+    document.getElementById(`step-${highlightStepKey}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Compute step labels from templates (fall back to defaults)
   const STEP_LABELS = useMemo(() => {
@@ -1340,8 +1351,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
               const isWheelsPanel = wheelsCheckPanelStepId === s.id;
               const isLinkPanel = editingLinkStepId === s.id;
 
+              const isHighlighted = s.step_key === highlightStepKey;
+
               return (
-                <li key={s.id} className="space-y-2">
+                <li key={s.id} id={`step-${s.step_key}`} className={`space-y-2 ${isHighlighted ? 'ring-2 ring-brand-red ring-offset-2 rounded-lg' : ''}`}>
                   <div
                     className={`flex items-center gap-3 p-3 rounded-lg border transition-shadow ${
                       isActive

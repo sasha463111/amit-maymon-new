@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
@@ -59,10 +59,12 @@ interface Props {
 function PainterRequestItem({
   req,
   canManage,
+  isHighlighted,
   onStatusUpdate,
 }: {
   req: PainterRequest;
   canManage: boolean;
+  isHighlighted?: boolean;
   onStatusUpdate: (newStatus: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -83,7 +85,12 @@ function PainterRequestItem({
   }
 
   return (
-    <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+    <div
+      id={`painter-request-${req.id}`}
+      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+        isHighlighted ? 'bg-amber-50 border-amber-300 ring-2 ring-brand-red ring-offset-2' : 'bg-gray-50 border-gray-100'
+      }`}
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-xs font-medium text-gray-500 bg-gray-200 rounded px-2 py-0.5">
@@ -179,6 +186,16 @@ export function PainterCaseClient({
   initialRequests,
 }: Props) {
   const router = useRouter();
+  // Arriving from a painter-request notification (?highlight=<request id>)
+  // scrolls to and highlights that specific request instead of just landing
+  // generically on the page — same pattern as approvals' ?highlight.
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`painter-request-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Checklist state (optimistic)
   const [enteredWork, setEnteredWork] = useState(
@@ -614,6 +631,7 @@ export function PainterCaseClient({
                 key={req.id}
                 req={req}
                 canManage={role === 'SERVICE_MANAGER' || role === 'CEO'}
+                isHighlighted={req.id === highlightId}
                 onStatusUpdate={(newStatus) => {
                   setRequests((prev) =>
                     prev.map((r) => (r.id === req.id ? { ...r, status: newStatus } : r))
