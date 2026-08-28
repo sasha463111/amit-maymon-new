@@ -9,11 +9,14 @@ Next.js + Supabase CRM for bodyshop repair workflow (intake to closure).
 1. Create a [Supabase](https://supabase.com) project.
 2. In **Authentication → Providers**: enable **Email** (Email + Password).
 3. In **Storage**: create a bucket named **extras-images**, set to **Private**.
-4. In **SQL Editor**: run migrations in order:
-   - `src/db/migrations/001_init.sql`
-   - `src/db/migrations/002_storage.sql` (after bucket exists)
-   - `src/db/migrations/003_schema_align.sql` (if present)
-   - `src/db/migrations/004_seed_branches.sql` (if present)
+4. In **SQL Editor**: run every file under `src/db/migrations/` in filename
+   order (`001_...`, `002_...`, etc. — a couple of numbers have an extra `b`
+   file alongside them, e.g. `010_...` and `010b_...`; run both). Before
+   running one against an existing (non-fresh) database, check whether it's
+   already applied: `SELECT filename FROM schema_migrations ORDER BY filename;`
+   (from migration 036 onward — every migration inserts its own filename
+   there as its last step, so this is the source of truth for what's
+   actually run, not the filenames on disk).
 
 ### 2. Environment
 
