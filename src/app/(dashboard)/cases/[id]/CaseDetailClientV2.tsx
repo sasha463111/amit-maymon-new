@@ -13,6 +13,9 @@ import {
   SUB_CLAIM_LABELS, INSURANCE_TYPE_LABELS, CLAIM_TYPE_LABELS,
 } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { CaseStatusBanner } from './CaseStatusBanner';
+import { DocumentsSection } from './DocumentsSection';
+import { TimelineSection } from './TimelineSection';
 
 // Steps that ask "by whom?" before completing.
 const ASSIGNEE_FIELD_BY_STEP: Record<string, 'catalog_numbers_assignee' | 'parts_discounts_assignee' | 'completion_photos_assignee'> = {
@@ -499,6 +502,16 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       .order('created_at', { ascending: false });
     if (data) setLocalDocuments(data as typeof documents);
     setUploadingDocument(false);
+  }
+
+  async function deleteDocument(docId: string) {
+    if (!confirm('האם אתה בטוח שברצונך למחוק קובץ זה?')) return;
+    const res = await deleteCaseDocument(docId);
+    if (res?.error) {
+      setDocumentError(res.error);
+    } else {
+      setLocalDocuments((prev) => prev.filter((d) => d.id !== docId));
+    }
   }
 
   const initRef = useRef<string | null>(null);
@@ -1061,45 +1074,16 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   return (
     <div className="space-y-6" dir="rtl">
       {/* Case status banner — top-of-page, color-coded so the user sees state at a glance */}
-      {isClosed ? (
-        <div className="bg-gradient-to-l from-gray-100 to-gray-50 border-2 border-gray-300 rounded-xl px-5 py-3 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gray-400 text-white flex items-center justify-center text-lg">🔒</div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-gray-700">תיק סגור</p>
-            <p className="text-xs text-gray-500">
-              נסגר בתאריך {props.closedAt ? new Date(props.closedAt).toLocaleDateString('he-IL') : '—'}
-            </p>
-          </div>
-        </div>
-      ) : isInClosure ? (
-        <div className="bg-gradient-to-l from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl px-5 py-3 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-amber-400 text-white flex items-center justify-center text-lg">📋</div>
-          <div className="flex-1">
-            <p className="text-sm font-bold text-amber-900">הועבר למשרד — בתהליך סגירה</p>
-            <p className="text-xs text-amber-700">
-              הסתיים הטיפול המקצועי בתאריך{' '}
-              {props.treatmentFinishedAt ? new Date(props.treatmentFinishedAt).toLocaleDateString('he-IL') : '—'} —
-              אילנה משלימה את הסגירה.
-            </p>
-          </div>
-          {(role === 'OFFICE' || role === 'CEO') && (
-            <Link
-              href={`/closure/${caseId}`}
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shrink-0"
-            >
-              המשך סגירה ←
-            </Link>
-          )}
-        </div>
-      ) : isActive && activeProfessionalStepLabel ? (
-        <div className="bg-gradient-to-l from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl px-5 py-3 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-lg">⏱</div>
-          <div className="flex-1">
-            <p className="text-xs text-blue-700 font-medium">השלב הנוכחי</p>
-            <p className="text-base font-bold text-blue-900">{activeProfessionalStepLabel}</p>
-          </div>
-        </div>
-      ) : null}
+      <CaseStatusBanner
+        isClosed={isClosed}
+        closedAt={props.closedAt}
+        isInClosure={isInClosure}
+        treatmentFinishedAt={props.treatmentFinishedAt}
+        isActive={isActive}
+        activeProfessionalStepLabel={activeProfessionalStepLabel}
+        role={role}
+        caseId={caseId}
+      />
 
       <div className="flex items-center justify-between">
         <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
@@ -1942,208 +1926,18 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       </div>
 
       {/* ── מסמכים ── */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-2xl">📎</span>
-            מסמכים וקבצים
-          </h2>
-          {canEdit && (
-            <div className="flex gap-2">
-              <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={async (e) => {
-                    const files = e.target.files;
-                    if (!files || files.length === 0) return;
-                    await uploadDocuments(Array.from(files));
-                    e.target.value = '';
-                  }}
-                  disabled={uploadingDocument}
-                />
-                📁 {uploadingDocument ? 'מעלה...' : 'בחר קבצים'}
-              </label>
-              <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={async (e) => {
-                    const files = e.target.files;
-                    if (!files || files.length === 0) return;
-                    await uploadDocuments(Array.from(files));
-                    e.target.value = '';
-                  }}
-                  disabled={uploadingDocument}
-                />
-                📷 {uploadingDocument ? 'מעלה...' : 'צלם'}
-              </label>
-            </div>
-          )}
-        </div>
-        {documentError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-            ⚠️ {documentError}
-          </div>
-        )}
-        {localDocuments.length === 0 ? (
-          <div className="text-center py-8 text-gray-400">
-            <div className="text-4xl mb-2">📄</div>
-            <p className="text-sm">אין קבצים להצגה</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {localDocuments.map((doc) => {
-              const url = signedDocUrls[doc.file_path];
-              const fileSize = doc.file_size ? (doc.file_size / 1024).toFixed(1) + ' KB' : '—';
-              const isImage = doc.mime_type?.startsWith('image/');
-              const isPdf = doc.mime_type === 'application/pdf';
-              const docType = doc.document_type ?? null;
-              const isFinalEstimate = docType === 'FINAL_ESTIMATE';
-              const docTypeLabel: Record<string, string> = {
-                ESTIMATE: 'אומדן',
-                FINAL_ESTIMATE: 'אומדן סופי',
-                WHEELS_CHECK: 'טפסי גלגלים',
-              };
-              return (
-                <div
-                  key={doc.id}
-                  className={`group relative flex flex-col rounded-lg border overflow-hidden transition-all ${
-                    isFinalEstimate
-                      ? 'bg-purple-50 border-purple-300'
-                      : 'bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  {/* Preview area */}
-                  <a
-                    href={url ?? '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block aspect-square bg-white border-b border-gray-200 overflow-hidden relative"
-                    onClick={(e) => { if (!url) e.preventDefault(); }}
-                  >
-                    {isImage && url ? (
-                      <img
-                        src={url}
-                        alt={doc.file_name}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : isPdf ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                        <span className="text-4xl">📄</span>
-                        <span className="text-[10px] font-semibold mt-1">PDF</span>
-                      </div>
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-500">
-                        <span className="text-4xl">{isFinalEstimate ? '⭐' : '📎'}</span>
-                      </div>
-                    )}
-                    {/* Hover overlay with "view" */}
-                    {url && (
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                        <span className="text-white text-xs font-semibold">פתח</span>
-                      </div>
-                    )}
-                  </a>
-                  {/* Caption */}
-                  <div className="p-2 flex-1 flex flex-col gap-1">
-                    <p className="text-xs font-medium text-gray-800 truncate" title={doc.file_name}>
-                      {doc.file_name}
-                    </p>
-                    {docType && (
-                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold self-start ${
-                        isFinalEstimate ? 'bg-purple-200 text-purple-900' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {docTypeLabel[docType] ?? docType}
-                      </span>
-                    )}
-                    <p className="text-[10px] text-gray-400">{fileSize} · {new Date(doc.created_at).toLocaleDateString('he-IL')}</p>
-                  </div>
-                  {/* Delete (top-right corner, hover-revealed on touchscreens stays visible) */}
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!confirm('האם אתה בטוח שברצונך למחוק קובץ זה?')) return;
-                        const res = await deleteCaseDocument(doc.id);
-                        if (res?.error) {
-                          setDocumentError(res.error);
-                        } else {
-                          setLocalDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-                        }
-                      }}
-                      className="absolute top-1 left-1 w-6 h-6 rounded-full bg-white/90 text-red-600 text-xs shadow-md hover:bg-red-50"
-                      aria-label="מחק קובץ"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <DocumentsSection
+        documents={localDocuments}
+        signedDocUrls={signedDocUrls}
+        canEdit={canEdit}
+        documentError={documentError}
+        uploadingDocument={uploadingDocument}
+        onUploadFiles={uploadDocuments}
+        onDeleteDocument={deleteDocument}
+      />
 
       {/* ── ציר זמן ── */}
-      {timeline.length > 0 && (
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
-          <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-            <span className="text-2xl">⏱️</span>
-            ציר זמן
-          </h2>
-          <div className="relative">
-            <div className="absolute right-6 top-0 bottom-0 w-0.5 bg-blue-200" />
-            <div className="space-y-4">
-              {timeline.map((item) => (
-                <div key={item.id} className="relative flex items-start gap-4 pr-6">
-                  <div
-                    className={`flex-shrink-0 w-4 h-4 rounded-full mt-1 z-10 ${
-                      item.type === 'case' ? 'bg-blue-500' : 'bg-green-500'
-                    }`}
-                  />
-                  <div className="flex-1 bg-gray-50 rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="text-sm font-semibold text-gray-800">{item.stepLabel}</div>
-                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                          <span>🕐</span>
-                          <span>
-                            {new Date(item.timestamp).toLocaleString('he-IL', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                        {item.performedBy && (
-                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                            <span>👤</span>
-                            <span>בוצע על ידי: {item.performedBy}</span>
-                          </div>
-                        )}
-                      </div>
-                      {item.type === 'step' && (
-                        <span className="flex-shrink-0 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          ✓ הושלם
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <TimelineSection items={timeline} />
     </div>
   );
 }
