@@ -29,7 +29,8 @@ export default async function NewExtraPage() {
   let casesQuery = supabase
     .from('cases')
     .select('id, case_key, cars(license_plate)')
-    .is('closed_at', null);
+    .is('closed_at', null)
+    .order('opened_at', { ascending: false });
 
   if (profile?.branch_id) {
     casesQuery = casesQuery.eq('branch_id', profile.branch_id);
