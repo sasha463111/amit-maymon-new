@@ -63,9 +63,12 @@ Supabase-project-id correction above from 2026-08-28).**
 | `cases` | `deleted_at IS NULL` for active. Columns grew across migrations; check `src/types/database.ts`. |
 | `case_workflow_runs` | `workflow_type` = `PROFESSIONAL` or `CLOSURE`. One `ACTIVE` run per type per case. |
 | `case_workflow_steps` | `state`: `PENDING` / `ACTIVE` / `DONE` / `SKIPPED`. `order_index` drives ordering. |
-| `ceo_approvals` | `approval_type` enum: `ESTIMATE_AND_DETAILS`, `WHEELS_CHECK`, `CASE_CLOSURE` (added post-001). |
+| `ceo_approvals` | `approval_type` enum: `ESTIMATE_AND_DETAILS`, `WHEELS_CHECK`. `CASE_CLOSURE` was removed (Session 6) — don't reintroduce it, `CLOSE_CASE` no longer requires a separate approval. Unique index on `(case_id, approval_type)` (020). |
 | `role_permissions` | Unique on `(role, action)`. Use `ON CONFLICT (role, action) DO NOTHING` if seeding. |
 | `workflow_step_templates` | CEO-editable. `requires_link` / `requires_file_or_link` / `requires_ceo_approval` drive blocking logic in `workflow.ts`. |
+| `painter_requests` | `status`: `PENDING`/`IN_PROGRESS`/`DONE`/`REJECTED` (040 added REJECTED + `response_note`). Shown on both `/painters/[id]` and `/cases/[id]`. |
+| `referrals` / `referral_status_updates` / `referral_documents` | Pre-case module (039/042/043). `referrals.current_status_tag` is denormalized from the latest tagged row in `referral_status_updates` — keep both in sync in the same action if you touch either. |
+| `notifications` | Fan-out trigger `fanout_notifications_to_ceos()` (031/032/041) copies every insert to CEOs + cross-branch advisors. Since 041, CEO is never excluded even when `triggered_by` is the CEO themself — check that function (not just the app-level `pushToOverseers` exclude logic) if you touch this. |
 
 # After a schema change
 

@@ -14,6 +14,8 @@ You are the QA agent for the Tehila Bodyshop CRM. You test a specific, already-i
    - Touches `/cases/[id]` (CaseDetailClientV2.tsx and friends) → CEO + SERVICE_MANAGER at minimum (both can edit); add SERVICE_ADVISOR if the change touches something advisors can also do.
    - Touches `/painters/*` → both PAINTER accounts (they're branch-scoped — Netivot and Ashkelon are genuinely different data, not interchangeable) + SERVICE_MANAGER/CEO (who can also view painter pages).
    - Touches `/closure/*` → OFFICE + CEO.
+   - Touches `/referrals/*` → OFFICE + CEO (same gate as closure; PAINTER/SERVICE_MANAGER/SERVICE_ADVISOR can't reach this at all — worth a quick check that they're still blocked).
+   - Touches `/extras/*` → PAINTER (creates, via `/extras/new`) + SERVICE_MANAGER/CEO (review queue with status tabs, via `/extras`).
    - Touches `/approvals` → CEO (approvals are CEO-only) + whoever triggers the approval (usually SERVICE_MANAGER).
    - Touches notifications/`/go/[id]` routing → at least two different roles, since the whole point of that code is role-based forwarding.
    - Cross-cutting (types/database.ts, a server action used everywhere, middleware-equivalent logic) → all 6.

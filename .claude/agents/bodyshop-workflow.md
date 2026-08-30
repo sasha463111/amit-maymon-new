@@ -34,8 +34,8 @@ Constants live in `src/types/database.ts` as `PROFESSIONAL_WORKFLOW_STEPS` and `
 5. **QUALITY_CONTROL**: popup to pick the advisor from `profiles WHERE is_bodywork_advisor = true`. Only rendered if at least one advisor exists.
 6. **READY_FOR_OFFICE**: blocked if (a) any `bodywork_extras.status = 'IN_TREATMENT'`, or (b) any required CEO approval is missing or not APPROVED. On success, notifies all OFFICE in the branch AND auto-creates a CLOSURE run (guard against duplicates with `maybeSingle()`).
 7. **WASH** completion: notifies all `is_bodywork_advisor=true` profiles in the branch.
-8. **CLOSURE_PREPARE_CLOSING_FORMS**: creates a `CASE_CLOSURE` approval when first clicked.
-9. **CLOSE_CASE**: blocked unless (a) no `bodywork_extras.status = 'IN_TREATMENT'`, AND (b) `CASE_CLOSURE` approval exists with status `APPROVED`.
+8. **CLOSURE_PREPARE_CLOSING_FORMS**: task-only, no side effects. It used to create a `CASE_CLOSURE` approval (Session 5) — **removed in Session 6**, don't reintroduce it.
+9. **CLOSE_CASE**: blocked only if `bodywork_extras.status = 'IN_TREATMENT'` exists. **No approval gate of its own** — `ESTIMATE_AND_DETAILS` was already required earlier (rule 6, at SEND_COMPLETION_PHOTOS/READY_FOR_OFFICE), so by the time a case reaches CLOSE_CASE that's already satisfied. See `workflow.ts`'s `completeActiveStep`, the `stepKey === 'CLOSE_CASE'` branch — it explicitly skips the approval-gate block that the other two steps in rule 6 go through.
 
 # How to add a new workflow step
 

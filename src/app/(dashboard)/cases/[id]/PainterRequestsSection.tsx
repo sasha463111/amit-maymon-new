@@ -35,11 +35,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 const TYPE_LABEL: Record<string, string> = { WORK: 'עבודה', PARTS: 'חלקים' };
 
 export function PainterRequestsSection({
-  caseId,
   requests,
   canRespond,
 }: {
-  caseId: string;
   requests: PainterRequestRow[];
   canRespond: boolean;
 }) {

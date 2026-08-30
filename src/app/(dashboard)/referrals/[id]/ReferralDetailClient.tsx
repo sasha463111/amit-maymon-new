@@ -7,7 +7,8 @@ import { CreateCaseButton } from '../../cases/CreateCaseButton';
 import { DocumentsSection, type CaseDocument } from '../../cases/[id]/DocumentsSection';
 import {
   updateReferral, cancelReferral, uploadReferralDocument, deleteReferralDocument, convertReferral,
-  addReferralStatusUpdate, setReferralFollowUpDate, type ReferralStatusTag, type ReferralStatusUpdateRow,
+  addReferralStatusUpdate, getReferralStatusUpdates, setReferralFollowUpDate,
+  type ReferralStatusTag, type ReferralStatusUpdateRow,
 } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import type { Referral, ReferralDocument } from '@/types/database';
@@ -221,17 +222,12 @@ export function ReferralDetailClient({
     }
     setUpdateTag('');
     setUpdateNote('');
-    // Re-read straight from the DB, same reasoning as documents above — this
-    // client component owns its own list, router.refresh() alone wouldn't
-    // update it.
-    const { createClient } = await import('@/lib/supabase/client');
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('referral_status_updates')
-      .select('id, status_tag, note, created_at, profiles(full_name)')
-      .eq('referral_id', referral.id)
-      .order('created_at', { ascending: false });
-    if (data) setStatusUpdates(data as unknown as ReferralStatusUpdateRow[]);
+    // Re-read via the same server action page.tsx used for the initial load
+    // — this client component owns its own list, so router.refresh() alone
+    // wouldn't update it. (Unlike the documents list below, there's already
+    // a server action for this read, so no need to duplicate the query here.)
+    const { data } = await getReferralStatusUpdates(referral.id);
+    setStatusUpdates(data);
     router.refresh();
   }
 

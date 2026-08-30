@@ -497,7 +497,6 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
       {/* ── בקשות פחח ── */}
       <PainterRequestsSection
-        caseId={caseId}
         requests={painterRequests}
         canRespond={role === 'SERVICE_MANAGER' || role === 'CEO'}
       />
