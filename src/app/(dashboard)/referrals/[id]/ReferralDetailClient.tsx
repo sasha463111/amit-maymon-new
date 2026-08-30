@@ -7,7 +7,7 @@ import { CreateCaseButton } from '../../cases/CreateCaseButton';
 import { DocumentsSection, type CaseDocument } from '../../cases/[id]/DocumentsSection';
 import {
   updateReferral, cancelReferral, uploadReferralDocument, deleteReferralDocument, convertReferral,
-  addReferralStatusUpdate, type ReferralStatusTag, type ReferralStatusUpdateRow,
+  addReferralStatusUpdate, setReferralFollowUpDate, type ReferralStatusTag, type ReferralStatusUpdateRow,
 } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import type { Referral, ReferralDocument } from '@/types/database';
@@ -66,6 +66,7 @@ export function ReferralDetailClient({
     appraiser_name: referral.appraiser_name ?? '',
     phone: referral.phone ?? '',
     status_note: referral.status_note ?? '',
+    follow_up_date: referral.follow_up_date ?? '',
   });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -140,6 +141,14 @@ export function ReferralDetailClient({
     }
 
     const res = await updateReferral(referral.id, patch);
+    if (res?.error) setSaveError(res.error);
+    router.refresh();
+  }
+
+  async function saveFollowUpDate(value: string) {
+    setFields((f) => ({ ...f, follow_up_date: value }));
+    setSaveError(null);
+    const res = await setReferralFollowUpDate(referral.id, value || null);
     if (res?.error) setSaveError(res.error);
     router.refresh();
   }
@@ -306,7 +315,21 @@ export function ReferralDetailClient({
           <Field label="חברת ביטוח" value={fields.insurance_company} onSave={(v) => void saveField('insurance_company', v)} />
           <Field label="סוג תביעה" value={fields.claim_type} onSave={(v) => void saveField('claim_type', v)} />
           <Field label="שמאי" value={fields.appraiser_name} onSave={(v) => void saveField('appraiser_name', v)} />
+          <div className="flex items-center gap-2 py-1.5">
+            <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">תזכורת מעקב:</span>
+            <input
+              type="date"
+              value={fields.follow_up_date}
+              onChange={(e) => setFields((f) => ({ ...f, follow_up_date: e.target.value }))}
+              onBlur={() => { if (fields.follow_up_date !== (referral.follow_up_date ?? '')) void saveFollowUpDate(fields.follow_up_date); }}
+              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors"
+              dir="ltr"
+            />
+          </div>
         </div>
+        <p className="text-xs text-gray-400 mt-1">
+          תזכורת מעקב תשלח התראה במשרד/מנכ"ל ביום שנקבע — לדוגמה "לקוח תואם לשבוע הבא"
+        </p>
         <div className="mt-4 pt-4 border-t border-gray-100">
           <label className="block text-sm font-medium text-gray-700 mb-1.5">סטטוס הפנייה (טקסט חופשי)</label>
           <textarea

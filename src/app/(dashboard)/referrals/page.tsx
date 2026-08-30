@@ -32,7 +32,7 @@ export default async function ReferralsPage() {
 
   let referralsQuery = supabase
     .from('referrals')
-    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, current_status_tag, created_at')
+    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, current_status_tag, follow_up_date, created_at')
     .eq('status', 'ACTIVE')
     .order('created_at', { ascending: true }); // oldest-waiting first — the ones most overdue for follow-up surface first
 
@@ -50,6 +50,7 @@ export default async function ReferralsPage() {
     plate_number: string | null;
     status_note: string | null;
     current_status_tag: string | null;
+    follow_up_date: string | null;
     created_at: string;
   }[];
 
@@ -113,6 +114,12 @@ export default async function ReferralsPage() {
 
                   {r.status_note && (
                     <p className="text-[12.5px] text-stone-500 line-clamp-2">📝 {r.status_note}</p>
+                  )}
+
+                  {r.follow_up_date && (
+                    <span className="self-start px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[11px] font-medium">
+                      📅 תזכורת: {new Date(r.follow_up_date).toLocaleDateString('he-IL')}
+                    </span>
                   )}
 
                   <div className="flex-1" />

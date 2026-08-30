@@ -77,6 +77,29 @@ export async function updateReferral(referralId: string, updates: UpdateReferral
   return { ok: true, error: null };
 }
 
+/**
+ * Sets (or clears, with date=null) the referral's follow-up reminder date —
+ * "לקוח תואם לשבוע הבא לתאריך מסוים". Always resets
+ * follow_up_reminder_sent_at so a NEW date gets its own reminder; the caller
+ * (the Field component's onBlur) only invokes this when the date actually
+ * changed, so this doesn't re-arm a reminder on every unrelated edit.
+ */
+export async function setReferralFollowUpDate(referralId: string, date: string | null) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  const { error } = await supabase
+    .from('referrals')
+    .update({ follow_up_date: date || null, follow_up_reminder_sent_at: null } as never)
+    .eq('id', referralId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/referrals');
+  revalidatePath(`/referrals/${referralId}`);
+  return { ok: true, error: null };
+}
+
 /** Manual cancel — soft (status flip), matches cases' deleted_at pattern. Referral drops out of the active list but stays for history. */
 export async function cancelReferral(referralId: string) {
   const supabase = await createClient();

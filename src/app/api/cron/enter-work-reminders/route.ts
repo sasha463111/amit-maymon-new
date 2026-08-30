@@ -587,6 +587,64 @@ async function runOfficeClosureEscalation(supabase: ServiceClient) {
   return { notified, checked: candidates.length };
 }
 
+/**
+ * Item 4 — referral follow-up reminder. A referral with an explicit
+ * follow_up_date set ("לקוח תואם לשבוע הבא לתאריך מסוים") gets a one-time
+ * reminder to OFFICE + CEO in its branch once that date arrives. No max-age
+ * cap like items 2/3 — this is a deliberately-chosen date, not an
+ * auto-timestamp that can silently go stale; reminder_sent_at alone is
+ * enough to keep it one-time-only. If the referral is converted to a case
+ * before its date (the normal "car came in early" outcome), convertReferral
+ * already flips status away from ACTIVE, so it drops out of this query on
+ * its own — nothing extra to do here for that case.
+ */
+async function runReferralFollowUpReminders(supabase: ServiceClient, todayIso: string) {
+  const { data: due } = await supabase
+    .from('referrals')
+    .select('id, branch_id, customer_name, plate_number, status_note, follow_up_date')
+    .eq('status', 'ACTIVE')
+    .is('follow_up_reminder_sent_at', null)
+    .not('follow_up_date', 'is', null)
+    .lte('follow_up_date', todayIso);
+
+  const candidates = (due ?? []) as Array<{
+    id: string; branch_id: string; customer_name: string | null; plate_number: string | null;
+    status_note: string | null; follow_up_date: string;
+  }>;
+
+  let notified = 0;
+  for (const r of candidates) {
+    const { data: branchUsers } = await supabase.rpc('branch_recipients' as never, { p_branch: r.branch_id } as never);
+    const users = (branchUsers ?? []) as { id: string; role: string }[];
+    const recipients = users.filter((p) => p.role === 'OFFICE' || p.role === 'CEO').map((p) => p.id);
+    if (recipients.length === 0) continue;
+
+    const who = r.customer_name?.trim() || r.plate_number || 'הפנייה';
+    const title = 'תזכורת מעקב הפנייה';
+    const body = r.status_note ? `${who} · ${r.status_note}` : `${who} — נקבע ליצירת קשר היום`;
+    const url = `/referrals/${r.id}`;
+
+    // Sequential — see the comment on the identical pattern in
+    // runEnterWorkReminders above (race against the DB fan-out trigger).
+    for (const userId of recipients) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: userId,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: url,
+      } as never);
+      if (notifErr) console.error('[referral-followup-reminder] notification insert failed', notifErr);
+      await sendPushToUser(userId, { title, body, url, tag: `referral-followup-${r.id}` });
+    }
+
+    await supabase.from('referrals').update({ follow_up_reminder_sent_at: new Date().toISOString() } as never).eq('id', r.id);
+    notified++;
+  }
+
+  return { notified, checked: candidates.length };
+}
+
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get('authorization');
@@ -608,6 +666,7 @@ export async function GET(req: NextRequest) {
 
   const painterRequests = await runPainterRequestEscalation(supabase);
   const officeClosure = await runOfficeClosureEscalation(supabase);
+  const referralFollowUps = await runReferralFollowUpReminders(supabase, isoDate);
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure });
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps });
 }

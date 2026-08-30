@@ -440,6 +440,8 @@ export interface Referral {
   status_note: string | null;
   status: ReferralStatus;
   current_status_tag: string | null;
+  follow_up_date: string | null;
+  follow_up_reminder_sent_at: string | null;
   case_id: string | null;
   created_by: string | null;
   created_at: string;
