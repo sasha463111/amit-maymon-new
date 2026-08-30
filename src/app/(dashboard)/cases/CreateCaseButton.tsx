@@ -28,12 +28,37 @@ const INSURANCE_COMPANIES = [
   'אחר',
 ];
 
+// Prefill shape accepted from a referral ("צור תיק מהפנייה") — a subset of
+// `form`'s fields, all optional since a referral may have some blank.
+export interface CreateCaseInitialValues {
+  plate_number?: string;
+  vehicle_type?: string;
+  vehicle_year?: string;
+  customer_name?: string;
+  phone?: string;
+  insurance_company?: string;
+  appraiser_name?: string;
+  claim_type?: ClaimType | '';
+  branch_id?: string;
+}
+
 export function CreateCaseButton({
   branchId,
   isCeo = false,
+  initialValues,
+  triggerLabel,
+  onCreated,
 }: {
   branchId: string | null;
   isCeo?: boolean;
+  // The rest support opening this dialog pre-filled from a referral instead
+  // of the plain "פתיחת תיק" entry point — same form/action, different
+  // starting values and a hook to react to the created case (used to mark
+  // the referral CONVERTED). Whoever has case-creation permission can use
+  // this regardless of who originally logged the referral.
+  initialValues?: CreateCaseInitialValues;
+  triggerLabel?: string;
+  onCreated?: (caseId: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -41,19 +66,19 @@ export function CreateCaseButton({
   const [error, setError] = useState<string | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [form, setForm] = useState({
-    plate_number: '',
-    vehicle_type: '',
-    vehicle_year: '',
-    customer_name: '',
-    phone: '',
-    insurance_company: '',
-    appraiser_name: '',
+    plate_number: initialValues?.plate_number ?? '',
+    vehicle_type: initialValues?.vehicle_type ?? '',
+    vehicle_year: initialValues?.vehicle_year ?? '',
+    customer_name: initialValues?.customer_name ?? '',
+    phone: initialValues?.phone ?? '',
+    insurance_company: initialValues?.insurance_company ?? '',
+    appraiser_name: initialValues?.appraiser_name ?? '',
     event_date: '',
     claim_number: '',
-    claim_type: '' as ClaimType | '',
+    claim_type: initialValues?.claim_type ?? ('' as ClaimType | ''),
     sub_claim_type: '' as SubClaimType | '',
     sub_claim_type_other_text: '',
-    branch_id: branchId ?? '',
+    branch_id: initialValues?.branch_id ?? branchId ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
@@ -94,6 +119,26 @@ export function CreateCaseButton({
 
   async function handleOpen() {
     setOpen(true);
+    // Re-sync from the latest initialValues on every open, not just this
+    // component's own first mount — otherwise an edit made in the referral
+    // detail view (this instance stays mounted the whole time) wouldn't show
+    // up here unless the page was reloaded first. Real bug, caught live:
+    // edited "שמאי" on a referral, then opened this dialog in the same visit
+    // and it was still blank.
+    if (initialValues) {
+      setForm((f) => ({
+        ...f,
+        plate_number: initialValues.plate_number ?? f.plate_number,
+        vehicle_type: initialValues.vehicle_type ?? f.vehicle_type,
+        vehicle_year: initialValues.vehicle_year ?? f.vehicle_year,
+        customer_name: initialValues.customer_name ?? f.customer_name,
+        phone: initialValues.phone ?? f.phone,
+        insurance_company: initialValues.insurance_company ?? f.insurance_company,
+        appraiser_name: initialValues.appraiser_name ?? f.appraiser_name,
+        claim_type: initialValues.claim_type ?? f.claim_type,
+        branch_id: initialValues.branch_id ?? f.branch_id,
+      }));
+    }
     if (needsBranchPicker && branches.length === 0) {
       const supabase = createClient();
       const { data } = await supabase.from('branches').select('id, name');
@@ -178,7 +223,13 @@ export function CreateCaseButton({
       branch_id: branchId ?? '',
     });
     setFiles([]);
-    router.push('/cases');
+    if (newCaseId && onCreated) {
+      // Referral flow: let the caller decide navigation (e.g. mark the
+      // referral converted, then go to the new case) instead of the default.
+      onCreated(newCaseId);
+    } else {
+      router.push('/cases');
+    }
     router.refresh();
   }
 
@@ -214,7 +265,7 @@ export function CreateCaseButton({
         className="flex items-center gap-2 px-4 py-2.5 bg-brand-red hover:bg-brand-red-dark text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
       >
         <Plus size={16} />
-        פתיחת תיק
+        {triggerLabel ?? 'פתיחת תיק'}
       </button>
 
       {open && (

@@ -417,6 +417,60 @@ export interface CompleteStepInput {
   step_id?: string; // optional: complete current active step
 }
 
+// ── Referrals ("סטטוס הפניות") — migration 039 ──
+export type ReferralStatus = 'ACTIVE' | 'CONVERTED' | 'CANCELLED';
+
+export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
+  ACTIVE: 'פעילה',
+  CONVERTED: 'הומרה לתיק',
+  CANCELLED: 'בוטלה',
+};
+
+export interface Referral {
+  id: string;
+  branch_id: string;
+  customer_name: string | null;
+  insurance_company: string | null;
+  claim_type: string | null;
+  vehicle_type: string | null;
+  vehicle_year: number | null;
+  plate_number: string | null;
+  appraiser_name: string | null;
+  phone: string | null;
+  status_note: string | null;
+  status: ReferralStatus;
+  case_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReferralDocument {
+  id: string;
+  referral_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number | null;
+  mime_type: string | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+export interface CreateReferralInput {
+  branch_id: string;
+  customer_name?: string | null;
+  insurance_company?: string | null;
+  claim_type?: string | null;
+  vehicle_type?: string | null;
+  vehicle_year?: number | null;
+  plate_number?: string | null;
+  appraiser_name?: string | null;
+  phone?: string | null;
+  status_note?: string | null;
+}
+
+export type UpdateReferralInput = Partial<CreateReferralInput>;
+
 export interface CreateExtraInput {
   case_id: string;
   description: string;

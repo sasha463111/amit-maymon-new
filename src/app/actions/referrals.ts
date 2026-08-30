@@ -1,0 +1,183 @@
+'use server';
+
+import { createClient } from '@/lib/supabase/server';
+import { revalidatePath } from 'next/cache';
+import type { CreateReferralInput, UpdateReferralInput } from '@/types/database';
+
+// Only OFFICE + CEO touch referrals at all — matches the RLS gate in
+// migration 039 and the /closure page's precedent for office-only screens.
+async function requireOfficeOrCeo(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' as const };
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('id, role, branch_id, sees_all_branches')
+    .eq('id', user.id)
+    .single();
+  const profile = profileData as { id: string; role: string; branch_id: string | null; sees_all_branches?: boolean } | null;
+  if (!profile || (profile.role !== 'OFFICE' && profile.role !== 'CEO')) {
+    return { error: 'רק משרד או מנכ"ל יכולים לנהל הפניות' as const };
+  }
+  return { user, profile };
+}
+
+export async function createReferral(input: CreateReferralInput) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+  if (!input.branch_id) return { error: 'סניף לא תקין' };
+
+  const { data, error } = await supabase
+    .from('referrals')
+    .insert({
+      branch_id: input.branch_id,
+      customer_name: input.customer_name ?? null,
+      insurance_company: input.insurance_company ?? null,
+      claim_type: input.claim_type ?? null,
+      vehicle_type: input.vehicle_type ?? null,
+      vehicle_year: input.vehicle_year ?? null,
+      plate_number: input.plate_number ?? null,
+      appraiser_name: input.appraiser_name ?? null,
+      phone: input.phone ?? null,
+      status_note: input.status_note ?? null,
+      status: 'ACTIVE',
+      created_by: auth.user.id,
+    } as never)
+    .select('id')
+    .single();
+
+  if (error || !data) return { error: error?.message ?? 'שגיאה ביצירת הפנייה' };
+
+  revalidatePath('/referrals');
+  return { ok: true, referralId: (data as { id: string }).id, error: null };
+}
+
+export async function updateReferral(referralId: string, updates: UpdateReferralInput) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  // Column allow-list, same reasoning as caseDetails.ts — the client passes
+  // a plain object, so keep it explicit rather than trusting the shape.
+  const ALLOWED = new Set([
+    'customer_name', 'insurance_company', 'claim_type', 'vehicle_type',
+    'vehicle_year', 'plate_number', 'appraiser_name', 'phone', 'status_note',
+  ]);
+  const patch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (ALLOWED.has(k)) patch[k] = v;
+  }
+  if (Object.keys(patch).length === 0) return { ok: true, error: null };
+
+  const { error } = await supabase.from('referrals').update(patch as never).eq('id', referralId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/referrals');
+  revalidatePath(`/referrals/${referralId}`);
+  return { ok: true, error: null };
+}
+
+/** Manual cancel — soft (status flip), matches cases' deleted_at pattern. Referral drops out of the active list but stays for history. */
+export async function cancelReferral(referralId: string) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  const { error } = await supabase
+    .from('referrals')
+    .update({ status: 'CANCELLED' } as never)
+    .eq('id', referralId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/referrals');
+  return { ok: true, error: null };
+}
+
+/**
+ * Called right after a case is successfully created from this referral (see
+ * CreateCaseButton's onCreated hook, wired from the referral detail page) —
+ * links the two rows and flips status so the referral drops off the active
+ * list. Not itself responsible for creating the case.
+ */
+export async function convertReferral(referralId: string, caseId: string) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  const { error } = await supabase
+    .from('referrals')
+    .update({ status: 'CONVERTED', case_id: caseId } as never)
+    .eq('id', referralId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/referrals');
+  return { ok: true, error: null };
+}
+
+export async function uploadReferralDocument(formData: FormData) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  const referralId = formData.get('referral_id') as string;
+  const file = formData.get('file') as File;
+  if (!referralId || !file) return { error: 'חסרים פרטים (referral_id או file)' };
+  if (!(file instanceof File) || file.size === 0) return { error: 'הקובץ ריק או לא תקין' };
+
+  const MAX_BYTES = 20 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return { error: `הקובץ גדול מדי (${(file.size / 1024 / 1024).toFixed(1)} MB). מקסימום 20 MB.` };
+  }
+  const ACCEPTED = /^(image\/|application\/(pdf|x-pdf|msword|vnd\.openxmlformats|vnd\.ms-excel))/i;
+  if (file.type && !ACCEPTED.test(file.type)) {
+    return { error: `סוג קובץ לא נתמך: ${file.type}. תמונות + PDF בלבד.` };
+  }
+
+  const safeName = file.name.replace(/[^\w.\-א-ת ]/g, '_');
+  const path = `${referralId}/${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('referral-documents')
+    .upload(path, file, { upsert: false, contentType: file.type || undefined });
+  if (uploadError) return { error: `שגיאה בהעלאת הקובץ ל-Storage: ${uploadError.message}` };
+
+  const { error: insertError } = await supabase
+    .from('referral_documents')
+    .insert({
+      referral_id: referralId,
+      file_name: file.name,
+      file_path: path,
+      file_size: file.size,
+      mime_type: file.type || null,
+      uploaded_by: auth.user.id,
+    } as never);
+
+  if (insertError) {
+    await supabase.storage.from('referral-documents').remove([path]);
+    return { error: `שגיאה בשמירת פרטי הקובץ: ${insertError.message}` };
+  }
+
+  revalidatePath(`/referrals/${referralId}`);
+  return { ok: true, error: null };
+}
+
+export async function deleteReferralDocument(documentId: string) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+
+  const { data: doc } = await supabase
+    .from('referral_documents')
+    .select('id, referral_id, file_path')
+    .eq('id', documentId)
+    .single();
+  if (!doc) return { error: 'קובץ לא נמצא' };
+  const docRow = doc as { referral_id: string; file_path: string };
+
+  await supabase.storage.from('referral-documents').remove([docRow.file_path]);
+  const { error } = await supabase.from('referral_documents').delete().eq('id', documentId);
+  if (error) return { error: `שגיאה במחיקת הקובץ: ${error.message}` };
+
+  revalidatePath(`/referrals/${docRow.referral_id}`);
+  return { ok: true, error: null };
+}

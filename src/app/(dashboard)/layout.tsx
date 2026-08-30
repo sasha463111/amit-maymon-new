@@ -18,6 +18,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   OFFICE: [
     { label: 'סגירה', href: '/closure' },
+    { label: 'הפניות', href: '/referrals' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'התראות', href: '/notifications' },
   ],
@@ -25,6 +26,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'תיקים', href: '/cases' },
     { label: 'אישורים', href: '/approvals' },
     { label: 'סגירה', href: '/closure' },
+    { label: 'הפניות', href: '/referrals' },
     { label: 'פחחים', href: '/painters' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },

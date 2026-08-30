@@ -13,7 +13,7 @@ import { revalidatePath } from 'next/cache';
  * if a signed-URL call returns 403, we just omit the entry).
  */
 export async function getSignedFileUrls(
-  bucket: 'case-documents' | 'painter-images' | 'extras-images',
+  bucket: 'case-documents' | 'painter-images' | 'extras-images' | 'referral-documents',
   paths: string[],
   expiresInSec = 3600
 ): Promise<Record<string, string>> {
