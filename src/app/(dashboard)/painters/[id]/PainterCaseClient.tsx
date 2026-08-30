@@ -12,6 +12,7 @@ type PainterRequest = {
   description: string;
   request_type: string;
   status: string;
+  response_note?: string | null;
   created_at: string;
   image_urls?: string[];
 };
@@ -20,11 +21,13 @@ const REQUEST_STATUS_LABELS: Record<string, string> = {
   PENDING: 'ממתין',
   IN_PROGRESS: 'בטיפול',
   DONE: 'טופל',
+  REJECTED: 'נדחה',
 };
 const REQUEST_STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
   IN_PROGRESS: 'bg-blue-100 text-blue-800',
   DONE: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
 };
 
 function formatCheckedAt(iso: string): string {
@@ -104,6 +107,9 @@ function PainterRequestItem({
           </span>
         </div>
         <p className="text-sm text-gray-700 break-words">{req.description}</p>
+        {req.response_note && (
+          <p className="text-xs text-gray-500 mt-1">💬 {req.response_note}</p>
+        )}
         {(req.image_urls?.length ?? 0) > 0 && (
           <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 gap-2">
             {req.image_urls!.map((url, i) => (

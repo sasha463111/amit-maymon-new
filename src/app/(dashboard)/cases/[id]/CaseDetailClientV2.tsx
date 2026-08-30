@@ -14,6 +14,7 @@ import { DocumentsSection } from './DocumentsSection';
 import { TimelineSection } from './TimelineSection';
 import { CaseDetailsSection } from './CaseDetailsSection';
 import { WorkflowStepsSection } from './WorkflowStepsSection';
+import { PainterRequestsSection, type PainterRequestRow } from './PainterRequestsSection';
 
 type StepRow = {
   id: string;
@@ -85,6 +86,7 @@ interface CaseDetailClientProps {
   // Session 7 — status banner
   treatmentFinishedAt?: string | null;
   closedAt?: string | null;
+  painterRequests: PainterRequestRow[];
 }
 
 export function CaseDetailClientV2(props: CaseDetailClientProps) {
@@ -134,6 +136,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     catalogNumbersAssignee: initialCatalogNumbersAssignee,
     partsDiscountsAssignee: initialPartsDiscountsAssignee,
     completionPhotosAssignee: initialCompletionPhotosAssignee,
+    painterRequests,
   } = props;
 
   const router = useRouter();
@@ -490,6 +493,13 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         initialPartsOrdered={initialPartsOrdered}
         initialPartsArrived={initialPartsArrived}
         onDocumentsChange={setLocalDocuments}
+      />
+
+      {/* ── בקשות פחח ── */}
+      <PainterRequestsSection
+        caseId={caseId}
+        requests={painterRequests}
+        canRespond={role === 'SERVICE_MANAGER' || role === 'CEO'}
       />
 
       {/* ── מסמכים ── */}

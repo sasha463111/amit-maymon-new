@@ -213,6 +213,7 @@ async function CaseDetailData({
     { data: documentsData },
     stepAuditResult,
     { data: advisorsData },
+    { data: painterRequestsData },
   ] = await Promise.all([
     supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
     supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
@@ -222,7 +223,12 @@ async function CaseDetailData({
       ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
       : Promise.resolve({ data: null })) as Promise<AuditResult>,
     supabase.from('profiles').select('id, full_name').eq('is_bodywork_advisor', true).eq('is_active', true).order('full_name'),
+    supabase.from('painter_requests').select('id, description, request_type, status, response_note, created_at').eq('case_id', id).order('created_at', { ascending: false }),
   ]);
+
+  const painterRequests = (painterRequestsData ?? []) as {
+    id: string; description: string; request_type: string; status: string; response_note: string | null; created_at: string;
+  }[];
 
   let auditRows: AuditRow[] = (caseAudit ?? []) as AuditRow[];
   if (stepAuditResult.data) {
@@ -349,6 +355,7 @@ async function CaseDetailData({
       completionPhotosAssignee={caseRow.completion_photos_assignee ?? null}
       treatmentFinishedAt={caseRow.treatment_finished_at ?? null}
       closedAt={caseRow.closed_at ?? null}
+      painterRequests={painterRequests}
     />
   );
 }

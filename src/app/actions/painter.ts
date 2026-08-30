@@ -209,10 +209,14 @@ export async function getPainterRequests(caseId: string) {
 }
 
 /** Update painter request status (SERVICE_MANAGER / CEO). Sends a push back
- *  to the painter who opened the request whenever a manager acts on it. */
+ *  to the painter who opened the request whenever a manager acts on it.
+ *  `note` is the manually-typed comment shown in the response modal on the
+ *  case page — stored so the painter (and anyone reviewing later) can see
+ *  *why* it was marked done/rejected, not just the bare status flip. */
 export async function updatePainterRequestStatus(
   requestId: string,
-  status: 'PENDING' | 'IN_PROGRESS' | 'DONE'
+  status: 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'REJECTED',
+  note?: string | null
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -245,7 +249,7 @@ export async function updatePainterRequestStatus(
 
   const { error } = await supabase
     .from('painter_requests')
-    .update({ status } as never)
+    .update({ status, response_note: note?.trim() || null } as never)
     .eq('id', requestId);
 
   if (error) return { error: error.message };
@@ -263,9 +267,12 @@ export async function updatePainterRequestStatus(
       PENDING: 'הוחזרה לטיפול',
       IN_PROGRESS: 'בטיפול',
       DONE: 'בוצעה',
+      REJECTED: 'נדחתה',
     };
     const title = `הבקשה שלך ${STATUS_LABELS[status] ?? status}`;
-    const body = `${plate} · ${req.description.slice(0, 80)}`;
+    const body = note?.trim()
+      ? `${plate} · ${note.trim()}`
+      : `${plate} · ${req.description.slice(0, 80)}`;
     const statusUrl = `/painters/${req.case_id}?highlight=${requestId}`;
     const { error: notifErr } = await supabase.from('notifications').insert({
       user_id: req.created_by,
