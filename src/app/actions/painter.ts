@@ -63,23 +63,25 @@ export async function updatePainterChecklist(
     }
     const title = 'חלקים הגיעו';
     const body = `${customer} · ${plate} - אפשר להמשיך בעבודה`;
-    await Promise.all(
-      recipients
-        .filter((p) => p.id !== user.id)
-        .map(async (p) => {
-          const { error: notifErr } = await supabase.from('notifications').insert({
-            user_id: p.id,
-            case_id: caseId,
-            type: 'OTHER',
-            title,
-            body,
-            action_url: `/painters/${caseId}`,
-            triggered_by: user.id,
-          } as never);
-          if (notifErr) console.error('[notifications] insert failed', notifErr);
-          await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
-        })
-    );
+    // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+    // trigger's (031/032) 10-second de-dup check against each other, so
+    // several can all pass the "not already sent" check before any of their
+    // fan-out copies commit — real duplicate notifications to CEOs/
+    // cross-branch advisors. These lists are small, so serializing costs
+    // nothing that matters.
+    for (const p of recipients.filter((r) => r.id !== user.id)) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: p.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: `/painters/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
+    }
     await pushToOverseers({ title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id);
   }
 
@@ -169,23 +171,21 @@ export async function createPainterRequest(
   // on this specific request, not just "somewhere on the painter screen" —
   // same reasoning/pattern as the approvals highlight.
   const reqUrl = `/painters/${caseId}?highlight=${reqId}`;
-  await Promise.all(
-    advisors
-      .filter((adv) => adv.id !== user.id)
-      .map(async (adv) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: adv.id,
-          case_id: caseId,
-          type: 'PAINTER_REQUEST',
-          title: reqTitle,
-          body: reqBody,
-          action_url: reqUrl,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: reqUrl, tag: `painter-${caseId}` });
-      })
-  );
+  // Sequential — see the comment on the identical pattern in
+  // updatePainterChecklist above (race against the DB fan-out trigger).
+  for (const adv of advisors.filter((a) => a.id !== user.id)) {
+    const { error: notifErr } = await supabase.from('notifications').insert({
+      user_id: adv.id,
+      case_id: caseId,
+      type: 'PAINTER_REQUEST',
+      title: reqTitle,
+      body: reqBody,
+      action_url: reqUrl,
+      triggered_by: user.id,
+    } as never);
+    if (notifErr) console.error('[notifications] insert failed', notifErr);
+    await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: reqUrl, tag: `painter-${caseId}` });
+  }
   await pushToOverseers({ title: reqTitle, body: reqBody, url: reqUrl, tag: `painter-${caseId}` }, user.id);
 
   revalidatePath(`/painters/${caseId}`);

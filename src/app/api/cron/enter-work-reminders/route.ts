@@ -3,30 +3,55 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser } from '@/app/actions/push';
 
 /**
- * "כניסה לעבודה" reminder — re-notifies painters about cars that entered
- * work but nobody's acknowledged (painter_entered_work_at still null),
- * roughly every 2 hours during the work day, until the car's status changes.
+ * Reminder sweep — despite the file/route name (kept as-is so the existing
+ * external pinger and its secrets don't need to change), this now covers
+ * THREE separate escalation reminders, all on the same "re-notify until
+ * acknowledged" idea:
+ *
+ *  1. ENTER_WORK — re-notifies painters about cars that entered work but
+ *     nobody's acknowledged (painter_entered_work_at still null), roughly
+ *     every ~2h during the work day.
+ *  2. Painter requests — re-notifies the branch's advisors/manager about a
+ *     painter's request that's sat PENDING for over an hour with no advisor
+ *     response yet.
+ *  3. Office closure handoff — re-notifies OFFICE staff about a case that's
+ *     been ready for closure for over an hour and nobody with an OFFICE
+ *     account has opened the notification yet.
  *
  * WHY THIS IS A PLAIN API ROUTE, NOT A VERCEL CRON JOB: Vercel's Hobby plan
- * only allows a daily cron trigger — nowhere near the ~2h cadence this needs.
- * Instead this is meant to be pinged externally on a real schedule (see
+ * only allows a daily cron trigger — nowhere near the cadence any of these
+ * need. Instead this is meant to be pinged externally on a real schedule (see
  * .github/workflows/enter-work-reminders.yml, which runs every 30 min via
  * GitHub Actions — free, and not tied to any Vercel plan tier).
  *
- * WHY EVERY 30 MIN INSTEAD OF EVERY 2H: precision isn't needed here — the
- * route is idempotent (painter_reminder_sent_at gates re-sends), so pinging
- * more often just means the actual ~2h interval self-corrects instead of
+ * WHY EVERY 30 MIN INSTEAD OF THE ACTUAL INTERVALS: precision isn't needed
+ * here — every check below is idempotent (a *_sent_at column gates re-sends),
+ * so pinging more often just means the real interval self-corrects instead of
  * depending on an external scheduler landing exactly on the hour. It also
  * means a late/missed external ping doesn't silently skip a whole cycle.
  *
- * HOLIDAYS: only Israeli weekend (Fri/Sat) is handled programmatically.
- * Jewish holiday dates need to be hand-maintained in EXTRA_CLOSED_DATES
- * below — there's no reliable way to compute the Hebrew calendar here
- * without a library this project doesn't have, and guessing wrong dates is
- * worse than leaving it to be filled in.
+ * Items 2 and 3 are NOT gated by work-hours/weekend/holiday (unlike item 1) —
+ * a painter's request or a case waiting on office doesn't stop being urgent
+ * just because it's outside 9-17; the point of "notify again after an hour"
+ * is exactly to catch things sitting unattended, whenever that happens.
+ *
+ * HOLIDAYS: only Israeli weekend (Fri/Sat) is handled programmatically, and
+ * only for item 1. Jewish holiday dates need to be hand-maintained in
+ * EXTRA_CLOSED_DATES below — there's no reliable way to compute the Hebrew
+ * calendar here without a library this project doesn't have, and guessing
+ * wrong dates is worse than leaving it to be filled in.
  */
 
 const REMINDER_INTERVAL_MS = 110 * 60 * 1000; // ~110 min: under 2h so drift never skips a cycle
+const ESCALATION_INTERVAL_MS = 60 * 60 * 1000; // 1h, as requested for items 2 and 3
+// Upper bound so a genuinely old, abandoned PENDING row (weeks-old — someone
+// never followed up, or the status just never got updated) doesn't escalate
+// forever. Real incident: the first-ever run of this route matched 44
+// painter_requests and 9 cases at once — some dated back over a month —
+// because nothing had ever been escalated before, so every stale row fired
+// simultaneously in one batch. 48h (~2 workdays) is "still worth a nudge",
+// beyond that it's stale data, not an active thing to escalate about.
+const MAX_ESCALATION_AGE_MS = 48 * 60 * 60 * 1000;
 const WORKDAY_START_HOUR = 9;
 const WORKDAY_END_HOUR = 17;
 
@@ -325,25 +350,10 @@ function israelNow(): { hour: number; weekday: number; isoDate: string } {
   };
 }
 
-export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
+type ServiceClient = NonNullable<ReturnType<typeof getServiceClient>>;
 
-  const { hour, weekday, isoDate } = israelNow();
-  const isWeekend = weekday === 5 || weekday === 6; // Fri/Sat
-  const isHoliday = EXTRA_CLOSED_DATES.includes(isoDate);
-  const inWorkHours = hour >= WORKDAY_START_HOUR && hour < WORKDAY_END_HOUR;
-
-  if (isWeekend || isHoliday || !inWorkHours) {
-    return NextResponse.json({ ok: true, skipped: true, reason: isWeekend ? 'weekend' : isHoliday ? 'holiday' : 'outside-work-hours' });
-  }
-
-  const supabase = getServiceClient();
-  if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
-
+/** Item 1 — ENTER_WORK reminder. Gated by work-hours/weekend/holiday by the caller. */
+async function runEnterWorkReminders(supabase: ServiceClient) {
   // Candidates: ENTER_WORK is DONE (painters were already notified once) but
   // painter_entered_work_at is still null (nobody's acknowledged) — "until
   // the car changes status" per the request.
@@ -353,7 +363,7 @@ export async function GET(req: NextRequest) {
     .eq('workflow_type', 'PROFESSIONAL')
     .eq('status', 'ACTIVE');
   const runs = (activeRuns ?? []) as { id: string; case_id: string }[];
-  if (runs.length === 0) return NextResponse.json({ ok: true, notified: 0 });
+  if (runs.length === 0) return { notified: 0, checked: 0 };
 
   const runIdToCaseId = new Map(runs.map((r) => [r.id, r.case_id]));
   const { data: enterWorkSteps } = await supabase
@@ -365,7 +375,7 @@ export async function GET(req: NextRequest) {
   const doneCaseIds = ((enterWorkSteps ?? []) as { run_id: string }[])
     .map((s) => runIdToCaseId.get(s.run_id))
     .filter((id): id is string => !!id);
-  if (doneCaseIds.length === 0) return NextResponse.json({ ok: true, notified: 0 });
+  if (doneCaseIds.length === 0) return { notified: 0, checked: 0 };
 
   const { data: candidateCases } = await supabase
     .from('cases')
@@ -399,24 +409,205 @@ export async function GET(req: NextRequest) {
     const title = 'תזכורת — רכב ממתין לעבודה';
     const body = `${customer} · ${plate} - עדיין לא סומן כנכנס לעבודה`;
 
-    await Promise.all(
-      recipients.map(async (userId) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: userId,
-          case_id: c.id,
-          type: 'OTHER',
-          title,
-          body,
-          action_url: `/painters/${c.id}`,
-        } as never);
-        if (notifErr) console.error('[enter-work-reminders] notification insert failed', notifErr);
-        await sendPushToUser(userId, { title, body, url: `/painters/${c.id}`, tag: `enter-work-reminder-${c.id}` });
-      })
-    );
+    // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+    // trigger's (031/032) 10-second de-dup check against each other, so
+    // several can all pass the "not already sent" check before any of their
+    // fan-out copies commit — real duplicate notifications to CEOs/
+    // cross-branch advisors. Confirmed live: the first run of the escalation
+    // loops below (same pattern) sent some overseers 3-4 copies each.
+    for (const userId of recipients) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: userId,
+        case_id: c.id,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: `/painters/${c.id}`,
+      } as never);
+      if (notifErr) console.error('[enter-work-reminders] notification insert failed', notifErr);
+      await sendPushToUser(userId, { title, body, url: `/painters/${c.id}`, tag: `enter-work-reminder-${c.id}` });
+    }
 
     await supabase.from('cases').update({ painter_reminder_sent_at: new Date().toISOString() } as never).eq('id', c.id);
     notified++;
   }
 
-  return NextResponse.json({ ok: true, notified, checked: due.length });
+  return { notified, checked: due.length };
+}
+
+/**
+ * Item 2 — painter request escalation. A painter's request (`painter_requests`)
+ * sitting PENDING (the advisor hasn't even started on it — IN_PROGRESS/DONE
+ * both count as "responded") for over an hour gets re-sent to the same
+ * advisor audience as the original request (createPainterRequest in
+ * app/actions/painter.ts), plus the overseer fan-out. Not gated by work
+ * hours — see the file-level doc comment for why.
+ */
+async function runPainterRequestEscalation(supabase: ServiceClient) {
+  const cutoffIso = new Date(Date.now() - ESCALATION_INTERVAL_MS).toISOString();
+  const maxAgeIso = new Date(Date.now() - MAX_ESCALATION_AGE_MS).toISOString();
+
+  const { data: pending } = await supabase
+    .from('painter_requests')
+    .select('id, case_id, description, request_type, created_at, reminder_sent_at')
+    .eq('status', 'PENDING')
+    .is('reminder_sent_at', null) // one escalation per request, not a repeating nag — see file-level doc
+    .lt('created_at', cutoffIso)
+    .gt('created_at', maxAgeIso);
+
+  const candidates = (pending ?? []) as Array<{
+    id: string; case_id: string; description: string; request_type: string;
+    created_at: string; reminder_sent_at: string | null;
+  }>;
+
+  let notified = 0;
+  for (const r of candidates) {
+    const { data: caseData } = await supabase
+      .from('cases')
+      .select('branch_id, case_key, cars(license_plate)')
+      .eq('id', r.case_id)
+      .single();
+    const c = caseData as { branch_id: string; case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+    if (!c) continue;
+    const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+    const plate = car?.license_plate ?? c.case_key ?? 'תיק';
+
+    const { data: branchUsers } = await supabase.rpc('branch_recipients' as never, { p_branch: c.branch_id } as never);
+    const users = (branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[];
+    const advisors = users.filter((p) => p.is_bodywork_advisor === true || p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR');
+    if (advisors.length === 0) continue;
+
+    const typeLabel = r.request_type === 'WORK' ? 'עבודה' : 'חלקים';
+    const title = `תזכורת — בקשת פחח ממתינה (${typeLabel})`;
+    const body = `רכב ${plate}: ${r.description}`;
+    const url = `/go/${r.case_id}?highlight=${r.id}`;
+
+    // Sequential — see the comment on the identical pattern in
+    // runEnterWorkReminders above (race against the DB fan-out trigger).
+    for (const adv of advisors) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: adv.id,
+        case_id: r.case_id,
+        type: 'PAINTER_REQUEST',
+        title,
+        body,
+        action_url: url,
+      } as never);
+      if (notifErr) console.error('[painter-request-escalation] notification insert failed', notifErr);
+      await sendPushToUser(adv.id, { title, body, url, tag: `painter-escalation-${r.id}` });
+    }
+
+    const overseers = users.filter((p) => p.role === 'CEO' || p.role === 'SERVICE_ADVISOR');
+    await Promise.all(overseers.map((o) => sendPushToUser(o.id, { title, body, url, tag: `painter-escalation-${r.id}` })));
+
+    await supabase.from('painter_requests').update({ reminder_sent_at: new Date().toISOString() } as never).eq('id', r.id);
+    notified++;
+  }
+
+  return { notified, checked: candidates.length };
+}
+
+/**
+ * Item 3 — office closure-handoff escalation. A case that's been ready for
+ * closure (treatment_finished_at set, closed_at still null) for over an hour,
+ * where the original READY_FOR_OFFICE notification is still unread by every
+ * OFFICE recipient of that branch, gets a second push. Not gated by work
+ * hours — see the file-level doc comment for why.
+ */
+async function runOfficeClosureEscalation(supabase: ServiceClient) {
+  const cutoffIso = new Date(Date.now() - ESCALATION_INTERVAL_MS).toISOString();
+  const maxAgeIso = new Date(Date.now() - MAX_ESCALATION_AGE_MS).toISOString();
+
+  const { data: waiting } = await supabase
+    .from('cases')
+    .select('id, branch_id, case_key, customer_name, office_reminder_sent_at, cars(license_plate)')
+    .not('treatment_finished_at', 'is', null)
+    .is('closed_at', null)
+    .is('office_reminder_sent_at', null) // one escalation per case, not a repeating nag — closure can legitimately take weeks, see file-level doc
+    .lt('treatment_finished_at', cutoffIso)
+    .gt('treatment_finished_at', maxAgeIso);
+
+  const candidates = (waiting ?? []) as Array<{
+    id: string; branch_id: string; case_key: string | null; customer_name: string | null;
+    office_reminder_sent_at: string | null;
+    cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
+  }>;
+
+  let notified = 0;
+  for (const c of candidates) {
+    // Skip if any OFFICE recipient already read the original notification —
+    // "she hasn't opened it" is the actual condition, not just "still open".
+    // CAVEAT: this only catches a click through the notification bell — a
+    // staffer who navigated to /closure directly (very plausible; that's the
+    // normal nav link) never flips `read`, so this check under-detects
+    // "already looked at it" more than it over-detects. Not worth solving
+    // here — the one-time-only + 48h cap above already bound the downside.
+    const { data: readRows } = await supabase
+      .from('notifications')
+      .select('id, read')
+      .eq('case_id', c.id)
+      .eq('type', 'READY_FOR_OFFICE');
+    const rows = (readRows ?? []) as { id: string; read: boolean }[];
+    if (rows.length > 0 && rows.some((n) => n.read)) continue;
+
+    const { data: branchUsers } = await supabase.rpc('branch_recipients' as never, { p_branch: c.branch_id } as never);
+    const users = (branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[];
+    const officeUsers = users.filter((p) => p.role === 'OFFICE');
+    if (officeUsers.length === 0) continue;
+
+    const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+    const plate = car?.license_plate ?? c.case_key ?? 'תיק';
+    const customer = c.customer_name?.trim() || plate;
+    const title = 'תזכורת — תיק ממתין לתהליך סגירה';
+    const body = `${customer} · ${plate} - עדיין לא נפתח`;
+    const url = `/closure/${c.id}`;
+
+    // Sequential — see the comment on the identical pattern in
+    // runEnterWorkReminders above (race against the DB fan-out trigger).
+    for (const ou of officeUsers) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: ou.id,
+        case_id: c.id,
+        type: 'READY_FOR_OFFICE',
+        title,
+        body,
+        action_url: url,
+      } as never);
+      if (notifErr) console.error('[office-closure-escalation] notification insert failed', notifErr);
+      await sendPushToUser(ou.id, { title, body, url, tag: `office-escalation-${c.id}` });
+    }
+
+    const overseers = users.filter((p) => p.role === 'CEO' || p.role === 'SERVICE_ADVISOR');
+    await Promise.all(overseers.map((o) => sendPushToUser(o.id, { title, body, url, tag: `office-escalation-${c.id}` })));
+
+    await supabase.from('cases').update({ office_reminder_sent_at: new Date().toISOString() } as never).eq('id', c.id);
+    notified++;
+  }
+
+  return { notified, checked: candidates.length };
+}
+
+export async function GET(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  const auth = req.headers.get('authorization');
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  const supabase = getServiceClient();
+  if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
+
+  const { hour, weekday, isoDate } = israelNow();
+  const isWeekend = weekday === 5 || weekday === 6; // Fri/Sat
+  const isHoliday = EXTRA_CLOSED_DATES.includes(isoDate);
+  const inWorkHours = hour >= WORKDAY_START_HOUR && hour < WORKDAY_END_HOUR;
+
+  const enterWork = (isWeekend || isHoliday || !inWorkHours)
+    ? { notified: 0, checked: 0, skipped: true as const, reason: isWeekend ? 'weekend' : isHoliday ? 'holiday' : 'outside-work-hours' }
+    : await runEnterWorkReminders(supabase);
+
+  const painterRequests = await runPainterRequestEscalation(supabase);
+  const officeClosure = await runOfficeClosureEscalation(supabase);
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure });
 }

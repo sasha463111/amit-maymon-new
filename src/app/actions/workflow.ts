@@ -79,21 +79,27 @@ async function notifyCeosPendingApproval(
   const title = `אישור ${label} ממתין`;
   const body = `רכב ${plate} ממתין לאישורך`;
   const url = `/approvals?highlight=${approvalId}`;
-  await Promise.all(
-    ((ceos ?? []) as { id: string }[]).map(async (ceo) => {
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: ceo.id,
-        case_id: caseId,
-        type: 'PENDING_APPROVAL',
-        title,
-        body,
-        action_url: url,
-        triggered_by: triggeredBy,
-      } as never);
-      if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(ceo.id, { title, body, url, tag: `approval-${caseId}` });
-    })
-  );
+  // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+  // trigger's (031/032) 10-second de-dup check against each other, so
+  // several of these can all pass the "not already sent" check before any
+  // of their fan-out copies commit — producing real duplicate notifications
+  // to CEOs/cross-branch advisors. Real incident, not theoretical: the first
+  // live run of a similar loop in the escalation cron (added later) sent
+  // some overseers 3-4 copies of the same notification. These lists are
+  // small (a handful of staff), so serializing costs nothing that matters.
+  for (const ceo of (ceos ?? []) as { id: string }[]) {
+    const { error: notifErr } = await supabase.from('notifications').insert({
+      user_id: ceo.id,
+      case_id: caseId,
+      type: 'PENDING_APPROVAL',
+      title,
+      body,
+      action_url: url,
+      triggered_by: triggeredBy,
+    } as never);
+    if (notifErr) console.error('[notifications] insert failed', notifErr);
+    await sendPushToUser(ceo.id, { title, body, url, tag: `approval-${caseId}` });
+  }
   await pushToOverseers({ title, body, url, tag: `approval-${caseId}` }, triggeredBy);
 }
 
@@ -299,26 +305,29 @@ export async function createCase(input: CreateCaseInput) {
     const customerLabel = input.customer_name?.trim() || input.plate_number;
     const title = 'תיק חדש נפתח';
     const body = `${customerLabel} · ${input.plate_number}`;
+    // Requested: painters should know a new case exists too — they're the
+    // ones who'll actually work on the car. `/go/${caseId}` (not
+    // `/cases/${caseId}` directly) is the role-neutral deep link — it
+    // forwards a painter to /painters/{id} and everyone else to /cases/{id}
+    // (see src/app/go/[id]/page.tsx), so one action_url works for every role.
     const branchStaff = (await branchRecipients(supabase, branchId))
-      .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.role === 'OFFICE');
-    await Promise.all(
-      branchStaff
-        .filter((staff) => staff.id !== user.id) // skip the creator
-        .map(async (staff) => {
-          const { error: notifErr } = await supabase.from('notifications').insert({
-            user_id: staff.id,
-            case_id: caseId,
-            type: 'OTHER',
-            title,
-            body,
-            action_url: `/cases/${caseId}`,
-            triggered_by: user.id,
-          } as never);
-          if (notifErr) console.error('[notifications] insert failed', notifErr);
-          await sendPushToUser(staff.id, { title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` });
-        })
-    );
-    await pushToOverseers({ title, body, url: `/cases/${caseId}`, tag: `new-case-${caseId}` }, user.id);
+      .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.role === 'OFFICE' || p.role === 'PAINTER');
+    // Sequential — see the comment on the identical pattern in
+    // notifyCeosPendingApproval above (race against the DB fan-out trigger).
+    for (const staff of branchStaff.filter((s) => s.id !== user.id)) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: staff.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title,
+        body,
+        action_url: `/go/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(staff.id, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` });
+    }
+    await pushToOverseers({ title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id);
   }
 
   return { caseId: String(caseId) };
@@ -612,21 +621,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .filter((p) => p.role === 'OFFICE');
     const officeTitle = 'תיק מוכן לסגירה';
     const officeBody = `רכב ${plateLabel} סיים טיפול ומוכן לתהליך סגירה`;
-    await Promise.all(
-      officeUsers.map(async (ou) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: ou.id,
-          case_id: caseId,
-          type: 'READY_FOR_OFFICE',
-          title: officeTitle,
-          body: officeBody,
-          action_url: `/closure/${caseId}`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
-      })
-    );
+    // Sequential — see the comment on notifyCeosPendingApproval above.
+    for (const ou of officeUsers) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: ou.id,
+        case_id: caseId,
+        type: 'READY_FOR_OFFICE',
+        title: officeTitle,
+        body: officeBody,
+        action_url: `/closure/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
+    }
     await pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
@@ -720,23 +728,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     }
     const ewTitle = 'רכב נכנס לעבודה';
     const ewBody = `${ewCustomer} · ${ewPlate} - מוכן עבורך`;
-    await Promise.all(
-      recipients
-        .filter((p) => p.id !== user.id)
-        .map(async (p) => {
-          const { error: notifErr } = await supabase.from('notifications').insert({
-            user_id: p.id,
-            case_id: caseId,
-            type: 'OTHER',
-            title: ewTitle,
-            body: ewBody,
-            action_url: `/painters/${caseId}`,
-            triggered_by: user.id,
-          } as never);
-          if (notifErr) console.error('[notifications] insert failed', notifErr);
-          await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
-        })
-    );
+    // Sequential — see the comment on notifyCeosPendingApproval above.
+    for (const p of recipients.filter((r) => r.id !== user.id)) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: p.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title: ewTitle,
+        body: ewBody,
+        action_url: `/painters/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
+    }
     await pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
   }
 
@@ -757,21 +762,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     // Body text points advisors straight at QUALITY_CONTROL — highlight it so
     // they land scrolled to the right step instead of scanning the list.
     const washUrl = `/cases/${caseId}?highlight=QUALITY_CONTROL`;
-    await Promise.all(
-      advisors.map(async (adv) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: adv.id,
-          case_id: caseId,
-          type: 'WASH_STARTED',
-          title: washTitle,
-          body: washBody,
-          action_url: washUrl,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` });
-      })
-    );
+    // Sequential — see the comment on notifyCeosPendingApproval above.
+    for (const adv of advisors) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: adv.id,
+        case_id: caseId,
+        type: 'WASH_STARTED',
+        title: washTitle,
+        body: washBody,
+        action_url: washUrl,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` });
+    }
     await pushToOverseers({ title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` }, user.id);
   }
 
@@ -804,21 +808,20 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     closeRecipients.delete(user.id);
     const closeTitle = 'תיק נסגר';
     const closeBody = `התיק של ${cc?.customer_name ?? ''} (רכב ${ccPlate}) נסגר סופית`.replace('  ', ' ');
-    await Promise.all(
-      Array.from(closeRecipients).map(async (rid) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: rid,
-          case_id: caseId,
-          type: 'CASE_CLOSED',
-          title: closeTitle,
-          body: closeBody,
-          action_url: `/cases/${caseId}`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
-      })
-    );
+    // Sequential — see the comment on notifyCeosPendingApproval above.
+    for (const rid of Array.from(closeRecipients)) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: rid,
+        case_id: caseId,
+        type: 'CASE_CLOSED',
+        title: closeTitle,
+        body: closeBody,
+        action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
+    }
     await pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
   }
 

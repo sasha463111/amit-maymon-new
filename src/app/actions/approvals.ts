@@ -81,21 +81,25 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const rejTitle = `${approvalTypeLabel} נדחה`;
     const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - עמית דחה את האישור`;
-    await Promise.all(
-      managers.map(async (m) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: m.id,
-          case_id: approval.case_id,
-          type: 'CEO_REJECTED',
-          title: rejTitle,
-          body: rejBody,
-          action_url: `/cases/${approval.case_id}`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
-      })
-    );
+    // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+    // trigger's (031/032) 10-second de-dup check against each other, so
+    // several can all pass the "not already sent" check before any of their
+    // fan-out copies commit — real duplicate notifications to CEOs/
+    // cross-branch advisors. These lists are small, so serializing costs
+    // nothing that matters.
+    for (const m of managers) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: m.id,
+        case_id: approval.case_id,
+        type: 'CEO_REJECTED',
+        title: rejTitle,
+        body: rejBody,
+        action_url: `/cases/${approval.case_id}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
+    }
     await pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
@@ -103,21 +107,20 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const okTitle = `${approvalTypeLabel} אושר ✓`;
     const okBody = `רכב ${plateLabel} - עמית אישר. אפשר להמשיך בטיפול.`;
-    await Promise.all(
-      managers.map(async (m) => {
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: m.id,
-          case_id: approval.case_id,
-          type: 'OTHER',
-          title: okTitle,
-          body: okBody,
-          action_url: `/cases/${approval.case_id}`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
-      })
-    );
+    // Sequential — see the comment on the identical pattern above.
+    for (const m of managers) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: m.id,
+        case_id: approval.case_id,
+        type: 'OTHER',
+        title: okTitle,
+        body: okBody,
+        action_url: `/cases/${approval.case_id}`,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
+    }
     await pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
   }
 

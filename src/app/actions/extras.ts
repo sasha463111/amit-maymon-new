@@ -46,21 +46,25 @@ export async function createExtra(input: CreateExtraInput) {
     .filter((p) => p.role === 'SERVICE_MANAGER');
   const extraTitle = 'תוספת חדשה';
   const extraBody = input.description;
-  await Promise.all(
-    managers.map(async (m) => {
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: m.id,
-        case_id: input.case_id,
-        type: 'EXTRA_CREATED',
-        title: extraTitle,
-        body: extraBody,
-        action_url: `/cases/${input.case_id}`,
-        triggered_by: user.id,
-      } as never);
-      if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
-    })
-  );
+  // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+  // trigger's (031/032) 10-second de-dup check against each other, so
+  // several can all pass the "not already sent" check before any of their
+  // fan-out copies commit — real duplicate notifications to CEOs/
+  // cross-branch advisors. These lists are small, so serializing costs
+  // nothing that matters.
+  for (const m of managers) {
+    const { error: notifErr } = await supabase.from('notifications').insert({
+      user_id: m.id,
+      case_id: input.case_id,
+      type: 'EXTRA_CREATED',
+      title: extraTitle,
+      body: extraBody,
+      action_url: `/cases/${input.case_id}`,
+      triggered_by: user.id,
+    } as never);
+    if (notifErr) console.error('[notifications] insert failed', notifErr);
+    await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
+  }
   await pushToOverseers({ title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id);
 
   await supabase.from('audit_events').insert({
