@@ -815,6 +815,16 @@ export function WorkflowStepsSection({
                         {Math.floor((Date.now() - new Date(s.activated_at!).getTime()) / 3_600_000)} שעות ממתין
                       </span>
                     )}
+                    {/* Requested: once ENTER_WORK is marked done, show a running
+                        day-counter here ("X ימים מכניסת הרכב לעבודה") so it's
+                        visible on the checklist itself, not just on the
+                        painter's own screen (which already had this via
+                        enterWorkCompletedAt in painters/[id]/page.tsx). */}
+                    {s.step_key === 'ENTER_WORK' && isDone && s.completed_at && (
+                      <span className="mr-2 text-xs font-medium text-stone-500">
+                        {Math.floor((Date.now() - new Date(s.completed_at).getTime()) / 86_400_000)} ימים מכניסת הרכב לעבודה
+                      </span>
+                    )}
                   </div>
 
                   {canEdit && !isDone && !isSkipped && (

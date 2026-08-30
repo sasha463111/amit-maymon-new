@@ -52,6 +52,7 @@ export default async function ClosurePage() {
       opened_at,
       parts_status,
       insurance_type,
+      insurance_company,
       claim_number,
       cars(license_plate, make, model),
       branches(name)
@@ -109,6 +110,7 @@ export default async function ClosurePage() {
               opened_at: string | null;
               parts_status: string | null;
               insurance_type: string | null;
+              insurance_company: string | null;
               claim_number: string | null;
               cars: { license_plate: string | null; make: string | null; model: string | null } | null;
               branches: { name: string } | null;
@@ -138,6 +140,7 @@ export default async function ClosurePage() {
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-stone-500">
                     {car?.make && <span>{car.make} {car.model}</span>}
+                    {row.insurance_company && <span>🏢 {row.insurance_company}</span>}
                     {branch?.name && <span>📍 {branch.name}</span>}
                   </div>
 

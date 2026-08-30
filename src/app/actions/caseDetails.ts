@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/server';
 // fields in CaseDetailClientV2.
 const ALLOWED_CASE_COLS = new Set([
   'customer_name', 'phone', 'insurance_company', 'appraiser_name', 'event_date',
-  'claim_number', 'sub_claim_type', 'insurance_type', 'claim_type',
+  'claim_number', 'sub_claim_type', 'sub_claim_type_other_text', 'insurance_type', 'claim_type',
   'fixcar_link', 'wheels_check_link', 'estimate_link', 'notes',
   'parts_status', 'parts_ordered', 'parts_arrived', 'painter_status',
   'painter_status_other_text',

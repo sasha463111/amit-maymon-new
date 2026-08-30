@@ -45,7 +45,9 @@ export type SubClaimType =
   | 'THIRD_PARTY_SETTLEMENT'
   | 'PRIVATE_REPAIR'
   | 'SHLOMO_POLICY'
-  | 'SHLOMO_THIRD_PARTY';
+  | 'SHLOMO_THIRD_PARTY'
+  | 'MILITARY'
+  | 'OTHER';
 
 // Was duplicated identically in ApprovalsList.tsx, CaseDetailClientV2.tsx,
 // and ClosureDetailClient.tsx.
@@ -56,6 +58,8 @@ export const SUB_CLAIM_LABELS: Record<string, string> = {
   PRIVATE_REPAIR: 'תיקון פרטי',
   SHLOMO_POLICY: 'מוקד שלמה פוליסה',
   SHLOMO_THIRD_PARTY: "מוקד שלמה צד ג'",
+  MILITARY: "צה\"ל",
+  OTHER: 'אחר',
 };
 
 export type WorkflowType = 'PROFESSIONAL' | 'CLOSURE';
@@ -140,6 +144,8 @@ export interface Case {
   insurance_type: InsuranceType | null;
   claim_type: ClaimType | null;
   sub_claim_type: SubClaimType | null;
+  // Added in migration 037, free-text companion for sub_claim_type === 'OTHER'
+  sub_claim_type_other_text: string | null;
   fixcar_link: string | null;
   wheels_check_link: string | null;
   customer_name: string | null;
@@ -382,6 +388,8 @@ export const SUB_CLAIM_TYPE_LABELS: Record<SubClaimType, string> = {
   PRIVATE_REPAIR: 'תיקון פרטי',
   SHLOMO_POLICY: 'מוקד שלמה פוליסה',
   SHLOMO_THIRD_PARTY: 'מוקד שלמה צד ג\'',
+  MILITARY: 'צה"ל',
+  OTHER: 'אחר',
 };
 
 // DTOs for actions
@@ -392,6 +400,7 @@ export interface CreateCaseInput {
   insurance_type?: InsuranceType | null;
   claim_type?: ClaimType | null;
   sub_claim_type?: SubClaimType | null;
+  sub_claim_type_other_text?: string | null;
   branch_id: string;
   // New fields
   customer_name?: string | null;

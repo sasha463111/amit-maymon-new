@@ -37,6 +37,7 @@ export default async function ApprovalsPage() {
       approval_type,
       status,
       rejection_note,
+      created_at,
       cases(
         id,
         case_key,
@@ -63,6 +64,7 @@ export default async function ApprovalsPage() {
       approval_type: string;
       status: string;
       rejection_note: string | null;
+      created_at: string | null;
       cases: {
         id: string;
         case_key: string | null;
@@ -86,6 +88,7 @@ export default async function ApprovalsPage() {
       case_id: row.case_id,
       approval_type: row.approval_type,
       rejection_note: row.rejection_note,
+      created_at: row.created_at,
       case_key: c?.case_key ?? null,
       fixcar_link: c?.fixcar_link ?? null,
       wheels_check_link: c?.wheels_check_link ?? null,

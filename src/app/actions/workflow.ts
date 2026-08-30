@@ -174,6 +174,7 @@ export async function createCase(input: CreateCaseInput) {
       created_by: user.id,
       // New fields (migration 006) — only send if not null to avoid schema cache errors
       ...(input.sub_claim_type != null ? { sub_claim_type: input.sub_claim_type } : {}),
+      ...(input.sub_claim_type_other_text != null ? { sub_claim_type_other_text: input.sub_claim_type_other_text } : {}),
       ...(input.customer_name != null ? { customer_name: input.customer_name } : {}),
       ...(input.phone != null ? { phone: input.phone } : {}),
       ...(input.insurance_company != null ? { insurance_company: input.insurance_company } : {}),

@@ -175,6 +175,7 @@ export function CaseDetailsSection({
   initialNotes,
   initialPainterStatus,
   initialPainterStatusOtherText,
+  initialSubClaimTypeOtherText,
 }: {
   caseId: string;
   role: string | null;
@@ -199,6 +200,7 @@ export function CaseDetailsSection({
   initialNotes: string | null;
   initialPainterStatus: string | null;
   initialPainterStatusOtherText: string | null;
+  initialSubClaimTypeOtherText: string | null;
 }) {
   const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR';
   const canEditDetails = role !== 'PAINTER' && role !== null;
@@ -261,6 +263,12 @@ export function CaseDetailsSection({
 
     if (caseKey) {
       caseUpdates[caseKey] = value || null;
+      // Leaving OTHER clears the free text — same reasoning as painter_status
+      // above: otherwise stale wording could resurface if switched back later.
+      if (field === 'subClaimType' && value !== 'OTHER') {
+        caseUpdates.sub_claim_type_other_text = null;
+        setSubClaimTypeOtherText('');
+      }
     } else if (carKey) {
       carUpdates[carKey] = field === 'vehicleYear' ? (value ? parseInt(value, 10) : null) : (value || null);
     }
@@ -314,6 +322,17 @@ export function CaseDetailsSection({
     const res = await updateCaseDetails(caseId, { painter_status_other_text: text || null });
     if (res?.error) console.error('[savePainterStatusOtherText] failed', res.error);
     setPainterStatusOtherSaving(false);
+  }
+
+  const [subClaimTypeOtherText, setSubClaimTypeOtherText] = useState(initialSubClaimTypeOtherText ?? '');
+  const [subClaimTypeOtherSaving, setSubClaimTypeOtherSaving] = useState(false);
+
+  async function saveSubClaimTypeOtherText(text: string) {
+    setSubClaimTypeOtherText(text);
+    setSubClaimTypeOtherSaving(true);
+    const res = await updateCaseDetails(caseId, { sub_claim_type_other_text: text || null });
+    if (res?.error) console.error('[saveSubClaimTypeOtherText] failed', res.error);
+    setSubClaimTypeOtherSaving(false);
   }
 
   return (
@@ -383,11 +402,35 @@ export function CaseDetailsSection({
             { value: 'PRIVATE_REPAIR', label: 'תיקון פרטי' },
             { value: 'SHLOMO_POLICY', label: 'מוקד שלמה פוליסה' },
             { value: 'SHLOMO_THIRD_PARTY', label: "מוקד שלמה צד ג'" },
+            { value: 'MILITARY', label: 'צה"ל' },
+            { value: 'OTHER', label: 'אחר' },
           ]}
           displayMap={SUB_CLAIM_LABELS}
+          renderDisplay={(v) => (
+            <span className="text-gray-800">
+              {v ? (SUB_CLAIM_LABELS[v] ?? v) : '—'}
+              {v === 'OTHER' && subClaimTypeOtherText ? `: ${subClaimTypeOtherText}` : ''}
+            </span>
+          )}
           fieldValues={fieldValues} editingField={editingField} editValue={editValue} canEdit={canEditDetails} onStartEdit={startEdit} onEditChange={setEditValue} onSave={() => void saveField()} onCancel={cancelEdit}
         />
       </div>
+
+      {/* ── תת סוג תביעה: "אחר" — טקסט חופשי ── */}
+      {canEditDetails && fieldValues.subClaimType === 'OTHER' && (
+        <div className="mt-3">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            פירוט תת סוג תביעה {subClaimTypeOtherSaving && <span className="text-xs text-gray-400">שומר...</span>}
+          </label>
+          <input
+            type="text"
+            defaultValue={subClaimTypeOtherText}
+            onBlur={(e) => void saveSubClaimTypeOtherText(e.target.value)}
+            placeholder="פרט את סוג התביעה"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand-red outline-none"
+          />
+        </div>
+      )}
 
       {/* ── סטטוס פחח ── */}
       {(canEdit || role === 'PAINTER') && (

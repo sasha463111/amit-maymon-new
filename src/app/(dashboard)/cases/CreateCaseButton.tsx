@@ -52,6 +52,7 @@ export function CreateCaseButton({
     claim_number: '',
     claim_type: '' as ClaimType | '',
     sub_claim_type: '' as SubClaimType | '',
+    sub_claim_type_other_text: '',
     branch_id: branchId ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
@@ -119,6 +120,7 @@ export function CreateCaseButton({
       claim_number: form.claim_number.trim() || null,
       claim_type: (form.claim_type as ClaimType) || null,
       sub_claim_type: (form.sub_claim_type as SubClaimType) || null,
+      sub_claim_type_other_text: form.sub_claim_type === 'OTHER' ? (form.sub_claim_type_other_text.trim() || null) : null,
       branch_id: form.branch_id,
       customer_name: form.customer_name.trim() || null,
       phone: form.phone.trim() || null,
@@ -172,11 +174,33 @@ export function CreateCaseButton({
       claim_number: '',
       claim_type: '',
       sub_claim_type: '',
+      sub_claim_type_other_text: '',
       branch_id: branchId ?? '',
     });
     setFiles([]);
     router.push('/cases');
     router.refresh();
+  }
+
+  // Enter used to submit the whole form immediately (native <form> behavior)
+  // the moment the user hit Enter after typing the plate — before this, only
+  // clicking "צור תיק" was supposed to open the case. Enter now just moves
+  // focus to the next field instead, like Tab. Doesn't fire on the submit
+  // button itself either, so a stray Enter there can't open the case — only
+  // an actual click can.
+  function handleFormKeyDown(e: React.KeyboardEvent<HTMLFormElement>) {
+    if (e.key !== 'Enter') return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'TEXTAREA') return; // allow multiline fields to keep native Enter behavior
+    e.preventDefault();
+    const form = e.currentTarget;
+    const focusable = Array.from(
+      form.querySelectorAll<HTMLElement>('input, select, textarea, button')
+    ).filter((el) => !el.hasAttribute('disabled') && el.tabIndex !== -1 && el.offsetParent !== null);
+    const idx = focusable.indexOf(target);
+    if (idx > -1 && idx < focusable.length - 1) {
+      focusable[idx + 1].focus();
+    }
   }
 
   const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white';
@@ -215,7 +239,7 @@ export function CreateCaseButton({
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5">
+            <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="p-4 sm:p-6 space-y-5">
               {/* ── פרטי רכב ── */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פרטי רכב</p>
@@ -390,7 +414,19 @@ export function CreateCaseButton({
                       <option value="PRIVATE_REPAIR">תיקון פרטי</option>
                       <option value="SHLOMO_POLICY">מוקד שלמה פוליסה</option>
                       <option value="SHLOMO_THIRD_PARTY">מוקד שלמה צד ג&apos;</option>
+                      <option value="MILITARY">צה&quot;ל</option>
+                      <option value="OTHER">אחר</option>
                     </select>
+                    {form.sub_claim_type === 'OTHER' && (
+                      <input
+                        type="text"
+                        value={form.sub_claim_type_other_text}
+                        onChange={(e) => set('sub_claim_type_other_text', e.target.value)}
+                        className={`${inputCls} mt-2`}
+                        placeholder="פרט את סוג התביעה"
+                        autoComplete="off"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

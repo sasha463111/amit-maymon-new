@@ -51,6 +51,7 @@ interface CaseDetailClientProps {
   appraiserName: string | null;
   eventDate: string | null;
   subClaimType: string | null;
+  subClaimTypeOtherText: string | null;
   insuranceType: string | null;
   claimType: string | null;
   vehicleType: string | null;
@@ -103,6 +104,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     appraiserName,
     eventDate,
     subClaimType,
+    subClaimTypeOtherText,
     insuranceType,
     claimType,
     vehicleType,
@@ -460,6 +462,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         initialNotes={initialNotes}
         initialPainterStatus={initialPainterStatus}
         initialPainterStatusOtherText={initialPainterStatusOtherText}
+        initialSubClaimTypeOtherText={subClaimTypeOtherText}
       />
 
       {/* ── צ'קליסט עבודה ── */}

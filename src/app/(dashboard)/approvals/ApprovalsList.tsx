@@ -13,6 +13,7 @@ interface ApprovalRow {
   case_id: string;
   approval_type: string;
   rejection_note: string | null;
+  created_at?: string | null;
   case_key: string | null;
   fixcar_link: string | null;
   wheels_check_link: string | null;
@@ -34,6 +35,17 @@ const APPROVAL_TYPE_LABELS: Record<string, string> = {
 
 function getApprovalLabel(type: string): string {
   return APPROVAL_TYPE_LABELS[type] ?? `אישור שלב: ${type}`;
+}
+
+// "ממתין X" badge for the approvals list — hours while fresh, days once it's
+// been sitting a while, so a stale approval reads as stale at a glance.
+function formatWaitingSince(createdAt: string): string {
+  const ms = Date.now() - new Date(createdAt).getTime();
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return 'ממתין פחות משעה';
+  if (hours < 24) return `ממתין ${hours} שעות`;
+  const days = Math.floor(hours / 24);
+  return `ממתין ${days} ${days === 1 ? 'יום' : 'ימים'}`;
 }
 
 // Kept local (not merged into types/database.ts's plain-string PARTS_STATUS_LABELS)
@@ -430,6 +442,14 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                 <div className={`text-xs mt-1 font-medium ${selectedId === a.id ? 'text-indigo-600' : 'text-amber-600'}`}>
                   ⏳ {getApprovalLabel(a.approval_type)}
                 </div>
+                {/* Requested: waiting time visible on the card itself, without
+                    opening it — same "don't make me click in to find out"
+                    reasoning as the closure list's "X ימים" badge. */}
+                {a.created_at && (
+                  <div className="text-[11px] mt-0.5 text-gray-400">
+                    {formatWaitingSince(a.created_at)}
+                  </div>
+                )}
               </button>
             </li>
           ))}
