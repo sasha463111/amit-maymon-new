@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import { ReferralDetailClient } from './ReferralDetailClient';
 import type { Referral, ReferralDocument } from '@/types/database';
+import { getReferralStatusUpdates } from '@/app/actions/referrals';
 
 export default async function ReferralDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -42,11 +43,14 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
     .eq('referral_id', params.id)
     .order('created_at', { ascending: false });
 
+  const { data: statusUpdates } = await getReferralStatusUpdates(params.id);
+
   return (
     <ReferralDetailClient
       referral={row}
       branchName={branch?.name ?? '—'}
       documents={(docsData ?? []) as ReferralDocument[]}
+      initialStatusUpdates={statusUpdates}
     />
   );
 }

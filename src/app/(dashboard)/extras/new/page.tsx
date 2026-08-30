@@ -30,6 +30,7 @@ export default async function NewExtraPage() {
     .from('cases')
     .select('id, case_key, cars(license_plate)')
     .is('closed_at', null)
+    .is('deleted_at', null)
     .order('opened_at', { ascending: false });
 
   if (profile?.branch_id) {

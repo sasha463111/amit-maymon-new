@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createReferral, uploadReferralDocument } from '@/app/actions/referrals';
+import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
 
@@ -37,9 +38,33 @@ export function NewReferralButton({ branchId, isCeo = false }: { branchId: strin
   });
 
   const needsBranchPicker = isCeo || !branchId;
+  // Same Ministry of Transport plate lookup as opening an accident case
+  // (CreateCaseButton) — referrals previously required typing vehicle type
+  // by hand even though the same auto-fill already exists elsewhere.
+  const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handlePlateBlur() {
+    const digits = form.plate_number.replace(/\D/g, '');
+    if (!digits) {
+      setVehicleLookupState('idle');
+      return;
+    }
+    setVehicleLookupState('loading');
+    const res = await lookupVehicleByPlate(form.plate_number);
+    if (res.error || (!res.vehicle_type && !res.vehicle_year)) {
+      setVehicleLookupState('not-found');
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      vehicle_type: res.vehicle_type ?? f.vehicle_type,
+      vehicle_year: res.vehicle_year ? String(res.vehicle_year) : f.vehicle_year,
+    }));
+    setVehicleLookupState('found');
   }
 
   async function handleOpen() {
@@ -176,10 +201,29 @@ export function NewReferralButton({ branchId, isCeo = false }: { branchId: strin
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className={labelCls}>מספר רכב</label>
-                    <input type="text" value={form.plate_number} onChange={(e) => set('plate_number', e.target.value)} className={inputCls} dir="ltr" placeholder="12-345-67" autoComplete="off" />
+                    <input
+                      type="text"
+                      value={form.plate_number}
+                      onChange={(e) => { set('plate_number', e.target.value); setVehicleLookupState('idle'); }}
+                      onBlur={handlePlateBlur}
+                      className={inputCls}
+                      dir="ltr"
+                      placeholder="12-345-67"
+                      autoComplete="off"
+                    />
                   </div>
                   <div>
-                    <label className={labelCls}>סוג רכב</label>
+                    <label className={labelCls}>
+                      סוג רכב
+                      {vehicleLookupState === 'loading' && (
+                        <span className="mr-2 inline-flex items-center gap-1 text-xs font-normal text-gray-400">
+                          <Loader2 size={12} className="animate-spin" /> מאתר במשרד התחבורה...
+                        </span>
+                      )}
+                      {vehicleLookupState === 'not-found' && (
+                        <span className="mr-2 text-xs font-normal text-amber-600">לא נמצא ברשימת משרד התחבורה</span>
+                      )}
+                    </label>
                     <input type="text" value={form.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} className={inputCls} placeholder="יונדאי i20" autoComplete="off" />
                   </div>
                   <div>

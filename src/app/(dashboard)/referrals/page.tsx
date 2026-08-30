@@ -32,7 +32,7 @@ export default async function ReferralsPage() {
 
   let referralsQuery = supabase
     .from('referrals')
-    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, created_at')
+    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, current_status_tag, created_at')
     .eq('status', 'ACTIVE')
     .order('created_at', { ascending: true }); // oldest-waiting first — the ones most overdue for follow-up surface first
 
@@ -49,6 +49,7 @@ export default async function ReferralsPage() {
     insurance_company: string | null;
     plate_number: string | null;
     status_note: string | null;
+    current_status_tag: string | null;
     created_at: string;
   }[];
 
@@ -79,18 +80,33 @@ export default async function ReferralsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {referrals.map((r) => {
             const daysWaiting = Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000);
+            // Explicit request: flag a referral waiting on paperwork with no
+            // case opened yet (query is already status='ACTIVE' only) in
+            // yellow so it stands out from the rest of the active list.
+            const awaitingPaperwork = r.current_status_tag === 'AWAITING_PAPERWORK';
             return (
               <Link key={r.id} href={`/referrals/${r.id}`} className="block group h-full">
-                <div className="h-full flex flex-col gap-3 bg-white rounded-xl border-[1.5px] border-stone-200 shadow-xs p-4 hover:border-accent/50 hover:shadow-sm transition-all">
+                <div className={`h-full flex flex-col gap-3 rounded-xl border-[1.5px] shadow-xs p-4 hover:shadow-sm transition-all ${
+                  awaitingPaperwork
+                    ? 'bg-amber-50 border-amber-300 hover:border-amber-400'
+                    : 'bg-white border-stone-200 hover:border-accent/50'
+                }`}>
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-base font-bold text-stone-900 truncate">
                       {r.customer_name ?? 'ללא שם לקוח'}
                     </h3>
-                    {r.insurance_company && (
-                      <span className="shrink-0 px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[11px] font-medium">
-                        {r.insurance_company}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {awaitingPaperwork && (
+                        <span className="px-2 py-0.5 bg-amber-200 text-amber-900 rounded text-[11px] font-semibold">
+                          ⏳ ממתין לניירת
+                        </span>
+                      )}
+                      {r.insurance_company && (
+                        <span className="px-2 py-0.5 bg-stone-100 text-stone-600 rounded text-[11px] font-medium">
+                          {r.insurance_company}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {r.plate_number && <LicensePlate plate={r.plate_number} size="sm" />}

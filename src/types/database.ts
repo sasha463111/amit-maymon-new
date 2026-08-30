@@ -439,6 +439,7 @@ export interface Referral {
   phone: string | null;
   status_note: string | null;
   status: ReferralStatus;
+  current_status_tag: string | null;
   case_id: string | null;
   created_by: string | null;
   created_at: string;

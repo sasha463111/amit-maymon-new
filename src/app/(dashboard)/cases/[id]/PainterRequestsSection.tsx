@@ -12,8 +12,8 @@
  * manually-typed note, per the explicit request — not a bare status flip.
  */
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { updatePainterRequestStatus } from '@/app/actions/painter';
 
 export interface PainterRequestRow {
@@ -49,6 +49,20 @@ export function PainterRequestsSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Arriving from a painter-request notification (?highlight=<request id>) —
+  // notifications route through /go/[id], which sends non-PAINTER roles to
+  // /cases/[id] (not /painters/[id]), so this page needs to consume the same
+  // highlight param the painter board does or the query string is silently
+  // dropped and there's no way to tell which request the notification was
+  // about. Same id convention (`painter-request-${id}`) as PainterCaseClient.
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+  useEffect(() => {
+    if (!highlightId) return;
+    document.getElementById(`painter-request-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (requests.length === 0) return null;
 
   const openReq = requests.find((r) => r.id === openId) ?? null;
@@ -78,14 +92,17 @@ export function PainterRequestsSection({
         {requests.map((r) => {
           const s = STATUS_LABELS[r.status] ?? { label: r.status, color: 'bg-gray-100 text-gray-700' };
           const isOpenStatus = r.status === 'PENDING' || r.status === 'IN_PROGRESS';
+          const isHighlighted = r.id === highlightId;
           return (
-            <li key={r.id}>
+            <li key={r.id} id={`painter-request-${r.id}`}>
               <button
                 type="button"
                 onClick={() => canRespond && isOpenStatus && (setOpenId(r.id), setNote(''), setError(null))}
                 className={`w-full text-right flex items-start gap-3 p-3 rounded-lg border transition-colors ${
                   isOpenStatus ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'
-                } ${canRespond && isOpenStatus ? 'hover:bg-amber-100 cursor-pointer' : 'cursor-default'}`}
+                } ${canRespond && isOpenStatus ? 'hover:bg-amber-100 cursor-pointer' : 'cursor-default'} ${
+                  isHighlighted ? 'ring-2 ring-brand-red ring-offset-2' : ''
+                }`}
               >
                 <span className="text-lg shrink-0">{r.request_type === 'PARTS' ? '🔩' : '🔧'}</span>
                 <div className="flex-1 min-w-0">

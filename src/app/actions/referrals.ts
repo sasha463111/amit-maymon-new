@@ -114,6 +114,68 @@ export async function convertReferral(referralId: string, caseId: string) {
   return { ok: true, error: null };
 }
 
+export type ReferralStatusTag = 'AWAITING_REPLACEMENT_CAR' | 'AWAITING_PAPERWORK' | 'AWAITING_SCHEDULING' | 'OTHER';
+
+/**
+ * Appends a dated entry to the referral's status log ("מעקב הפנייה") — the
+ * replacement for silently overwriting the single status_note field, so
+ * "לקוח ממתין לרכב חלופי" today and "השלמת ניירת וטרם תואם" next week both
+ * stay visible instead of one erasing the other.
+ *
+ * When a tag is picked, it's also copied onto referrals.current_status_tag
+ * (denormalized) so the list page can color the card without re-querying the
+ * whole log for every row. A plain free-text note with no tag selected
+ * ("no change") leaves the current tag/color as-is.
+ */
+export async function addReferralStatusUpdate(referralId: string, statusTag: ReferralStatusTag | null, note: string) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { error: auth.error };
+  if (!note.trim() && !statusTag) return { error: 'נדרש מצב או הערה' };
+
+  const { error } = await supabase.from('referral_status_updates').insert({
+    referral_id: referralId,
+    status_tag: statusTag,
+    note: note.trim() || null,
+    created_by: auth.user.id,
+  } as never);
+  if (error) return { error: error.message };
+
+  if (statusTag) {
+    const { error: patchErr } = await supabase
+      .from('referrals')
+      .update({ current_status_tag: statusTag } as never)
+      .eq('id', referralId);
+    if (patchErr) console.error('[referrals] current_status_tag sync failed', patchErr);
+  }
+
+  revalidatePath('/referrals');
+  revalidatePath(`/referrals/${referralId}`);
+  return { ok: true, error: null };
+}
+
+export async function getReferralStatusUpdates(referralId: string) {
+  const supabase = await createClient();
+  const auth = await requireOfficeOrCeo(supabase);
+  if ('error' in auth) return { data: [], error: auth.error };
+
+  const { data, error } = await supabase
+    .from('referral_status_updates')
+    .select('id, status_tag, note, created_at, profiles(full_name)')
+    .eq('referral_id', referralId)
+    .order('created_at', { ascending: false });
+  if (error) return { data: [], error: error.message };
+  return { data: (data ?? []) as unknown as ReferralStatusUpdateRow[], error: null };
+}
+
+export interface ReferralStatusUpdateRow {
+  id: string;
+  status_tag: ReferralStatusTag | null;
+  note: string | null;
+  created_at: string;
+  profiles: { full_name: string | null } | { full_name: string | null }[] | null;
+}
+
 export async function uploadReferralDocument(formData: FormData) {
   const supabase = await createClient();
   const auth = await requireOfficeOrCeo(supabase);

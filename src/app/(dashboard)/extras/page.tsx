@@ -27,15 +27,16 @@ export default async function ExtrasPage() {
     );
   }
 
-  let caseIds: string[] | null = null;
+  // Always scope to non-deleted cases — an extra whose case was soft-deleted
+  // (or, for non-CEO, outside the user's branch) isn't relevant work to show
+  // here; it used to leak through because this only filtered by branch and
+  // never checked deleted_at at all.
+  let casesInScopeQuery = supabase.from('cases').select('id').is('deleted_at', null);
   if (profile && profile.role !== 'CEO' && profile.branch_id) {
-    const { data: branchCasesData } = await supabase
-      .from('cases')
-      .select('id')
-      .eq('branch_id', profile.branch_id);
-    const branchCases = (branchCasesData ?? []) as { id: string }[];
-    caseIds = branchCases.map((c) => c.id);
+    casesInScopeQuery = casesInScopeQuery.eq('branch_id', profile.branch_id);
   }
+  const { data: casesInScopeData } = await casesInScopeQuery;
+  const caseIds = ((casesInScopeData ?? []) as { id: string }[]).map((c) => c.id);
 
   let query = supabase
     .from('bodywork_extras')
@@ -50,11 +51,9 @@ export default async function ExtrasPage() {
     `)
     .order('created_at', { ascending: false });
 
-  if (caseIds && caseIds.length > 0) {
-    query = query.in('case_id', caseIds);
-  } else if (caseIds && caseIds.length === 0) {
-    query = query.eq('case_id', '00000000-0000-0000-0000-000000000000');
-  }
+  query = caseIds.length > 0
+    ? query.in('case_id', caseIds)
+    : query.eq('case_id', '00000000-0000-0000-0000-000000000000');
 
   const { data: rows } = await query;
 

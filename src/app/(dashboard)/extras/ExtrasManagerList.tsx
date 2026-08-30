@@ -30,10 +30,23 @@ const STATUS_COLORS: Record<ExtraStatus, string> = {
   DONE: 'bg-emerald-100 text-emerald-700 border-emerald-300',
 };
 
+// Default view is "still needs a decision" (IN_TREATMENT) — otherwise every
+// extra ever created (done/rejected included) piles up forever in the same
+// list, and the handful that actually need the manager's attention get lost
+// in months of history. "הכל" is one tap away for anyone who wants it.
+type TabFilter = 'IN_TREATMENT' | 'DONE' | 'REJECTED' | 'ALL';
+const TABS: { key: TabFilter; label: string }[] = [
+  { key: 'IN_TREATMENT', label: 'בטיפול' },
+  { key: 'DONE', label: 'בוצעו' },
+  { key: 'REJECTED', label: 'נדחו' },
+  { key: 'ALL', label: 'הכל' },
+];
+
 export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
   const router = useRouter();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabFilter>('IN_TREATMENT');
 
   async function handleStatusChange(extraId: string, status: ExtraStatus) {
     setUpdatingId(extraId);
@@ -56,6 +69,14 @@ export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
     );
   }
 
+  const counts: Record<TabFilter, number> = {
+    IN_TREATMENT: extras.filter((e) => e.status === 'IN_TREATMENT').length,
+    DONE: extras.filter((e) => e.status === 'DONE').length,
+    REJECTED: extras.filter((e) => e.status === 'REJECTED').length,
+    ALL: extras.length,
+  };
+  const visible = tab === 'ALL' ? extras : extras.filter((e) => e.status === tab);
+
   return (
     <div dir="rtl">
       {error && (
@@ -63,8 +84,30 @@ export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
           ⚠️ {error}
         </div>
       )}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+              tab === t.key
+                ? 'bg-brand-red text-white border-brand-red'
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {t.label} ({counts[t.key]})
+          </button>
+        ))}
+      </div>
+      {visible.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center text-gray-400">
+          <div className="text-5xl mb-3">🎨</div>
+          <p className="text-sm">אין תוספות בקטגוריה זו</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {extras.map((e) => (
+        {visible.map((e) => (
           <article
             key={e.id}
             className={`bg-white rounded-xl border-2 shadow-sm overflow-hidden flex flex-col ${
@@ -151,6 +194,7 @@ export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
           </article>
         ))}
       </div>
+      )}
     </div>
   );
 }

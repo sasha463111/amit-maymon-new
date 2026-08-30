@@ -314,10 +314,17 @@ export async function pushToOverseers(
   const db = getServiceClient() ?? (await createClient());
   const { data: overseers } = await db
     .from('profiles')
-    .select('id')
+    .select('id, role')
     .in('role', ['CEO', 'SERVICE_ADVISOR'])
     .eq('is_active', true);
-  const targets = ((overseers ?? []) as { id: string }[]).filter((o) => o.id !== excludeUserId);
+  // CEOs get pushed for every event, including ones they triggered
+  // themselves, so their notifications feed works as a full activity/audit
+  // trail (explicit request — "שאוכל לעקוב"). Only non-CEO overseers are
+  // still excluded when they're also the actor. Mirrors the DB fan-out
+  // trigger change in migration 041.
+  const targets = ((overseers ?? []) as { id: string; role: string }[]).filter(
+    (o) => o.role === 'CEO' || o.id !== excludeUserId
+  );
   // Awaited (not fire-and-forget): on Vercel's serverless runtime, a promise
   // left running after the server action returns can get frozen/killed before
   // it ever sends — the same "huge delay" bug this file's docs already warn
