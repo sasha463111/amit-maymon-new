@@ -77,7 +77,7 @@ src/
   types/
     database.ts             # כל ה-types, enums, interfaces
   db/
-    migrations/             # SQL migrations 001–043 (ראה סעיף 16)
+    migrations/             # SQL migrations 001–045 (ראה סעיף 16)
 ```
 
 ---
@@ -113,7 +113,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 |---|----------|---------|-------|
 | 0 | `OPEN_CASE` | פתיחת תיק | אוטומטי DONE בפתיחה |
 | 1 | `FIXCAR_PHOTOS` | צילום FixCar | **חובה:** fixcar_link |
-| 2 | `WHEELS_CHECK` | טפסי גלגלים | SKIPPED אוטומטית אם גיל רכב ≤ 2 שנים; קישור או קובץ |
+| 2 | `WHEELS_CHECK` | טפסי גלגלים | SKIPPED אוטומטית אם גיל רכב ≤ 2 שנים; קישור או קובץ; **אין** אישור CEO חוסם (הוסר 044) — רק התראת FYI לעמית בסיום |
 | 3 | `PREP_ESTIMATE` | אומדן | אופציה להעלות קובץ אומדן |
 | 4 | `SEND_TO_APPRAISER` | שליחה לשמאי | — |
 | 5 | `WAIT_APPRAISER_APPROVAL` | המתנה לאישור שמאי | `requires_ceo_approval = true` |
@@ -199,6 +199,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 
 ### `cars`
 - `license_plate`, `make`, `model`, `year`, `vin`, `vehicle_type`, `first_registration_date`
+- ⚠️ **פתיחת תיק ממלאת רק `vehicle_type`** (תוצאת שליפת משרד התחבורה, למשל "טויוטה קורולה") — `make`/`model` נשארים כמעט תמיד ריקים בפועל, כי אין להם שדה נפרד בטופס יצירת תיק. כרטיס/כרטיסייה שמציג פרטי רכב (`PaintersBoard.tsx`, `ClosureCasesGrid.tsx`) צריך להעדיף `vehicle_type` ולהשתמש ב-`make`+`model` רק כ-fallback — נמצא ותוקן כ-bug אמיתי (2026-08-31): הכרטיסים הציגו כלום כמעט תמיד.
 
 ### `case_workflow_runs`
 - `case_id`, `workflow_type` (PROFESSIONAL/CLOSURE), `status` (ACTIVE/COMPLETED)
@@ -207,7 +208,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `run_id`, `step_key`, `state` (PENDING/ACTIVE/DONE/SKIPPED), `order_index`, `completed_by`, `completed_at`
 
 ### `ceo_approvals`
-- `case_id`, `approval_type` (ESTIMATE_AND_DETAILS/WHEELS_CHECK), `status` (PENDING/APPROVED/REJECTED), `rejection_note`
+- `case_id`, `approval_type` (ESTIMATE_AND_DETAILS/WHEELS_CHECK/CASE_CLOSURE — enum עדיין כולל את כל השלושה, אבל **רק ESTIMATE_AND_DETAILS עדיין בשימוש בפועל**: CASE_CLOSURE הוסר ב-Session 6, WHEELS_CHECK הוסר במיגרציה 044 — עמית ביקש שלא יידרש אישור, רק התראה), `status` (PENDING/APPROVED/REJECTED), `rejection_note`
 - unique index על `(case_id, approval_type)` (020)
 
 ### `bodywork_extras`
@@ -233,13 +234,15 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `request_id`, `image_path` (bucket: `painter-images`)
 
 ### `referrals` (039) — הפניות טרום-תיק
-- `branch_id`, `customer_name`, `insurance_company`, `claim_type`, `vehicle_type`, `vehicle_year`, `plate_number`, `appraiser_name`, `phone`, `status_note` (טקסט חופשי, שדה תמציתי אחד), `status` (ACTIVE/CONVERTED/CANCELLED), `case_id` (מתמלא כשהופכת לתיק), `current_status_tag` (042 — דנורמליזציה של התגית האחרונה מהיומן, לצביעה ברשימה בלי שאילתה נוספת), `follow_up_date` / `follow_up_reminder_sent_at` (043 — תאריך תזכורת + שער חד-פעמי)
+- `branch_id`, `customer_name`, `insurance_company`, `claim_type`, `vehicle_type`, `vehicle_year`, `plate_number`, `appraiser_name`, `phone`, `status_note` (תצוגה מקדימה — מסונכרן אוטומטית מהעדכון האחרון ביומן, **לא** ניתן לעריכה ישירה יותר, ראה 045), `status` (ACTIVE/CONVERTED/CANCELLED), `case_id` (מתמלא כשהופכת לתיק), `current_status_tag` (042 — דנורמליזציה של התגית האחרונה מהיומן, לצביעה ברשימה בלי שאילתה נוספת), `follow_up_date` / `follow_up_reminder_sent_at` (043 — תאריך תזכורת + שער חד-פעמי)
 - **צביעה בצהוב ב-`/referrals`:** referral עם `status='ACTIVE'` וגם `current_status_tag='AWAITING_PAPERWORK'`
 - **מספר רכב** מפעיל את אותה שליפה ממשרד התחבורה (`vehicleLookup.ts`) שקיימת בפתיחת תיק רגילה — ממלא סוג/שנת רכב אוטומטית
+- **טאבים לפי סניף** ב-`/referrals` (הכל/נתיבות/אשקלון) — אותו `SegmentedControl`/`ReferralsGrid.tsx` כמו ב-`/cases` וב-`/closure`
 
 ### `referral_status_updates` (042) — יומן מעקב הפניה
 - `referral_id`, `status_tag` (AWAITING_REPLACEMENT_CAR/AWAITING_PAPERWORK/AWAITING_SCHEDULING/OTHER, nullable), `note`, `created_by`, `created_at`
-- שורה חדשה בכל עדכון — **לא** דורס את הקודם, בניגוד ל-`status_note`. תגית (אם נבחרה) גם מסונכרנת ל-`referrals.current_status_tag`.
+- שורה חדשה בכל עדכון — **לא** דורס את הקודם, בניגוד לאיך ש-`status_note` עבד פעם. תגית (אם נבחרה) וגם ההערה (אם הוזנה) מסונכרנות ל-`referrals.current_status_tag`/`status_note`.
+- **תיקון bug אמיתי (045):** עד הסשן הזה הייתה תיבת טקסט נפרדת בעמוד הפנייה לעריכת `status_note` ישירות, במקביל ליומן — עמית מילא אותה וציפה שהצביעה תעבוד, אבל הצביעה תלויה רק ב-`current_status_tag` שרק היומן מעדכן. התיבה הנפרדת הוסרה; כל עדכון סטטוס עובר עכשיו רק דרך היומן (`addReferralStatusUpdate`), וגם `createReferral`'s הערה הראשונית הופכת לשורה ראשונה ביומן. מיגרציה 045 backfill-ה הערות status_note קיימות שלא היה להן שורת יומן.
 
 ### `referral_documents`
 - `referral_id`, `file_name`, `file_path` (bucket: `referral-documents`), `file_size`, `mime_type`, `uploaded_by`
@@ -345,7 +348,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | בקשת פחח נשלחת | התראה לכל `is_bodywork_advisor = true` בסניף, עם קישור `?highlight=` לבקשה עצמה |
 | מנהל שירות/CEO עונה לבקשת פחח | התראה חזרה לפחח שפתח את הבקשה, כולל ההערה שהוקלדה |
 | `SEND_COMPLETION_PHOTOS`/`READY_FOR_OFFICE` בלי אישור `ESTIMATE_AND_DETAILS` | חסימה + יצירת approval PENDING אם חסר. `CLOSE_CASE` עצמו לא בודק את זה שוב — רק extras IN_TREATMENT |
-| WHEELS_CHECK הושלם ויש קישור | יוצר `WHEELS_CHECK` approval |
+| WHEELS_CHECK הושלם | התראת FYI לעמית (CEO) בלבד — **לא** יוצר `ceo_approvals` יותר (הוסר 044, עמית ביקש רק התראה, לא אישור חוסם) |
 | כל התראה נוצרת | fanout ל-CEO + יועצים חוצי-סניף (ראה סעיף 8, טבלת `notifications`) |
 
 ### תזכורות מתוזמנות — `/api/cron/enter-work-reminders` (038, 043)
@@ -434,10 +437,12 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | `src/app/api/cron/enter-work-reminders/route.ts` | כל תזכורות ה-cron (4 סבבים, ראה סעיף 11) |
 | `src/app/go/[id]/page.tsx` | ניתוב role-neutral להתראות |
 | `src/types/database.ts` | כל ה-types — הראשון לעדכן בשינויי schema |
-| `src/db/migrations/` | מיגרציות SQL — Migration 043 היא האחרונה |
+| `src/db/migrations/` | מיגרציות SQL — Migration 045 היא האחרונה |
 | `src/app/(dashboard)/layout.tsx` | Navigation לפי role |
 | `src/app/(dashboard)/painters/[id]/PainterCaseClient.tsx` | ממשק הפחח הנפרד |
+| `src/app/(dashboard)/painters/PaintersBoard.tsx` | לוח כרטיסי הפחחים (`/painters`) — `carLineFor()` מעדיף `vehicle_type` |
 | `src/app/(dashboard)/referrals/[id]/ReferralDetailClient.tsx` | פרטי הפנייה, יומן מעקב, תאריך תזכורת |
+| `src/app/(dashboard)/referrals/ReferralsGrid.tsx` | רשימת הפניות + טאבי סניף |
 | `src/app/(dashboard)/settings/BodyworkAdvisorsTab.tsx` | ניהול יועצי פחח |
 
 ---
@@ -482,6 +487,8 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | 041 | CEO מקבל התראות גם על פעולות שהוא עצמו ביצע |
 | 042 | יומן מעקב הפניות (`referral_status_updates`) + `current_status_tag` |
 | 043 | תאריך תזכורת להפניה (`follow_up_date` + `follow_up_reminder_sent_at`) |
+| 044 | WHEELS_CHECK מפסיק לדרוש אישור CEO — מנקה approvals PENDING קיימים מסוג זה |
+| 045 | Backfill: `status_note` ישן → שורת יומן ראשונה ב-`referral_status_updates` |
 
 ---
 

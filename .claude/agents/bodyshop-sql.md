@@ -63,7 +63,7 @@ Supabase-project-id correction above from 2026-08-28).**
 | `cases` | `deleted_at IS NULL` for active. Columns grew across migrations; check `src/types/database.ts`. |
 | `case_workflow_runs` | `workflow_type` = `PROFESSIONAL` or `CLOSURE`. One `ACTIVE` run per type per case. |
 | `case_workflow_steps` | `state`: `PENDING` / `ACTIVE` / `DONE` / `SKIPPED`. `order_index` drives ordering. |
-| `ceo_approvals` | `approval_type` enum: `ESTIMATE_AND_DETAILS`, `WHEELS_CHECK`. `CASE_CLOSURE` was removed (Session 6) — don't reintroduce it, `CLOSE_CASE` no longer requires a separate approval. Unique index on `(case_id, approval_type)` (020). |
+| `ceo_approvals` | `approval_type` enum still has `ESTIMATE_AND_DETAILS`, `WHEELS_CHECK`, `CASE_CLOSURE` but **only `ESTIMATE_AND_DETAILS` is still created by the app**. `CASE_CLOSURE` was removed (Session 6) — `CLOSE_CASE` no longer requires a separate approval. `WHEELS_CHECK` was removed 2026-08-31 (migration 044) — Amit asked for a plain FYI notification instead of a blocking approval; don't reintroduce either. Unique index on `(case_id, approval_type)` (020). |
 | `role_permissions` | Unique on `(role, action)`. Use `ON CONFLICT (role, action) DO NOTHING` if seeding. |
 | `workflow_step_templates` | CEO-editable. `requires_link` / `requires_file_or_link` / `requires_ceo_approval` drive blocking logic in `workflow.ts`. |
 | `painter_requests` | `status`: `PENDING`/`IN_PROGRESS`/`DONE`/`REJECTED` (040 added REJECTED + `response_note`). Shown on both `/painters/[id]` and `/cases/[id]`. |

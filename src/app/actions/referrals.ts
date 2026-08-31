@@ -47,9 +47,22 @@ export async function createReferral(input: CreateReferralInput) {
     .single();
 
   if (error || !data) return { error: error?.message ?? 'שגיאה ביצירת הפנייה' };
+  const referralId = (data as { id: string }).id;
+
+  // The initial note (if any) becomes the first row of the status log, so
+  // the detail page's "מעקב הפנייה" timeline has no gap before the first
+  // real update — everything status-related lives in one place from here on.
+  if (input.status_note?.trim()) {
+    await supabase.from('referral_status_updates').insert({
+      referral_id: referralId,
+      status_tag: null,
+      note: input.status_note.trim(),
+      created_by: auth.user.id,
+    } as never);
+  }
 
   revalidatePath('/referrals');
-  return { ok: true, referralId: (data as { id: string }).id, error: null };
+  return { ok: true, referralId, error: null };
 }
 
 export async function updateReferral(referralId: string, updates: UpdateReferralInput) {
@@ -164,12 +177,15 @@ export async function addReferralStatusUpdate(referralId: string, statusTag: Ref
   } as never);
   if (error) return { error: error.message };
 
-  if (statusTag) {
-    const { error: patchErr } = await supabase
-      .from('referrals')
-      .update({ current_status_tag: statusTag } as never)
-      .eq('id', referralId);
-    if (patchErr) console.error('[referrals] current_status_tag sync failed', patchErr);
+  // Denormalize onto referrals so the list page (current_status_tag → color)
+  // and card preview (status_note → the 📝 line) both reflect this update
+  // without an extra "latest log entry" query per row.
+  const patch: Record<string, unknown> = {};
+  if (statusTag) patch.current_status_tag = statusTag;
+  if (note.trim()) patch.status_note = note.trim();
+  if (Object.keys(patch).length > 0) {
+    const { error: patchErr } = await supabase.from('referrals').update(patch as never).eq('id', referralId);
+    if (patchErr) console.error('[referrals] status sync failed', patchErr);
   }
 
   revalidatePath('/referrals');

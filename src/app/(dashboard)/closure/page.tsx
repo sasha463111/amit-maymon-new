@@ -53,7 +53,7 @@ export default async function ClosurePage() {
       insurance_type,
       insurance_company,
       claim_number,
-      cars(license_plate, make, model),
+      cars(license_plate, make, model, vehicle_type),
       branches(name)
     `
     )
@@ -90,7 +90,7 @@ export default async function ClosurePage() {
         parts_status: string | null;
         insurance_type: string | null;
         insurance_company: string | null;
-        cars: { license_plate: string | null; make: string | null; model: string | null } | null;
+        cars: { license_plate: string | null; make: string | null; model: string | null; vehicle_type: string | null } | null;
         branches: { name: string } | null;
       };
       const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
@@ -107,6 +107,9 @@ export default async function ClosurePage() {
         license_plate: car?.license_plate ?? null,
         make: car?.make ?? null,
         model: car?.model ?? null,
+        // Case creation only fills `vehicle_type` (Ministry lookup) — make/model
+        // are basically always empty in practice, same issue as the painters board.
+        vehicle_type: car?.vehicle_type ?? null,
         branch_name: branch?.name ?? null,
       };
     });

@@ -66,7 +66,6 @@ export function ReferralDetailClient({
     plate_number: referral.plate_number ?? '',
     appraiser_name: referral.appraiser_name ?? '',
     phone: referral.phone ?? '',
-    status_note: referral.status_note ?? '',
     follow_up_date: referral.follow_up_date ?? '',
   });
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -326,17 +325,6 @@ export function ReferralDetailClient({
         <p className="text-xs text-gray-400 mt-1">
           תזכורת מעקב תשלח התראה במשרד/מנכ"ל ביום שנקבע — לדוגמה "לקוח תואם לשבוע הבא"
         </p>
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">סטטוס הפנייה (טקסט חופשי)</label>
-          <textarea
-            value={fields.status_note}
-            onChange={(e) => setFields((f) => ({ ...f, status_note: e.target.value }))}
-            onBlur={() => void saveField('status_note', fields.status_note)}
-            rows={3}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:border-brand-red outline-none"
-            placeholder="לדוגמה: ממתין לתיאום עם הלקוח"
-          />
-        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-3 sm:p-6">

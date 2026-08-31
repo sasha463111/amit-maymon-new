@@ -28,7 +28,7 @@ Constants live in `src/types/database.ts` as `PROFESSIONAL_WORKFLOW_STEPS` and `
 # Blocking rules (must stay consistent across DB, server action, and UI)
 
 1. **FIXCAR_PHOTOS**: blocked unless `cases.fixcar_link` is set.
-2. **WHEELS_CHECK**: auto-SKIPPED if vehicle ≤ 2 years old (computed from `cars.first_registration_date`). Otherwise requires a link OR file, and triggers a `WHEELS_CHECK` approval.
+2. **WHEELS_CHECK**: auto-SKIPPED if vehicle ≤ 2 years old (computed from `cars.first_registration_date`). Otherwise requires a link OR file. It used to also create a `WHEELS_CHECK` `ceo_approvals` row and block on it — removed 2026-08-31 (migration 044): completing it now only sends the CEO an FYI notification, no approval, no gate.
 3. **Any step with `workflow_step_templates.requires_ceo_approval = true`**: first click creates a PENDING `ceo_approvals` row; subsequent clicks only succeed when the approval is `APPROVED`. `WAIT_APPRAISER_APPROVAL` uses `approval_type='ESTIMATE_AND_DETAILS'` for legacy compat.
 4. **ENTER_WORK**: soft warning (not a hard block) if `parts_status != 'AVAILABLE'`.
 5. **QUALITY_CONTROL**: popup to pick the advisor from `profiles WHERE is_bodywork_advisor = true`. Only rendered if at least one advisor exists.

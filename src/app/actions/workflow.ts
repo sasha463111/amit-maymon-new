@@ -454,7 +454,11 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     if (stepKey === 'CLOSE_CASE') {
       // No further approval gate — proceed to closure logic below.
     } else {
-      // SEND_COMPLETION_PHOTOS / READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS (and WHEELS_CHECK if relevant).
+      // SEND_COMPLETION_PHOTOS / READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS only.
+      // WHEELS_CHECK used to also require a CEO approval here — explicit request
+      // removed that gate (2026-08-31): wheel forms only need a plain FYI
+      // notification to the CEO, not a blocking sign-off. See the WHEELS_CHECK
+      // completion notification below instead of a ceo_approvals row.
       const { data: approvals } = await supabase
         .from('ceo_approvals')
         .select('approval_type, status, created_at')
@@ -462,28 +466,12 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       const approvalsArr = (approvals ?? []) as { approval_type: string; status: string; created_at: string }[];
       const latest = latestApprovalsByType(approvalsArr);
       const estimateApproval = latest.get('ESTIMATE_AND_DETAILS') ?? null;
-      const wheelsApproval = latest.get('WHEELS_CHECK') ?? null;
-      const { data: wheelsStep } = await supabase
-        .from('case_workflow_steps')
-        .select('id')
-        .eq('run_id', run.id)
-        .eq('step_key', 'WHEELS_CHECK')
-        .eq('state', 'DONE')
-        .maybeSingle();
-      const needsWheelsApproval = !!(wheelsStep as { id: string } | null)?.id;
 
-      // Ensure approvals exist (so case appears on the approvals screen).
+      // Ensure approval exists (so case appears on the approvals screen).
       if (!estimateApproval) {
         await supabase.from('ceo_approvals').insert({
           case_id: caseId,
           approval_type: 'ESTIMATE_AND_DETAILS',
-          status: 'PENDING',
-        } as never);
-      }
-      if (needsWheelsApproval && !wheelsApproval) {
-        await supabase.from('ceo_approvals').insert({
-          case_id: caseId,
-          approval_type: 'WHEELS_CHECK',
           status: 'PENDING',
         } as never);
       }
@@ -506,25 +494,6 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           reason: 'ceo_approval_missing_or_rejected',
         });
         return { error: 'נדרש אישור CEO לאומדן' };
-      }
-      if (needsWheelsApproval && (!wheelsApproval || wheelsApproval.status !== 'APPROVED')) {
-        const blockedTitle = 'פעולה חסומה';
-        const blockedBody = 'חסר או נדחה אישור CEO לטפסי גלגלים';
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: profile!.id,
-          case_id: caseId,
-          type: 'BLOCKED_ACTION',
-          title: blockedTitle,
-          body: blockedBody,
-          action_url: `/approvals`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-wheels-${caseId}` });
-        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-          reason: 'ceo_approval_missing_or_rejected',
-        });
-        return { error: 'נדרש אישור CEO לטפסי גלגלים' };
       }
     }
   }
@@ -560,29 +529,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
           .single();
         const newApprovalId = (newApproval as { id: string } | null)?.id;
         if (newApprovalId) await notifyCeosPendingApproval(supabase, caseId, approvalType, user.id, newApprovalId);
-        if (stepKey === 'WAIT_APPRAISER_APPROVAL') {
-          const typeKeys = new Set(Array.from(latestApprovalsByType(approvalsArr).keys()));
-          const { data: wheelsStep } = await supabase
-            .from('case_workflow_steps')
-            .select('id')
-            .eq('run_id', run.id)
-            .eq('step_key', 'WHEELS_CHECK')
-            .eq('state', 'DONE')
-            .maybeSingle();
-          if (wheelsStep && !typeKeys.has('WHEELS_CHECK')) {
-            const { data: newWheelsApproval } = await supabase
-              .from('ceo_approvals')
-              .insert({
-                case_id: caseId,
-                approval_type: 'WHEELS_CHECK',
-                status: 'PENDING',
-              } as never)
-              .select('id')
-              .single();
-            const newWheelsApprovalId = (newWheelsApproval as { id: string } | null)?.id;
-            if (newWheelsApprovalId) await notifyCeosPendingApproval(supabase, caseId, 'WHEELS_CHECK', user.id, newWheelsApprovalId);
-          }
-        }
+        // WHEELS_CHECK used to also get a ceo_approvals row created here — removed
+        // 2026-08-31, see the READY_FOR_OFFICE gate above and the WHEELS_CHECK
+        // completion notification below.
       }
       // Allow step to be marked DONE — gating is only at READY_FOR_OFFICE.
     }
@@ -743,6 +692,37 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
     await pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
+  }
+
+  // WHEELS_CHECK: FYI notification to the CEO only — explicit request (2026-08-31)
+  // removed the old blocking ceo_approvals gate here (see the READY_FOR_OFFICE
+  // gate above), Amit just wants to know it happened, not have to approve it.
+  if (stepKey === 'WHEELS_CHECK') {
+    const { data: wheelsCaseData } = await supabase
+      .from('cases')
+      .select('case_key, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const wc = wheelsCaseData as { case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+    const wcPlate = (Array.isArray(wc?.cars) ? wc?.cars[0]?.license_plate : wc?.cars?.license_plate) ?? wc?.case_key ?? 'תיק';
+    const { data: ceoRows } = await supabase.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true);
+    const wheelsTitle = 'טפסי גלגלים הושלמו';
+    const wheelsBody = `רכב ${wcPlate} — טפסי גלגלים סומנו כהושלמו`;
+    const wheelsUrl = `/go/${caseId}?highlight=WHEELS_CHECK`;
+    // Sequential — see the comment on notifyCeosPendingApproval above.
+    for (const ceo of ((ceoRows ?? []) as { id: string }[]).filter((r) => r.id !== user.id)) {
+      const { error: notifErr } = await supabase.from('notifications').insert({
+        user_id: ceo.id,
+        case_id: caseId,
+        type: 'OTHER',
+        title: wheelsTitle,
+        body: wheelsBody,
+        action_url: wheelsUrl,
+        triggered_by: user.id,
+      } as never);
+      if (notifErr) console.error('[notifications] insert failed', notifErr);
+      await sendPushToUser(ceo.id, { title: wheelsTitle, body: wheelsBody, url: wheelsUrl, tag: `wheels-${caseId}` });
+    }
   }
 
   // WASH step: notify SERVICE_MANAGER + SERVICE_ADVISOR (bodywork advisors) to start QC process

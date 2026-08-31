@@ -17,7 +17,16 @@ export interface PainterRow {
   car_make: string | null;
   car_model: string | null;
   car_year: number | null;
+  car_vehicle_type: string | null;
   branch_name: string | null;
+}
+
+// Case creation only ever fills `vehicle_type` (Ministry-of-Transport lookup,
+// e.g. "טויוטה קורולה") — make/model are basically always empty in practice,
+// so prefer it and fall back to make+model for any older/manually-entered car.
+function carLineFor(row: Pick<PainterRow, 'car_vehicle_type' | 'car_make' | 'car_model' | 'car_year'>) {
+  const desc = row.car_vehicle_type?.trim() || [row.car_make, row.car_model].filter(Boolean).join(' ');
+  return [desc, row.car_year].filter(Boolean).join(' · ');
 }
 
 const PAINTER_STATUS_ICON: Record<string, string> = {
@@ -48,7 +57,7 @@ function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => vo
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const carLine = [row.car_make, row.car_model, row.car_year].filter(Boolean).join(' ');
+  const carLine = carLineFor(row);
   const statusLabel = row.painter_status === 'OTHER'
     ? (row.painter_status_other_text?.trim() || 'אחר')
     : row.painter_status
@@ -157,7 +166,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
                 <p className="text-xs text-gray-400 text-center py-6">אין תיקים</p>
               ) : (
                 groupRows.map((row) => {
-                  const carLine = [row.car_make, row.car_model, row.car_year].filter(Boolean).join(' ');
+                  const carLine = carLineFor(row);
                   return (
                     <button
                       type="button"

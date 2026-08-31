@@ -25,6 +25,7 @@ export interface ClosureCaseRow {
   license_plate: string | null;
   make: string | null;
   model: string | null;
+  vehicle_type: string | null;
   branch_name: string | null;
 }
 
@@ -87,7 +88,9 @@ export function ClosureCasesGrid({
                   {row.license_plate && <LicensePlate plate={row.license_plate} size="sm" />}
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-stone-500">
-                    {row.make && <span>{row.make} {row.model}</span>}
+                    {(row.vehicle_type || row.make) && (
+                      <span>🚗 {row.vehicle_type || [row.make, row.model].filter(Boolean).join(' ')}</span>
+                    )}
                     {row.insurance_company && <span>🏢 {row.insurance_company}</span>}
                     {row.branch_name && <span>📍 {row.branch_name}</span>}
                   </div>

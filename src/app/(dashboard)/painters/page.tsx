@@ -28,7 +28,7 @@ export default async function PaintersPage() {
       painter_status_other_text,
       appraiser_name,
       opened_at,
-      cars(license_plate, make, model, year),
+      cars(license_plate, make, model, year, vehicle_type),
       branches(name)
     `)
     .is('closed_at', null)
@@ -43,7 +43,7 @@ export default async function PaintersPage() {
     painter_status_other_text: string | null;
     appraiser_name: string | null;
     opened_at: string | null;
-    cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null } | { license_plate: string | null; make: string | null; model: string | null; year: number | null }[] | null;
+    cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null; vehicle_type: string | null } | { license_plate: string | null; make: string | null; model: string | null; year: number | null; vehicle_type: string | null }[] | null;
     branches: { name: string } | { name: string }[] | null;
   }[];
 
@@ -62,6 +62,10 @@ export default async function PaintersPage() {
       car_make: car?.make ?? null,
       car_model: car?.model ?? null,
       car_year: car?.year ?? null,
+      // Case creation only ever fills `vehicle_type` (the Ministry-of-Transport
+      // lookup result, e.g. "טויוטה קורולה") — the separate make/model columns
+      // are basically always empty in practice, so the card was showing nothing.
+      car_vehicle_type: car?.vehicle_type ?? null,
       branch_name: branch?.name ?? null,
     };
   });
