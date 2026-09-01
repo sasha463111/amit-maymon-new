@@ -248,7 +248,7 @@ export function ReferralDetailClient({
         </div>
         <div className="flex items-center gap-2">
           <CreateCaseButton
-            branchId={referral.branch_id}
+            branchIds={[referral.branch_id]}
             isCeo={false /* deliberate: the case inherits the referral's own branch, no re-picking */}
             triggerLabel="צור תיק מהפנייה"
             onCreated={handleCaseCreated}

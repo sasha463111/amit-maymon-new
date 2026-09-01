@@ -10,12 +10,12 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_ids')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const profile = profileData as { role: string; branch_ids: string[] } | null;
   const role = profile?.role ?? null;
-  const branchId = profile?.branch_id ?? null;
+  const branchIds = profile?.branch_ids ?? [];
   const isCeo = role === 'CEO';
   const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO' || role === 'SERVICE_ADVISOR';
 
@@ -24,7 +24,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
     .select('id, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, cars!inner(license_plate)')
     .is('deleted_at', null)
     .order('opened_at', { ascending: false });
-  if (role !== 'CEO' && branchId) casesQuery = casesQuery.eq('branch_id', branchId);
+  if (role !== 'CEO' && branchIds.length > 0) casesQuery = casesQuery.in('branch_id', branchIds);
 
   const [{ data: casesRows }, { data: branchesData }] = await Promise.all([
     casesQuery,
@@ -122,7 +122,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       branches={branches}
       branchNameById={branchNameById}
       canCreate={canCreate}
-      branchId={branchId}
+      branchIds={branchIds}
       isCeo={isCeo}
     >
       {children}

@@ -11,11 +11,11 @@ export default async function NewExtraPage() {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_ids')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
   if (!isPreview && profile?.role !== 'PAINTER') {
     return (
@@ -33,8 +33,8 @@ export default async function NewExtraPage() {
     .is('deleted_at', null)
     .order('opened_at', { ascending: false });
 
-  if (profile?.branch_id) {
-    casesQuery = casesQuery.eq('branch_id', profile.branch_id);
+  if (profile?.branch_ids && profile.branch_ids.length > 0) {
+    casesQuery = casesQuery.in('branch_id', profile.branch_ids);
   }
 
   const { data: casesRows } = await casesQuery;

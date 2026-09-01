@@ -52,12 +52,12 @@ export default async function CasesArchivePage({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_ids')
     .eq('id', user.id)
     .single();
 
-  const role = (profileData as { role: string; branch_id: string | null } | null)?.role ?? null;
-  const userBranchId = (profileData as { role: string; branch_id: string | null } | null)?.branch_id ?? null;
+  const role = (profileData as { role: string; branch_ids: string[] } | null)?.role ?? null;
+  const userBranchIds = (profileData as { role: string; branch_ids: string[] } | null)?.branch_ids ?? [];
 
   // Open to OFFICE / SERVICE_MANAGER / CEO. Others bounce back.
   if (role !== 'CEO' && role !== 'SERVICE_MANAGER' && role !== 'OFFICE') {
@@ -70,8 +70,8 @@ export default async function CasesArchivePage({
     | 'closed'
     | 'deleted';
 
-  // CEO sees all branches; others only their branch.
-  const branchFilter = role === 'CEO' ? null : userBranchId;
+  // CEO sees all branches; others only their branches (as array).
+  const branchFilter = role === 'CEO' ? null : userBranchIds;
 
   // Three independent counts so the user sees what's where.
   const baseSelect =
@@ -98,10 +98,10 @@ export default async function CasesArchivePage({
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false });
 
-  if (branchFilter) {
-    inClosureQuery.eq('branch_id', branchFilter);
-    closedQuery.eq('branch_id', branchFilter);
-    deletedQuery.eq('branch_id', branchFilter);
+  if (branchFilter && branchFilter.length > 0) {
+    inClosureQuery.in('branch_id', branchFilter);
+    closedQuery.in('branch_id', branchFilter);
+    deletedQuery.in('branch_id', branchFilter);
   }
 
   // CEO sees deleted tab; others don't.

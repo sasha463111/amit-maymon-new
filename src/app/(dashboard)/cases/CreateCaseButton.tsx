@@ -43,13 +43,13 @@ export interface CreateCaseInitialValues {
 }
 
 export function CreateCaseButton({
-  branchId,
+  branchIds = [],
   isCeo = false,
   initialValues,
   triggerLabel,
   onCreated,
 }: {
-  branchId: string | null;
+  branchIds?: string[];
   isCeo?: boolean;
   // The rest support opening this dialog pre-filled from a referral instead
   // of the plain "פתיחת תיק" entry point — same form/action, different
@@ -78,7 +78,7 @@ export function CreateCaseButton({
     claim_type: initialValues?.claim_type ?? ('' as ClaimType | ''),
     sub_claim_type: '' as SubClaimType | '',
     sub_claim_type_other_text: '',
-    branch_id: initialValues?.branch_id ?? branchId ?? '',
+    branch_id: initialValues?.branch_id ?? branchIds?.[0] ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
@@ -114,8 +114,9 @@ export function CreateCaseButton({
 
   // Cross-branch staff (sees_all_branches → no fixed branch) and CEOs have no
   // default branch, so they must pick one — otherwise branch_id is empty and
-  // createCase rejects it with "סניף לא תקין".
-  const needsBranchPicker = isCeo || !branchId;
+  // createCase rejects it with "סניף לא תקין". OFFICE staff with multiple
+  // branches should also pick for each case (branch_ids array).
+  const needsBranchPicker = isCeo || branchIds.length === 0;
 
   async function handleOpen() {
     setOpen(true);
@@ -220,7 +221,7 @@ export function CreateCaseButton({
       claim_type: '',
       sub_claim_type: '',
       sub_claim_type_other_text: '',
-      branch_id: branchId ?? '',
+      branch_id: branchIds?.[0] ?? '',
     });
     setFiles([]);
     if (newCaseId && onCreated) {

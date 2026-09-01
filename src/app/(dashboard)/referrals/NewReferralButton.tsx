@@ -17,7 +17,7 @@ const INSURANCE_COMPANIES = [
   'מגדל ביטוח', 'שלמה רשת מוסכים', 'ביטוח ישיר', 'AIG', 'אנקור', 'הכשרה ביטוח', 'אחר',
 ];
 
-export function NewReferralButton({ branchId, isCeo = false }: { branchId: string | null; isCeo?: boolean }) {
+export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds?: string[]; isCeo?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,10 +34,10 @@ export function NewReferralButton({ branchId, isCeo = false }: { branchId: strin
     appraiser_name: '',
     phone: '',
     status_note: '',
-    branch_id: branchId ?? '',
+    branch_id: branchIds?.[0] ?? '',
   });
 
-  const needsBranchPicker = isCeo || !branchId;
+  const needsBranchPicker = isCeo || branchIds.length === 0;
   // Same Ministry of Transport plate lookup as opening an accident case
   // (CreateCaseButton) — referrals previously required typing vehicle type
   // by hand even though the same auto-fill already exists elsewhere.
@@ -130,7 +130,7 @@ export function NewReferralButton({ branchId, isCeo = false }: { branchId: strin
     setError(null);
     setForm({
       customer_name: '', insurance_company: '', claim_type: '', vehicle_type: '', vehicle_year: '',
-      plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchId ?? '',
+      plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchIds?.[0] ?? '',
     });
     setFiles([]);
     router.refresh();

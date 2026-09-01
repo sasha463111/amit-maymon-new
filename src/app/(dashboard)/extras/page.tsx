@@ -12,11 +12,11 @@ export default async function ExtrasPage() {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_ids')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
   if (!isPreview && profile?.role !== 'SERVICE_MANAGER' && profile?.role !== 'CEO') {
     return (
@@ -32,8 +32,8 @@ export default async function ExtrasPage() {
   // here; it used to leak through because this only filtered by branch and
   // never checked deleted_at at all.
   let casesInScopeQuery = supabase.from('cases').select('id').is('deleted_at', null);
-  if (profile && profile.role !== 'CEO' && profile.branch_id) {
-    casesInScopeQuery = casesInScopeQuery.eq('branch_id', profile.branch_id);
+  if (profile && profile.role !== 'CEO' && profile.branch_ids.length > 0) {
+    casesInScopeQuery = casesInScopeQuery.in('branch_id', profile.branch_ids);
   }
   const { data: casesInScopeData } = await casesInScopeQuery;
   const caseIds = ((casesInScopeData ?? []) as { id: string }[]).map((c) => c.id);

@@ -33,7 +33,7 @@ export function UsersTab({
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ role: UserRole; branch_id: string | null; is_active: boolean; full_name: string } | null>(null);
+  const [draft, setDraft] = useState<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -68,7 +68,7 @@ export function UsersTab({
 
   function startEdit(u: SystemUser) {
     setEditingId(u.id);
-    setDraft({ role: u.role, branch_id: u.branch_id, is_active: u.is_active, full_name: u.full_name });
+    setDraft({ role: u.role, branch_ids: u.branch_ids, is_active: u.is_active, full_name: u.full_name });
     setError(null);
   }
 
@@ -88,8 +88,8 @@ export function UsersTab({
           ? {
               ...x,
               role: draft.role,
-              branch_id: draft.branch_id,
-              branch_name: branches.find((b) => b.id === draft.branch_id)?.name ?? null,
+              branch_ids: draft.branch_ids,
+              branch_names: draft.branch_ids.map((bid) => branches.find((b) => b.id === bid)?.name ?? bid),
               is_active: draft.is_active,
               full_name: draft.full_name,
             }
@@ -217,17 +217,26 @@ export function UsersTab({
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase text-gray-400">סניף</label>
-                      <select
-                        value={draft.branch_id ?? ''}
-                        onChange={(e) => setDraft({ ...draft, branch_id: e.target.value || null })}
-                        className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                      >
-                        <option value="">— ללא —</option>
+                      <label className="text-[10px] uppercase text-gray-400 block mb-2">סניפים</label>
+                      <div className="flex flex-col gap-1.5">
                         {branches.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
+                          <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={draft.branch_ids.includes(b.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDraft({ ...draft, branch_ids: [...draft.branch_ids, b.id] });
+                                } else {
+                                  setDraft({ ...draft, branch_ids: draft.branch_ids.filter((id) => id !== b.id) });
+                                }
+                              }}
+                              className="w-4 h-4"
+                            />
+                            {b.name}
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     </div>
                   </div>
                   <label className="flex items-center gap-2 text-sm">
@@ -265,7 +274,7 @@ export function UsersTab({
                       <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
                       <p className="text-xs text-gray-500 mt-0.5">
                         {ROLE_LABELS[u.role] ?? u.role}
-                        {u.branch_name && ` · ${u.branch_name}`}
+                        {u.branch_names.length > 0 && ` · ${u.branch_names.join(', ')}`}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-0.5 text-[10px] shrink-0">
@@ -349,18 +358,27 @@ export function UsersTab({
                   </td>
                   <td className="px-3 py-2">
                     {isEditing && draft ? (
-                      <select
-                        value={draft.branch_id ?? ''}
-                        onChange={(e) => setDraft({ ...draft, branch_id: e.target.value || null })}
-                        className="border border-gray-300 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="">— ללא (CEO) —</option>
+                      <div className="flex flex-col gap-1">
                         {branches.map((b) => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
+                          <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={draft.branch_ids.includes(b.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDraft({ ...draft, branch_ids: [...draft.branch_ids, b.id] });
+                                } else {
+                                  setDraft({ ...draft, branch_ids: draft.branch_ids.filter((id) => id !== b.id) });
+                                }
+                              }}
+                              className="w-3 h-3"
+                            />
+                            {b.name}
+                          </label>
                         ))}
-                      </select>
+                      </div>
                     ) : (
-                      <span className="text-gray-600">{u.branch_name ?? '—'}</span>
+                      <span className="text-gray-600">{u.branch_names.length > 0 ? u.branch_names.join(', ') : '—'}</span>
                     )}
                   </td>
                   <td className="px-3 py-2">

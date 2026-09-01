@@ -27,8 +27,8 @@ export interface SystemUser {
   id: string;
   full_name: string;
   role: UserRole;
-  branch_id: string | null;
-  branch_name: string | null;
+  branch_ids: string[]; // Array of branch UUIDs
+  branch_names: string[]; // Corresponding branch names for UI display
   is_active: boolean;
   is_bodywork_advisor: boolean;
 }
@@ -39,7 +39,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
   const { data, error: queryError } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_id, is_active, is_bodywork_advisor, branches(name)')
+    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor')
     .order('full_name');
 
   if (queryError) return { data: [], error: queryError.message };
@@ -48,31 +48,31 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     id: string;
     full_name: string;
     role: UserRole;
-    branch_id: string | null;
+    branch_ids: string[];
     is_active: boolean;
     is_bodywork_advisor: boolean;
-    branches: { name: string } | { name: string }[] | null;
   }>;
 
-  const users: SystemUser[] = rows.map((r) => {
-    const branch = Array.isArray(r.branches) ? r.branches[0] : r.branches;
-    return {
-      id: r.id,
-      full_name: r.full_name,
-      role: r.role,
-      branch_id: r.branch_id,
-      branch_name: branch?.name ?? null,
-      is_active: r.is_active,
-      is_bodywork_advisor: r.is_bodywork_advisor,
-    };
-  });
+  // Fetch all branches for display mapping
+  const { data: branchesData } = await supabase.from('branches').select('id, name');
+  const branchNameMap = new Map((branchesData ?? []).map((b: { id: string; name: string }) => [b.id, b.name]));
+
+  const users: SystemUser[] = rows.map((r) => ({
+    id: r.id,
+    full_name: r.full_name,
+    role: r.role,
+    branch_ids: r.branch_ids ?? [],
+    branch_names: (r.branch_ids ?? []).map((bid) => branchNameMap.get(bid) ?? bid),
+    is_active: r.is_active,
+    is_bodywork_advisor: r.is_bodywork_advisor,
+  }));
 
   return { data: users, error: null };
 }
 
 export async function updateSystemUser(
   userId: string,
-  updates: Partial<{ role: UserRole; branch_id: string | null; is_active: boolean; full_name: string }>
+  updates: Partial<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string }>
 ) {
   const { error, supabase, userId: callerId } = await requireCeo();
   if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
@@ -86,7 +86,7 @@ export async function updateSystemUser(
     if (updates.is_active === false) {
       return { error: 'לא ניתן להשבית את החשבון שלך.' };
     }
-    if (updates.branch_id !== undefined) {
+    if (updates.branch_ids !== undefined) {
       return { error: 'CEO לא משויך לסניף.' };
     }
   }

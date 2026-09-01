@@ -113,8 +113,10 @@ export interface Profile {
   id: string;
   full_name: string;
   role: UserRole;
-  branch_id: string | null;
+  branch_ids: string[]; // Array of branch UUIDs; empty for CEO (can see all)
   is_active: boolean;
+  is_bodywork_advisor?: boolean;
+  sees_all_branches?: boolean;
   created_at: string;
   updated_at: string;
 }

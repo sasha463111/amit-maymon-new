@@ -66,11 +66,11 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_id, is_active')
+    .select('full_name, role, branch_ids, is_active')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_id: string | null; is_active?: boolean } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
   // Mid-session deactivation: if a CEO disabled this account, kick them out
@@ -98,14 +98,20 @@ export default async function DashboardLayout({
   const roleLabel = ROLE_LABEL[role];
 
   let branchName = '—';
-  if (profile?.branch_id) {
-    const { data: branchData } = await supabase
-      .from('branches')
-      .select('name')
-      .eq('id', profile.branch_id)
-      .single();
-    const branch = branchData as { name: string } | null;
-    branchName = branch?.name ?? '—';
+  if (profile?.branch_ids && profile.branch_ids.length > 0) {
+    // For OFFICE staff with multiple branches, show "כל הסניפים"
+    // For single-branch, show branch name
+    if (profile.branch_ids.length > 1) {
+      branchName = 'כל הסניפים';
+    } else {
+      const { data: branchData } = await supabase
+        .from('branches')
+        .select('name')
+        .eq('id', profile.branch_ids[0])
+        .single();
+      const branch = branchData as { name: string } | null;
+      branchName = branch?.name ?? '—';
+    }
   }
 
   return (

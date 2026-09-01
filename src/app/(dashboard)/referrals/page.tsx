@@ -12,10 +12,10 @@ export default async function ReferralsPage() {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id')
+    .select('role, branch_ids')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { role: string; branch_id: string | null } | null;
+  const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
   if (!isPreview && profile?.role !== 'OFFICE' && profile?.role !== 'CEO') {
     return (
@@ -27,14 +27,13 @@ export default async function ReferralsPage() {
   }
 
   // Branch tabs (הכל / נתיבות / אשקלון), same pattern as /cases and /closure —
-  // non-CEO users are already scoped to their own single branch below, so
-  // they only ever see one option and the tabs stay hidden (branches.length
-  // > 1 check in ReferralsGrid).
+  // OFFICE staff with multiple branches can filter between them (branch_ids array).
+  // (branches.length > 1 check in ReferralsGrid hides tabs if only 1 option)
   const { data: branchesData } =
     profile?.role === 'CEO'
       ? await supabase.from('branches').select('id, name').order('name')
-      : profile?.branch_id
-        ? await supabase.from('branches').select('id, name').eq('id', profile.branch_id)
+      : profile?.branch_ids && profile.branch_ids.length > 0
+        ? await supabase.from('branches').select('id, name').in('id', profile.branch_ids)
         : { data: [] };
   const branches = (branchesData ?? []) as { id: string; name: string }[];
   const branchNameById = new Map(branches.map((b) => [b.id, b.name]));
@@ -45,8 +44,8 @@ export default async function ReferralsPage() {
     .eq('status', 'ACTIVE')
     .order('created_at', { ascending: true }); // oldest-waiting first — the ones most overdue for follow-up surface first
 
-  if (profile && profile.role !== 'CEO' && profile.branch_id) {
-    referralsQuery = referralsQuery.eq('branch_id', profile.branch_id);
+  if (profile && profile.role !== 'CEO' && profile.branch_ids.length > 0) {
+    referralsQuery = referralsQuery.in('branch_id', profile.branch_ids);
   }
 
   const { data: rows } = await referralsQuery;
@@ -65,7 +64,7 @@ export default async function ReferralsPage() {
               {referrals.length} הפניות פעילות
             </span>
           )}
-          <NewReferralButton branchId={profile?.branch_id ?? null} isCeo={profile?.role === 'CEO'} />
+          <NewReferralButton branchIds={profile?.branch_ids ?? []} isCeo={profile?.role === 'CEO'} />
         </div>
       </div>
 

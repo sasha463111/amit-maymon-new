@@ -57,7 +57,7 @@ export function CasesMasterDetail({
   branches,
   branchNameById,
   canCreate,
-  branchId,
+  branchIds = [],
   isCeo,
   children,
 }: {
@@ -65,7 +65,7 @@ export function CasesMasterDetail({
   branches: { id: string; name: string }[];
   branchNameById: Record<string, string>;
   canCreate: boolean;
-  branchId: string | null;
+  branchIds?: string[];
   isCeo: boolean;
   children: React.ReactNode;
 }) {
@@ -113,7 +113,7 @@ export function CasesMasterDetail({
             <h1 className="text-xl font-bold text-stone-900">תיקים</h1>
             <span className="text-sm font-medium text-stone-500">{filtered.length} פתוחים</span>
           </div>
-          {canCreate && <CreateCaseButton branchId={branchId} isCeo={isCeo} />}
+          {canCreate && <CreateCaseButton branchIds={branchIds} isCeo={isCeo} />}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
@@ -178,7 +178,7 @@ export function CasesMasterDetail({
             <h1 className="text-xl font-bold text-stone-900">תיקים</h1>
             <span className="text-sm font-medium text-stone-500">{filtered.length} פתוחים</span>
           </div>
-          {canCreate && <CreateCaseButton branchId={branchId} isCeo={isCeo} />}
+          {canCreate && <CreateCaseButton branchIds={branchIds} isCeo={isCeo} />}
         </div>
 
         <div className="mb-3">
