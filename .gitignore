@@ -33,3 +33,8 @@ next-env.d.ts
 
 # Local dev server output
 dev.log
+
+# Supabase local DB backups / dumps (may contain PII — never commit)
+supabase/_archive/prod_*.sql
+supabase/.branches
+supabase/.temp

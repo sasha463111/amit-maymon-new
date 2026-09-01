@@ -77,7 +77,11 @@ src/
   types/
     database.ts             # כל ה-types, enums, interfaces
   db/
-    migrations/             # SQL migrations 001–046 (ראה סעיף 16)
+    migrations/             # SQL migrations 001–046 — היסטוריה קפואה (ראה סעיף 16). מיגרציות חדשות: supabase/migrations/
+supabase/
+  config.toml              # הגדרות ה-Supabase CLI (major_version=17, ports 54321-54324)
+  migrations/              # מיגרציות CLI עם timestamp — baseline: 20260901180001_remote_schema.sql (ראה סעיף 22)
+  _archive/                # remote_history_pre_rebaseline_2026-09-01.sql — 20 רשומות ההיסטוריה מלפני ה-re-baseline
 ```
 
 ---
@@ -381,7 +385,7 @@ Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 ד�
 
 **Soft delete:** `cases_select` מסנן `deleted_at IS NULL` לכולם חוץ מ-CEO — וכל שאילתת select אחרת על cases צריכה לעשות את זה בעצמה גם ברמת האפליקציה (ה-RLS לא תמיד מספיק, ראה סעיף 8).
 
-**אין יכולת self-service להרצת SQL** — אין RPC כמו `_import_sql`, ואין `DATABASE_URL`/Management API token בסביבה. **כל מיגרציה חייבת להיות מודבקת ידנית ל-Supabase Dashboard → SQL Editor** על ידי מי שיש לו גישה. תמיד לכתוב מיגרציות עם `DROP POLICY/TRIGGER/CONSTRAINT IF EXISTS` לפני `CREATE`, כדי שהרצה חלקית שנכשלה לא תחסום ניסיון תיקון חוזר.
+**הרצת SQL (עודכן 2026-09-01):** קיים עכשיו Supabase CLI מקומי מקושר לפרויקט הפרוד (`supabase link`, ראה סעיף 22). אפשר להריץ מיגרציות דרך `supabase db push` או להמשיך להדביק ידנית ל-Supabase Dashboard → SQL Editor — **בכל מקרה: backup לפני (סעיף 19), ולעדכן את היסטוריית ה-CLI** (`supabase migration repair --status applied <ts>` אם הודבק ידנית). קוד האפליקציה עצמו עדיין בלי `DATABASE_URL`/Management API token. תמיד לכתוב מיגרציות עם `DROP POLICY/TRIGGER/CONSTRAINT IF EXISTS` לפני `CREATE`, כדי שהרצה חלקית שנכשלה לא תחסום ניסיון תיקון חוזר.
 
 ---
 
@@ -442,7 +446,8 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | `src/app/api/cron/enter-work-reminders/route.ts` | כל תזכורות ה-cron (4 סבבים, ראה סעיף 11) |
 | `src/app/go/[id]/page.tsx` | ניתוב role-neutral להתראות |
 | `src/types/database.ts` | כל ה-types — הראשון לעדכן בשינויי schema |
-| `src/db/migrations/` | מיגרציות SQL — Migration 045 היא האחרונה |
+| `src/db/migrations/` | מיגרציות SQL 001–046 — **היסטוריה קפואה**. מיגרציות חדשות ב-`supabase/migrations/` (סעיף 22) |
+| `supabase/migrations/` | מיגרציות CLI חדשות — baseline `20260901180001_remote_schema.sql` = מצב הפרוד ב-046 |
 | `src/app/(dashboard)/layout.tsx` | Navigation לפי role |
 | `src/app/(dashboard)/painters/[id]/PainterCaseClient.tsx` | ממשק הפחח הנפרד |
 | `src/app/(dashboard)/painters/PaintersBoard.tsx` | לוח כרטיסי הפחחים (`/painters`) — `carLineFor()` מעדיף `vehicle_type` |
@@ -506,6 +511,8 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | 045 | Backfill: `status_note` ישן → שורת יומן ראשונה ב-`referral_status_updates` |
 | **046** | **Multi-branch OFFICE staff:** `profiles.branch_id` (single) → `branch_ids[]` (array); כל RLS policies עדכונות להשתמש ב-ANY() operator; OFFICE staff (אילנה, אביה) עכשיו יכולות להיות 2+ סניפים עם טאבים בכל דף |
 
+> **2026-09-01 — CLI re-baseline:** מ-046 והלאה עוברים ל-Supabase CLI. `src/db/migrations/001–046` קפואים כהיסטוריה; ה-baseline החדש הוא `supabase/migrations/20260901180001_remote_schema.sql` (= מצב הפרוד ב-046). מיגרציות חדשות ב-`supabase/migrations/` בלבד. ראה סעיף 22.
+
 ---
 
 ## 17. גיט ו-Deploy
@@ -514,7 +521,7 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 - **Branch:** `main` — זו הסביבה החיה, אין staging. פוש ל-`main` = דיפלוי לפרודקשן.
 - **Deploy:** Vercel **native Git integration** — כל פוש ל-`main` מדפלייר אוטומטית **שני** פרויקטי Vercel (`amit-maymon-new` + `amit-maymon-new-iyub`) ששניהם מחוברים לאותו repo. אין GitHub Action לדיפלוי (הוסר — היה מיותר ותקוע על טוקן ישן).
 - **GitHub Actions שכן קיים:** `.github/workflows/enter-work-reminders.yml` — מפינג את ה-cron route כל 30 דקות (לא קשור לדיפלוי).
-- **מיגרציות DB הן שלב נפרד לגמרי מהדיפלוי** — פוש קוד לא מריץ SQL. חובה להריץ ידנית ב-Supabase SQL Editor (ראה סעיף 12).
+- **מיגרציות DB הן שלב נפרד לגמרי מהדיפלוי** — פוש קוד לא מריץ SQL. מריצים דרך `supabase db push` או ידנית ב-SQL Editor, תמיד עם backup (ראה סעיף 12 + 22).
 - **Vercel Region:** `iad1` (הועבר מ-fra1 כדי לעקוף replica lag ישן של Supabase — commit `c26b715`. אל תחזיר ל-fra1.)
 
 ---
@@ -530,7 +537,7 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 ## 19. כללי עבודה עם הפרויקט
 
 1. **UI/UX חדש** → תמיד להשתמש ב-Stitch MCP (`mcp__stitch__*`) לפני כתיבת קומפוננטים, אם זמין
-2. **שינויי DB** → מיגרציה חדשה עם `DROP ... IF EXISTS` לפני `CREATE`, מסתיימת ב-INSERT ל-`schema_migrations`; **המשתמש** מריץ אותה ידנית ב-SQL Editor (אין self-service — ראה סעיף 12)
+2. **שינויי DB** → `supabase migration new <name>` → כותבים SQL עם `DROP ... IF EXISTS` לפני `CREATE`, מסתיים ב-INSERT ל-`schema_migrations` → בודקים מקומית (`supabase db reset`) → מריצים לפרוד (`supabase db push` או SQL Editor + `migration repair --status applied`), עם backup קודם. ראה סעיף 12 + 22
 3. **RLS** → כל שינוי schema חייב לעדכן policies בהתאם, ולהשתמש בשמות הפונקציות האמיתיים (`get_my_branch_id`/`get_my_role`/`can_see_all_branches`)
 4. **types/database.ts** → לעדכן ראשון בכל שינוי schema
 5. **Server Actions** → `'use server'` בראש, תמיד לאמת role לפני פעולה
@@ -608,3 +615,53 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 
 **הפרויקט הנוכחי אינו בפרנקפורט.** אי אפשר להעביר project קיים.
 כדי לשפר latency עתידית: צור project חדש ב-`eu-central-1`, הרץ כל המיגרציות, עדכן `.env.local` + Vercel env vars (ראה `SUPABASE_MIGRATION_GUIDE.md` בשורש הריפו — זה תכנון עתידי, לא בתהליך).
+
+---
+
+## 22. Supabase CLI + Local Dev (הוקם 2026-09-01)
+
+**סטטוס:** מותקן, מקושר לפרוד, ו-local stack מאומת עובד.
+
+### הקמה
+- `supabase` הוא devDependency (`package.json`). מפעילים עם `npx supabase <cmd>` מ-`C:\GitHub\amit-maymon-new`.
+- דרישות מקדימות: Docker Desktop (WSL2 backend) חייב לרוץ.
+- מקושר לפרוד: `supabase link --project-ref yhanmyvolpeiuxspcxmk`. סיסמת ה-DB שמורה ב-keyring של Windows מאז ה-link — פקודות `db pull` / `migration` / `db dump` מתחברות בלי לשאול.
+- `config.toml`: `major_version = 17` (תואם לפרוד — Postgres engine 17).
+
+### Re-baseline של היסטוריית המיגרציות
+טבלת `supabase_migrations.schema_migrations` בפרוד הכילה 20 רשומות חלקיות (מיגרציות ~016–029 שהורצו דרך Supabase MCP `apply_migration` באפריל–יוני 2026; 001–015 ו-030–046 מעולם לא נרשמו שם — הורצו ידנית ב-SQL Editor). ב-2026-09-01:
+1. גיבוי מלא של הפרוד → `C:\Backups\CRM\pre-cli-rebaseline_2026-09-01\` (schema + data + roles).
+2. ארכיון של 20 הרשומות עם ה-SQL המלא → `supabase/_archive/remote_history_pre_rebaseline_2026-09-01.sql`.
+3. `supabase migration repair --status reverted <20 versions>` — ניקה את הרישום (רק metadata; סכמה/דאטה לא נגעו).
+4. `supabase db pull` → יצר `supabase/migrations/20260901180001_remote_schema.sql` = מצב הפרוד המלא ב-046 (22 טבלאות, 56 policies, 16 functions). זו נקודת ההתחלה של ה-CLI.
+5. אומת: `supabase start` הפעיל DB מקומי טרי והחיל את ה-baseline נקי, ספירת אובייקטים זהה לפרוד.
+
+`src/db/migrations/001–046` נשארים כהיסטוריה קפואה — לא מומרים, לא נמחקים.
+
+### Workflow למיגרציה חדשה
+```
+npx supabase migration new <name>       # יוצר supabase/migrations/<ts>_<name>.sql
+# כותבים SQL: DROP ... IF EXISTS לפני CREATE, מסתיים ב-INSERT ל-schema_migrations
+npx supabase db reset                    # מחיל את הכל מאפס על ה-DB המקומי — בדיקה
+# ... בודקים מול הסטאק המקומי ...
+# backup לפרוד: .\SqlBackup\backup-before-push.ps1 (או supabase db dump)
+npx supabase db push                     # ← ברירת המחדל: מחיל לפרוד + מעדכן היסטוריה
+```
+> **מסלול הפרוד (נקבע 2026-09-01):**
+> 1. **ברירת מחדל — `supabase db push`.** תמיד לנסות קודם.
+> 2. **Fallback — SQL Editor ידני**, כשה-push לא מתאפשר (חסום ע"י מנגנון ההרשאות של Claude, בעיית חיבור, או צריך הרצה חלקית/ידנית). אחרי הדבקה ידנית **חובה** לסנכרן את היסטוריית ה-CLI:
+>    `npx supabase migration repair --status applied <ts>`
+>
+> בשני המקרים: backup לפני, וה-migration file נשמר תמיד ב-`supabase/migrations/`.
+
+### פקודות שימושיות
+- `npx supabase status` — URLs + keys של הסטאק המקומי (API 54321, DB 54322, Studio 54323, Mailpit 54324)
+- `npx supabase stop` — עוצר (שומר נתונים מקומיים); `--no-backup` מאפס
+- `npx supabase db diff -f <name>` — מייצר מיגרציה מהפרש סכמה מקומי
+- `npx supabase gen types typescript --linked > src/types/database.gen.ts` — types מהפרוד
+- `npx supabase db dump --linked -f <file>` (+ `--data-only` / `--role-only`) — גיבוי
+
+### מגבלות ידועות
+- `supabase login` (רענון token) ו-הפעלת Docker Desktop דורשים אינטראקציה ידנית.
+- `supabase migration repair` / `db push` (כתיבה לפרוד) עלולים להיחסם ע"י מנגנון ההרשאות של Claude — המשתמש מריץ, או מוסיפים כלל הרשאה.
+- החומרה (i7-3770K) איטית ל-local stack; זה עובד אבל לא מהיר.
