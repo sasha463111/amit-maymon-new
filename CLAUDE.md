@@ -452,7 +452,17 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 
 ---
 
-## 16. Migrations — היסטוריה
+## 16. Migrations — היסטוריה & Hotfixes
+
+### 🔥 Hotfix 2026-09-01: Referrals RLS Multi-Branch Fix
+**Problem:** OFFICE staff (Ilana) with multi-branch support couldn't see referrals from second branch  
+**Root Cause:** RLS policies used singular `get_my_branch_id()` instead of array `get_my_branch_ids()`  
+**Fix Applied:** Updated 3 policies on `referrals` table:
+- `referrals_select`: Changed `branch_id = get_my_branch_id()` → `branch_id = ANY(get_my_branch_ids())`
+- `referrals_insert`: Same change
+- `referrals_update`: Same change
+
+**Verification:** SQL test confirms Ilana now sees 8 referrals (5 ashkelon + 3 netivot), 17 cases (6+11)
 
 | Migration | תוכן |
 |-----------|------|
@@ -539,15 +549,20 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 - Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup`
 - **Auto-cleanup:** backups ישנים מ-30 ימים יוחקו אוטומטית
 
-**11. Daily Automatic Backups** 📅
-- הגדר Windows Task Scheduler לרוץ `.\SqlBackup\backup-supabase-daily.ps1` כל יום בחצות
-- כל backup כולל: `profiles`, `cases`, `referrals`, `notifications`, כל הנתונים
-- **אם יש בעיה (כמו Migration 046):** restore מ-backup! דוגמה:
-  ```sql
-  -- Restore profiles.branch_ids אחרי data loss
-  UPDATE profiles SET branch_ids = ARRAY[...]
+**11. Backup Implementation** 📅
+- **Manual Backup (Working):** לפני כל `git push origin main`, הריץ: `.\SqlBackup\backup-before-push.ps1`
+  - Script ירוץ backup אוטומטי + יבדוק הצלחה + יבקש אישור לפני push
+  - Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup\` עם timestamp
+  - Log file: `C:\GitHub\amit-maymon-new\SqlBackup\backup_log.txt`
+- **Daily Automatic (Future):** Task Scheduler דורש credentials שלא זמינים כרגע
+  - אפשרות לעתיד: cron חיצוני (GitHub Actions, Vercel Cron) או cloud backup service
+- **Recovery:** אם יש data loss (כמו Migration 046):
+  ```bash
+  # 1. שחזור מ-backup
+  pg_restore -d postgres://user:pass@host/db C:\GitHub\amit-maymon-new\SqlBackup\backup_YYYYMMDD_HHMMSS.sql
+  # 2. או SQL manual restore
+  UPDATE profiles SET branch_ids = ARRAY[...] WHERE id = ...;
   ```
-- Log file: `C:\GitHub\amit-maymon-new\SqlBackup\backup_log.txt`
 
 **12. Migration Best Practices** (תוקן אחרי Migration 046 failure) 🔧
 - **תמיד** ליצור column חדשה **לפני** הורדת הישנה
@@ -573,7 +588,23 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 
 ---
 
-## 20. Supabase Region (הערה חשובה)
+## 20. Email Setup (Resend) — 2026-09-01
+
+**Status:** 🔄 In Progress  
+**Domain:** toyota-tehila.co.il (דוח סיכום יומי via reports@toyota-tehila.co.il)  
+**Service:** Resend API (RESEND_API_KEY in .env.local)  
+
+**DNS Records Status:**
+- ✅ DKIM (TXT): resend._domainkey
+- ✅ SPF (TXT): v=spf1 include:amazonses.com ~all
+- ✅ MX: feedback-smtp.ap-northeast-1.amazonses.com
+- ✅ DMARC (TXT): v=DMARC1; p=none;
+
+**Next:** Hosting provider adds records → wait 5-30 min → Resend verification → Test `/settings` → "שלח דוח סיכום"
+
+---
+
+## 21. Supabase Region (הערה חשובה)
 
 **הפרויקט הנוכחי אינו בפרנקפורט.** אי אפשר להעביר project קיים.
 כדי לשפר latency עתידית: צור project חדש ב-`eu-central-1`, הרץ כל המיגרציות, עדכן `.env.local` + Vercel env vars (ראה `SUPABASE_MIGRATION_GUIDE.md` בשורש הריפו — זה תכנון עתידי, לא בתהליך).
