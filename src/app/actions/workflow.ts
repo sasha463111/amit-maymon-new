@@ -517,7 +517,11 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       const approvalsArr = (existingApprovals ?? []) as { approval_type: string; status: string; created_at: string }[];
       const existing = latestApprovalsByType(approvalsArr).get(approvalType) ?? null;
 
-      if (!existing) {
+      // Create a new PENDING approval in two cases:
+      // 1. No approval of this type exists yet
+      // 2. The latest is REJECTED — allow re-submission with a fresh row (keeps audit trail)
+      const needsNewApproval = !existing || existing.status === 'REJECTED';
+      if (needsNewApproval) {
         const { data: newApproval } = await supabase
           .from('ceo_approvals')
           .insert({
