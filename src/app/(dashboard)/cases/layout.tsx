@@ -72,6 +72,14 @@ export default async function CasesLayout({ children }: { children: React.ReactN
     // if they later flip REJECTED → APPROVED on the same row, this clears on its own.
     if (a.status === 'REJECTED') ceoRejected.add(a.case_id);
   }
+
+  // Count unread notifications per case for highlighting
+  const unreadNotifCount = new Map<string, number>();
+  for (const n of (notifData ?? []) as { case_id: string | null }[]) {
+    if (!n.case_id) continue;
+    unreadNotifCount.set(n.case_id, (unreadNotifCount.get(n.case_id) ?? 0) + 1);
+  }
+
   const runIdToCaseId = new Map((runsData ?? []).map((r) => [(r as { id: string; case_id: string }).id, (r as { id: string; case_id: string }).case_id]));
   const runIds = Array.from(runIdToCaseId.keys());
 
@@ -104,6 +112,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       hasExtrasInTreatment: extrasSet.has(row.id),
       hasCeoRejection: ceoRejected.has(row.id),
       notifSeverity: notifSeverityByCase.get(row.id) ?? null,
+      unreadNotificationCount: unreadNotifCount.get(row.id) ?? 0,
     };
   });
 

@@ -33,6 +33,7 @@ export interface RailCase {
   hasExtrasInTreatment: boolean;
   hasCeoRejection: boolean;
   notifSeverity: 'red' | 'yellow' | null;
+  unreadNotificationCount: number;
 }
 
 function caseStatus(c: RailCase): CaseStatus {
@@ -210,6 +211,7 @@ export function CasesMasterDetail({
               status={caseStatus(c)}
               selected={c.id === selectedId}
               onClick={() => router.push(`/cases/${c.id}`)}
+              unreadNotificationCount={c.unreadNotificationCount}
             />
           ))}
         </div>

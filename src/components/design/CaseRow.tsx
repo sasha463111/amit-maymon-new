@@ -15,6 +15,7 @@ export function CaseRow({
   status,
   selected = false,
   onClick,
+  unreadNotificationCount = 0,
 }: {
   plate: string;
   customer: string;
@@ -24,6 +25,7 @@ export function CaseRow({
   status: CaseStatus;
   selected?: boolean;
   onClick?: () => void;
+  unreadNotificationCount?: number;
 }) {
   const done = status === 'done';
   const rejected = status === 'rejected';
@@ -44,11 +46,16 @@ export function CaseRow({
         ? 'bg-status-blocked'
         : 'bg-accent';
 
+  // Add yellow highlight ring if there are unread notifications
+  const hasUnreadNotifs = unreadNotificationCount > 0;
+
   return (
     <button
       type="button"
       onClick={onClick}
       className={`w-full text-right flex flex-col gap-3 p-4 rounded-lg border-[1.5px] transition-all ${
+        hasUnreadNotifs ? 'ring-2 ring-yellow-300 ring-offset-0' : ''
+      } ${
         selected
           ? 'bg-accent-soft border-accent shadow-md'
           : rejected
