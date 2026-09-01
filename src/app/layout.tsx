@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Heebo, JetBrains_Mono } from 'next/font/google';
+import { PushSubscriber } from '@/components/PushSubscriber';
 
 // Design system (Tehila Bodyshop): Heebo is the Hebrew-first workhorse, with
 // JetBrains Mono reserved for catalog numbers / codes where digit clarity matters.
@@ -92,7 +93,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: SW_CLEANUP_SCRIPT }} />
       </head>
-      <body className={`antialiased ${heebo.className}`}>{children}</body>
+      <body className={`antialiased ${heebo.className}`}>
+        {children}
+        <PushSubscriber />
+      </body>
     </html>
   );
 }
