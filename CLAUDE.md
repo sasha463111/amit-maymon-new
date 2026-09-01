@@ -534,6 +534,72 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 
 ---
 
+## 18. QA Testing Architecture (2026-09-01) ✅
+
+**Status:** ✅ FULLY AUTONOMOUS — No approval gates needed
+
+Comprehensive automated QA testing framework with Master Tester Agent + 5 specialized role agents:
+
+**Master Tester Agent (Orchestrator)**
+- Location: `.claude/agents/qa-master-tester.md`
+- Role: Spawns all 5 role-specific test agents + synthesizes results
+- Operation: **Fully autonomous** (no human approval between steps)
+- Read-only constraint: Only verifies, never modifies data
+
+**Specialized Test Agents (5 total)**
+- `qa-office-tester.md` — OFFICE staff multi-branch (Ilana: 8 referrals, 17 cases, branch tabs)
+- `qa-service-manager-tester.md` — SERVICE_MANAGER single-branch (Aran: 11 cases, workflow)
+- `qa-ceo-tester.md` — CEO full-access (Amit: all data, admin functions, approvals)
+- `qa-painter-tester.md` — PAINTER limited-access (Arez: own work requests only)
+- `qa-service-advisor-tester.md` — SERVICE_ADVISOR read-only (Knarit: case viewing only)
+
+Each agent tests independently:
+- Page access control (can they see this page?)
+- Data visibility (RLS: correct filtering by branch/permission)
+- Feature availability (buttons, forms, workflows)
+- Permission enforcement (no unauthorized data access)
+- Console errors (no red errors during testing)
+- Cross-branch isolation (multi-branch agents see only their branches)
+
+**Test Specification**
+- Location: `QA_TEST_SPEC.md`
+- Scope: 240+ lines of detailed per-role requirements
+- Data validation: Case/referral/approval counts
+- RLS verification: No cross-branch data leakage
+- Feature testing: Read-only, no modifications
+
+**How to Run (Fully Autonomous)**
+```bash
+# Just spawn the Master Tester Agent
+Agent(qa-master-tester)
+
+# It immediately:
+# 1. Spawns 5 role-specific agents (OFFICE/SM/CEO/PAINTER/ADVISOR)
+# 2. Each agent logs in and tests independently
+# 3. Collects all reports automatically
+# 4. Generates FINAL MASTER QA REPORT
+
+# NO approval gates
+# NO waiting for human input
+# NO credentials relay needed
+```
+
+**Authorization (One-Time)**
+User explicitly authorized: "Agents can test as long as they don't destroy/touch/change anything"
+- Applies to all future autonomous testing runs
+- No per-run approval needed
+- Read-only constraint enforced in code
+
+**Output**
+- Individual role PASS/FAIL status
+- Data counts verification (actual vs expected)
+- RLS violation check
+- Console errors detected
+- Critical issues summary
+- Final recommendations
+
+---
+
 ## 19. כללי עבודה עם הפרויקט
 
 1. **UI/UX חדש** → תמיד להשתמש ב-Stitch MCP (`mcp__stitch__*`) לפני כתיבת קומפוננטים, אם זמין
