@@ -77,7 +77,7 @@ src/
   types/
     database.ts             # כל ה-types, enums, interfaces
   db/
-    migrations/             # SQL migrations 001–045 (ראה סעיף 16)
+    migrations/             # SQL migrations 001–046 (ראה סעיף 16)
 ```
 
 ---
@@ -86,13 +86,14 @@ src/
 
 | Role | שם | גישה | מה הם עושים |
 |------|----|------|-------------|
-| `SERVICE_MANAGER` | ערן | סניף שלו | מנהל workflow מקצועי: FixCar, אומדן, שמאי, כניסה לעבודה, QC, שטיפה; גם עונה על בקשות פחח (בתיק וב-`/painters/[id]`) |
-| `OFFICE` | אילנה | סניף שלה | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות |
+| `SERVICE_MANAGER` | ערן | סניף שלו (array) | מנהל workflow מקצועי: FixCar, אומדן, שמאי, כניסה לעבודה, QC, שטיפה; גם עונה על בקשות פחח (בתיק וב-`/painters/[id]`) |
+| `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; **עכשיו יכולות לעבוד עם שני סניפים (נתיבות + אשקלון) — טאבים בכל דף רשימה** |
 | `CEO` | עמית | **כל הסניפים** | אישורים + גישה לכל + מחיקת תיקים + הגדרות; מקבל **כל** התראה במערכת כולל על פעולות שהוא עצמו ביצע (מיגרציה 041 — עובד כפיד מעקב מלא) |
 | `PAINTER` | ארז | סניף שלו | צ'קליסט פחח (נכנס לעבודה, חלקים), בקשות תוספות, תוספות פחחות |
 | `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים אם `sees_all_branches=true` | צפייה בלבד + יועצת פחח (מקבלת התראות) |
 
-**CEO אינו מגביל branch** — `branch_id = NULL` בפרופיל שלו.
+**CEO אינו מגביל branch** — `branch_ids = []` בפרופיל שלו (ריק = כל הסניפים).
+**OFFICE staff עכשיו multi-branch** — `branch_ids` array (מיגרציה 046: `branch_id` → `branch_ids[]`)
 
 **יועצי פחח (`is_bodywork_advisor = true`):** SERVICE_MANAGER + SERVICE_ADVISOR — מקבלים התראות על WASH ועל בקשות מהפחח, ומוצגים ברשימה בבקרת איכות.
 
@@ -192,7 +193,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `id` | uuid = auth.uid() | |
 | `full_name` | text | |
 | `role` | enum user_role | |
-| `branch_id` | uuid nullable | null = CEO |
+| `branch_ids` | uuid[] | **Multi-branch support (046):** array of branch UUIDs. Empty [] = CEO (כל הסניפים). SERVICE_MANAGER/OFFICE/PAINTER: 1+ סניף. OFFICE staff עכשיו יכולות להיות 2+ סניפים (אילנה, אביה עם נתיבות + אשקלון) |
 | `is_active` | bool | |
 | `is_bodywork_advisor` | bool | האם מקבל התראות פחח + ברשימת QC |
 | `sees_all_branches` | bool | (028) לרוב ל-SERVICE_ADVISOR — רואה את כל הסניפים בלי להיות CEO |
@@ -367,12 +368,16 @@ Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 ד�
 
 ## 12. RLS Policy Pattern
 
-**כלל ראשי:** כל טבלה מוגנת לפי `branch_id` של המשתמש, דרך פונקציות helper:
-- `public.get_my_branch_id()` — ה-branch_id של המשתמש המחובר
+**כלל ראשי:** כל טבלה מוגנת לפי `branch_ids` של המשתמש (array), דרך פונקציות helper:
+- `public.get_my_branch_ids()` — ה-branch_ids array של המשתמש המחובר (046: היה `get_my_branch_id()` יחיד)
 - `public.get_my_role()` — ה-role של המשתמש המחובר
 - `public.can_see_all_branches()` — true עבור CEO, ועבור כל role עם `sees_all_branches=true`
+- **RLS Operator (046):** `branch_id = ANY(public.get_my_branch_ids())` — בודק אם branch של הרשומה נמצא בarray של המשתמש
 
-⚠️ **חשוב:** מיגרציה 018 (`018_fix_rls_recursion.sql`) הצהירה שהיא יוצרת `current_user_branch_id()`/`current_user_role()`, אבל בפועל הפונקציות שפעילות בפרודקשן הן `get_my_branch_id()`/`get_my_role()` (השמות למעלה). לפני שסומכים על שם פונקציה מקובץ מיגרציה — לוודא מול הפרודקשן בפועל: `POST {SUPABASE_URL}/rest/v1/rpc/<function_name>` עם ה-service-role key; `404`/`PGRST202` = לא קיימת.
+⚠️ **חשוב:** 
+- מיגרציה 018 הצהירה שהיא יוצרת `current_user_branch_id()`/`current_user_role()`, אבל בפועל הפונקציות הן `get_my_branch_id()`/`get_my_role()`.
+- **מיגרציה 046** שינתה את `get_my_branch_id()` ל-`get_my_branch_ids()` (plural, returns uuid[]) ועדכנה את כל ה-RLS policies להשתמש ב-`= ANY()` operator לתמיכה multi-branch.
+- לפני שסומכים על שם פונקציה — לוודא מול הפרודקשן בפועל: `POST {SUPABASE_URL}/rest/v1/rpc/<function_name>` עם ה-service-role key; `404`/`PGRST202` = לא קיימת.
 
 **Soft delete:** `cases_select` מסנן `deleted_at IS NULL` לכולם חוץ מ-CEO — וכל שאילתת select אחרת על cases צריכה לעשות את זה בעצמה גם ברמת האפליקציה (ה-RLS לא תמיד מספיק, ראה סעיף 8).
 
@@ -489,6 +494,7 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 | 043 | תאריך תזכורת להפניה (`follow_up_date` + `follow_up_reminder_sent_at`) |
 | 044 | WHEELS_CHECK מפסיק לדרוש אישור CEO — מנקה approvals PENDING קיימים מסוג זה |
 | 045 | Backfill: `status_note` ישן → שורת יומן ראשונה ב-`referral_status_updates` |
+| **046** | **Multi-branch OFFICE staff:** `profiles.branch_id` (single) → `branch_ids[]` (array); כל RLS policies עדכונות להשתמש ב-ANY() operator; OFFICE staff (אילנה, אביה) עכשיו יכולות להיות 2+ סניפים עם טאבים בכל דף |
 
 ---
 
