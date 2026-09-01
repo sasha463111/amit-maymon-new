@@ -1234,8 +1234,8 @@ export function WorkflowStepsSection({
                   </div>
                 )}
 
-                {/* WHEELS CHECK file/link panel */}
-                {canEdit && isWheelsPanel && STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key) && !isDone && !isSkipped && (
+                {/* WHEELS CHECK file/link panel — stays editable even after DONE */}
+                {canEdit && isWheelsPanel && STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key) && !isSkipped && (
                   <div className="mr-11 mt-1 p-4 bg-white rounded-lg border border-purple-300 shadow-md">
                     <p className="text-xs font-semibold text-purple-700 mb-3">📎 הוסף לינק או קובץ לטפסי גלגלים</p>
                     {/* Tab switcher */}
@@ -1302,11 +1302,11 @@ export function WorkflowStepsSection({
                     <div className="flex gap-2 mt-3">
                       <button
                         type="button"
-                        disabled={wheelsUploading || completingStepId === s.id}
+                        disabled={wheelsUploading || completingStepId === s.id || isDone}
                         onClick={() => void handleWheelsConfirm(s)}
-                        className="px-4 py-1.5 bg-purple-600 text-white rounded-md text-xs font-semibold hover:bg-purple-700 disabled:opacity-50"
+                        className="px-4 py-1.5 bg-purple-600 text-white rounded-md text-xs font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {wheelsUploading ? '⏳ מעלה...' : '✓ אישור והשלמת שלב'}
+                        {isDone ? '✓ השלם בוצע' : wheelsUploading ? '⏳ מעלה...' : '✓ אישור והשלמת שלב'}
                       </button>
                       <button
                         type="button"
