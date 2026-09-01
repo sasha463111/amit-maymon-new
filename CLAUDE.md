@@ -529,6 +529,48 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 8. **התראות שמצביעות על משהו ספציפי בתוך עמוד** → להשתמש בדפוס `?highlight=<id>` הקיים (ראה סעיף 13), לא להמציא מנגנון חדש
 9. **לפני פוש לפרודקשן** → `npx tsc --noEmit` + `npm run build` (לא בזמן ש-`npm run dev` רץ) + בדיקה חיה עם דפדפן אמיתי; לנקות כל נתוני בדיקה מה-DB אחרי
 
+### 🚨 **BACKUP BEFORE EVERY PUSH** (2026-09-01)
+
+**10. סטנדינג ריל: Backup לפני כל Push לפרודקשן** ⚠️
+- **לפני כל `git push origin main`** חייב להוצא backup של מסד הנתונים!
+- **רוץ:** `.\SqlBackup\backup-before-push.ps1`
+- ה-script ירוץ backup אוטומטי, יבדוק שהצליח, ויבקש אישור לפני push
+- **אם backup נכשל:** אל תדחוף! תקן את הבעיה קודם (ודא `pg_dump` מותקן)
+- Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup`
+- **Auto-cleanup:** backups ישנים מ-30 ימים יוחקו אוטומטית
+
+**11. Daily Automatic Backups** 📅
+- הגדר Windows Task Scheduler לרוץ `.\SqlBackup\backup-supabase-daily.ps1` כל יום בחצות
+- כל backup כולל: `profiles`, `cases`, `referrals`, `notifications`, כל הנתונים
+- **אם יש בעיה (כמו Migration 046):** restore מ-backup! דוגמה:
+  ```sql
+  -- Restore profiles.branch_ids אחרי data loss
+  UPDATE profiles SET branch_ids = ARRAY[...]
+  ```
+- Log file: `C:\GitHub\amit-maymon-new\SqlBackup\backup_log.txt`
+
+**12. Migration Best Practices** (תוקן אחרי Migration 046 failure) 🔧
+- **תמיד** ליצור column חדשה **לפני** הורדת הישנה
+- **תמיד** לעשות BACKFILL של נתונים קודם
+- **תמיד** לבדוק אם יש data loss אחרי migration
+- דוגמה (✅ RIGHT):
+  ```sql
+  -- ✅ צור column חדשה
+  ALTER TABLE profiles ADD COLUMN branch_ids uuid[] NOT NULL DEFAULT '{}';
+  
+  -- ✅ Backfill נתונים
+  UPDATE profiles SET branch_ids = ARRAY[branch_id] WHERE branch_id IS NOT NULL;
+  
+  -- ✅ Drop הישנה
+  ALTER TABLE profiles DROP COLUMN branch_id;
+  ```
+- דוגמה (❌ WRONG — כמו Migration 046):
+  ```sql
+  -- ❌ ישירות drop — data loss!
+  ALTER TABLE profiles DROP COLUMN branch_id;
+  ALTER TABLE profiles ADD COLUMN branch_ids uuid[];  -- ריק!
+  ```
+
 ---
 
 ## 20. Supabase Region (הערה חשובה)
