@@ -18,6 +18,11 @@ interface MotResponse {
   result?: { records: MotRecord[] };
 }
 
+// Sleep helper for retries
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function lookupVehicleByPlate(
   plateNumber: string
 ): Promise<{ vehicle_type: string | null; vehicle_year: number | null; error?: string }> {
@@ -28,22 +33,43 @@ export async function lookupVehicleByPlate(
     JSON.stringify({ mispar_rechev: Number(digits) })
   )}`;
 
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return { vehicle_type: null, vehicle_year: null, error: 'שגיאה בפנייה למשרד התחבורה' };
+  // Retry logic: 2 attempts with exponential backoff (1s, 2s)
+  const maxRetries = 2;
+  let lastError = 'שגיאת תקשורת מול משרד התחבורה';
 
-    const data = (await res.json()) as MotResponse;
-    const record = data.result?.records?.[0];
-    if (!data.success || !record) {
-      return { vehicle_type: null, vehicle_year: null, error: 'הרכב לא נמצא ברשימת משרד התחבורה' };
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) {
+        lastError = 'שגיאה בפנייה למשרד התחבורה';
+        // Don't retry on bad status — move to next attempt
+        if (attempt < maxRetries) {
+          await sleep(1000 * (attempt + 1)); // 1s, then 2s
+          continue;
+        }
+        return { vehicle_type: null, vehicle_year: null, error: lastError };
+      }
+
+      const data = (await res.json()) as MotResponse;
+      const record = data.result?.records?.[0];
+      if (!data.success || !record) {
+        return { vehicle_type: null, vehicle_year: null, error: 'הרכב לא נמצא ברשימת משרד התחבורה' };
+      }
+
+      const vehicle_type = [record.tozeret_nm, record.kinuy_mishari || record.degem_nm]
+        .filter(Boolean)
+        .join(' ') || null;
+
+      return { vehicle_type, vehicle_year: record.shnat_yitzur ?? null };
+    } catch (err) {
+      lastError = 'שגיאת תקשורת מול משרד התחבורה';
+      // Only retry on network/timeout errors
+      if (attempt < maxRetries) {
+        await sleep(1000 * (attempt + 1)); // 1s, then 2s
+        continue;
+      }
     }
-
-    const vehicle_type = [record.tozeret_nm, record.kinuy_mishari || record.degem_nm]
-      .filter(Boolean)
-      .join(' ') || null;
-
-    return { vehicle_type, vehicle_year: record.shnat_yitzur ?? null };
-  } catch {
-    return { vehicle_type: null, vehicle_year: null, error: 'שגיאת תקשורת מול משרד התחבורה' };
   }
+
+  return { vehicle_type: null, vehicle_year: null, error: lastError };
 }
