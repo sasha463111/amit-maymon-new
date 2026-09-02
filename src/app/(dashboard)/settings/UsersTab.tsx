@@ -6,6 +6,7 @@ import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
 import { updateSystemUser, startViewAsUser, type SystemUser } from '@/app/actions/users';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { sendSummaryReport } from '@/app/actions/reports';
+import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -123,10 +124,14 @@ export function UsersTab({
         <span className="text-sm text-gray-500">({users.length})</span>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
-        ℹ️ כדי <strong>ליצור משתמש חדש</strong>, היכנס ל-Supabase Dashboard → Authentication → Add user. אחרי שתיצור,
-        חזור לכאן והגדר את התפקיד והסניף. המערכת יוצרת אוטומטית רשומה ב-<code className="bg-white px-1 rounded">profiles</code> דרך טריגר.
-      </div>
+      {/* Create new user form — CEO only */}
+      <AddUserForm
+        branches={branches}
+        onUserCreated={() => {
+          // Refresh the page to show the new user in the list
+          router.refresh();
+        }}
+      />
 
       {/* Push test card — diagnose if Web Push actually reaches your device */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">

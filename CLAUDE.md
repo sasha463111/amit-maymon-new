@@ -810,6 +810,37 @@ npx supabase db push                     # ← ברירת המחדל: מחיל �
 
 ---
 
+## 24. User Creation Form (2026-09-02) ✅
+
+**Status:** ✅ Implemented — Live
+
+**Location:** `/settings` → Users Tab → "משתמש חדש" button
+
+**What it does:**
+- CEO can create new users directly from the web UI (no Supabase Dashboard needed)
+- Form collects: email, password, full name, role, branch assignment(s)
+- Creates both Auth user and profile record atomically
+- Shows success/error message immediately
+
+**Components:**
+- `src/components/AddUserForm.tsx` — Form component (Client)
+- `src/app/actions/users.ts:createNewSystemUser()` — Server Action
+- Integrated into `src/app/(dashboard)/settings/UsersTab.tsx`
+
+**Validation:**
+- Email format check
+- Password minimum 8 characters
+- Full name required
+- CEO cannot be assigned branches
+- Non-CEO must have at least one branch
+
+**Error handling:**
+- Duplicate email detection
+- Atomic creation (if profile fails, auth user is deleted)
+- User-friendly error messages in Hebrew
+
+---
+
 ## 23. Real-Time Sync + Send Report Button (2026-09-02) ✅
 
 **Status:** ✅ Implemented — Live
