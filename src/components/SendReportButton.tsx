@@ -1,21 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail } from 'lucide-react';
 import { SendReportModal } from './SendReportModal';
-import { useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export function SendReportButton({ isCeo }: { isCeo: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
-    if (isCeo) {
-      createClient().auth.getUser().then(({ data }) => {
-        setUserEmail(data.user?.email || '');
-      });
-    }
+    if (!isCeo) return;
+
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || '');
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+        setUserName((data as any)?.full_name || '');
+      }
+    })();
   }, [isCeo]);
 
   if (!isCeo) return null;
@@ -29,7 +39,7 @@ export function SendReportButton({ isCeo }: { isCeo: boolean }) {
       >
         <Mail size={16} className="text-gray-500" />
       </button>
-      <SendReportModal isOpen={isOpen} onClose={() => setIsOpen(false)} userEmail={userEmail} />
+      <SendReportModal isOpen={isOpen} onClose={() => setIsOpen(false)} userEmail={userEmail} userName={userName} />
     </>
   );
 }

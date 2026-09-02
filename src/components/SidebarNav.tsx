@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus, Users, Archive } from 'lucide-react';
+import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus, Users, Archive, Link2 } from 'lucide-react';
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   '/cases': FolderOpen,
   '/cases/archive': Archive,
   '/closure': Lock,
   '/approvals': CheckSquare,
+  '/referrals': Link2,
   '/extras': Paintbrush,
   '/extras/new': Plus,
   '/extras/mine': Paintbrush,
