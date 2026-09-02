@@ -666,12 +666,22 @@ User explicitly authorized: "Agents can test as long as they don't destroy/touch
 - **Auto-cleanup:** backups ישנים מ-30 ימים יוחקו אוטומטית
 
 **11. Backup Implementation** 📅
-- **Manual Backup (Working):** לפני כל `git push origin main`, הריץ: `.\SqlBackup\backup-before-push.ps1`
+- **Pre-Push Manual Backup (Standing Rule):** לפני כל `git push origin main`, הריץ: `.\SqlBackup\backup-before-push.ps1`
   - Script ירוץ backup אוטומטי + יבדוק הצלחה + יבקש אישור לפני push
   - Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup\` עם timestamp
   - Log file: `C:\GitHub\amit-maymon-new\SqlBackup\backup_log.txt`
-- **Daily Automatic (Future):** Task Scheduler דורש credentials שלא זמינים כרגע
-  - אפשרות לעתיד: cron חיצוני (GitHub Actions, Vercel Cron) או cloud backup service
+  - Auto-cleanup: backups ישנים מ-30 ימים יוחקו אוטומטית
+
+- **Daily Automatic Backup (✅ Now Live):** GitHub Actions workflow — runs daily at 2 AM UTC
+  - Workflow: `.github/workflows/daily-backup.yml`
+  - Uses PostgreSQL `pg_dump` on GitHub-hosted runner
+  - Backup artifacts stored for 30 days in GitHub Actions
+  - Manual trigger available via GitHub UI (`Actions` → `Daily Database Backup` → `Run workflow`)
+  - **Setup Required (One-time):**
+    1. Go to GitHub repo: Settings → Secrets and variables → Actions
+    2. Add new secret: `SUPABASE_PASSWORD`
+    3. Value: The Supabase database password (from `.env.local` SUPABASE_DB_PASSWORD)
+  - **Why GitHub Actions instead of Task Scheduler:** No local credential issues, free tier, cloud-native, same pattern as existing `enter-work-reminders` workflow
 - **Recovery:** אם יש data loss (כמו Migration 046):
   ```bash
   # 1. שחזור מ-backup
