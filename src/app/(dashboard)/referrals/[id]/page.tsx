@@ -11,7 +11,7 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profileData } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from('profiles')
     .select('role, branch_ids')
     .eq('id', user.id)
@@ -19,16 +19,27 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
   const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
+  // DEBUG: Log what's happening
+  console.log('[referrals/[id]] Profile query:', {
+    userId: user.id,
+    profileData,
+    profileError,
+    profile,
+    isPreview,
+  });
+
   // Safety check: profile should always exist if user is logged in
   if (!profile && !isPreview) {
+    console.log('[referrals/[id]] No profile found, redirecting to login');
     redirect('/login');
   }
 
   if (!isPreview && profile && profile.role !== 'OFFICE' && profile.role !== 'CEO') {
+    console.log('[referrals/[id]] User role is neither OFFICE nor CEO:', profile.role);
     return (
       <div>
         <h1 className="text-2xl font-bold mb-4">הפנייה</h1>
-        <p className="text-gray-500">אין גישה לדף זה.</p>
+        <p className="text-gray-500">אין גישה לדף זה. (Role: {profile.role})</p>
       </div>
     );
   }
