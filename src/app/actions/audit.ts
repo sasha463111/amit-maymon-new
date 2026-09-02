@@ -15,14 +15,17 @@ export async function logActivity(params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  await supabase.from('activity_log').insert({
-    user_id: user.id,
-    action: params.action,
-    page_url: params.page_url || typeof window !== 'undefined' ? window.location.pathname : null,
-    metadata: params.metadata || null,
-  } as any).catch(() => {
+  // Log activity - silently fail if logging breaks
+  try {
+    await supabase.from('activity_log').insert({
+      user_id: user.id,
+      action: params.action,
+      page_url: params.page_url || typeof window !== 'undefined' ? window.location.pathname : null,
+      metadata: params.metadata || null,
+    } as any);
+  } catch {
     // Silently fail - don't break the app if logging fails
-  });
+  }
 }
 
 /**
