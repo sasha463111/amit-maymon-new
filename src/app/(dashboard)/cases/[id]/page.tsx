@@ -378,6 +378,11 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   const profile = profileData as { role: string; branch_ids: string[]; sees_all_branches?: boolean } | null;
 
+  // Safety check: profile should always exist if user is logged in
+  if (!profile) {
+    redirect('/login');
+  }
+
   // Case fetch — needed for access control and to pass data to CaseDetailData
   let caseRow: CaseRowMinimal | null = null;
   {

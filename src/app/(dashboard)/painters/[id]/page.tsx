@@ -15,9 +15,12 @@ export default async function PainterCasePage({ params }: { params: { id: string
     .single();
   const profile = profileData as { id: string; role: string; branch_ids: string[]; full_name: string | null } | null;
 
+  // Safety check: profile should always exist if user is logged in
+  if (!profile) redirect('/login');
+
   // Only PAINTER, SERVICE_MANAGER, CEO can access painter case page
   const allowed = ['PAINTER', 'SERVICE_MANAGER', 'CEO'];
-  if (!profile || !allowed.includes(profile.role)) redirect('/cases');
+  if (!allowed.includes(profile.role)) redirect('/cases');
 
   const { data: caseData } = await supabase
     .from('cases')

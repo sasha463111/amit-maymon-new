@@ -18,7 +18,13 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
     .single();
   const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
-  if (!isPreview && profile?.role !== 'OFFICE' && profile?.role !== 'CEO') {
+
+  // Safety check: profile should always exist if user is logged in
+  if (!profile && !isPreview) {
+    redirect('/login');
+  }
+
+  if (!isPreview && profile && profile.role !== 'OFFICE' && profile.role !== 'CEO') {
     return (
       <div>
         <h1 className="text-2xl font-bold mb-4">הפנייה</h1>
@@ -36,6 +42,11 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
 
   const row = referralData as Referral & { branches: { name: string } | { name: string }[] | null };
   const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+
+  // Branch access check: non-CEO users can only access referrals in their assigned branches
+  if (!isPreview && profile && profile.role !== 'CEO' && !profile.branch_ids.includes(row.branch_id)) {
+    notFound();
+  }
 
   const { data: docsData } = await supabase
     .from('referral_documents')
