@@ -20,7 +20,7 @@ export async function logActivity(params: {
     action: params.action,
     page_url: params.page_url || typeof window !== 'undefined' ? window.location.pathname : null,
     metadata: params.metadata || null,
-  }).catch(() => {
+  } as any).catch(() => {
     // Silently fail - don't break the app if logging fails
   });
 }
