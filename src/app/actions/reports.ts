@@ -142,19 +142,22 @@ export async function sendSummaryReport() {
   const html = await buildReportHtml(supabase);
   const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
 
+  // Ensure proper UTF-8 encoding by using TextEncoder
+  const payload = {
+    from: 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>',
+    to: ['Amitm@toyota-tehila.co.il'],
+    bcc: ['tomerdavidyan@hotmail.com'],
+    subject: `סיכום יומי — תהילה ניהול מוסך — ${dateStr}`,
+    html,
+  };
+
   const res = await fetch(RESEND_API_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
     },
-    body: JSON.stringify({
-      from: 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>',
-      to: ['Amitm@toyota-tehila.co.il'],
-      bcc: ['tomerdavidyan@hotmail.com'],
-      subject: `סיכום יומי — תהילה ניהול מוסך — ${dateStr}`,
-      html,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
