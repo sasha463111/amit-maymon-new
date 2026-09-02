@@ -197,14 +197,18 @@ export async function createNewSystemUser(params: {
   }
 
   // Create profile record
-  const { error: profileError } = await supabase.from('profiles').insert({
-    id: authUser.user.id,
-    full_name,
-    role,
-    branch_ids,
-    is_active: true,
-    is_bodywork_advisor: false,
-  });
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert(
+      {
+        id: authUser.user.id,
+        full_name,
+        role,
+        branch_ids,
+        is_active: true,
+        is_bodywork_advisor: false,
+      } as any
+    );
 
   if (profileError) {
     // If profile creation fails, try to delete the auth user we just created

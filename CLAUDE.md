@@ -600,7 +600,7 @@ User explicitly authorized: "Agents can test as long as they don't destroy/touch
 
 ---
 
-## 18b. Critical Bug Fix — 2026-09-02 🔴
+## 18b. Critical Bug Fix — 2026-09-02 🔴 (ONGOING)
 
 **CRITICAL BUG:** Detail pages returning "No Access" when clicking referrals/cases/closure/painters
 
@@ -612,14 +612,16 @@ User explicitly authorized: "Agents can test as long as they don't destroy/touch
 - `/painters/[id]` — Shows "No access" instead of painter details
 - `/cases/[id]` — Shows "No access" instead of case details
 
-**Fix Applied:**
-1. Updated all 4 pages to select `branch_ids` instead of `branch_id`
-2. Changed branch access check from `profile.branch_id !== branchId` to `!profile.branch_ids.includes(branchId)`
-3. Updated type definitions to use `branch_ids: string[]`
+**Fixes Applied:**
+1. Updated all 4 pages to select `branch_ids` instead of `branch_id` ✅
+2. Changed branch access check from `profile.branch_id !== branchId` to `!profile.branch_ids.includes(branchId)` ✅
+3. Updated type definitions to use `branch_ids: string[]` ✅
+4. Added null-safety checks: if profile query fails → redirect to login (not silent "No Access") ✅
+5. Added debug logging to `/referrals/[id]` to diagnose actual permission errors (commit 095c3af) ✅
+6. Fixed TypeScript type error in `createNewSystemUser` (users.ts line 200): cast profile insert as `any` for Supabase compatibility ✅
 
-**Impact:** ✅ Users can now open any detail page without access errors
-
-**QA Finding:** Agents failed to test this workflow (entering referrals/closure → clicking detail). Recommending test enhancement to cover full navigation flows.
+**Status:** 🔄 In Testing — Deployed to production, awaiting user verification of debug logs
+**QA Finding:** Agents failed to test full navigation workflows (enter page → click detail)
 
 ---
 
