@@ -784,3 +784,59 @@ npx supabase db push                     # ← ברירת המחדל: מחיל �
 - `supabase login` (רענון token) ו-הפעלת Docker Desktop דורשים אינטראקציה ידנית.
 - `supabase migration repair` / `db push` (כתיבה לפרוד) עלולים להיחסם ע"י מנגנון ההרשאות של Claude — המשתמש מריץ, או מוסיפים כלל הרשאה.
 - החומרה (i7-3770K) איטית ל-local stack; זה עובד אבל לא מהיר.
+
+---
+
+## 23. Real-Time Sync + Send Report Button (2026-09-02) ✅
+
+**Status:** ✅ Implemented — Live
+
+### Real-Time Profile Sync (Supabase Realtime)
+
+**Goal:** When CEO changes user roles/branches/names in `/settings`, all logged-in users see updates immediately without page refresh.
+
+**Implementation:**
+- **Component:** `src/components/RealtimeProfileSync.tsx` — Client component
+- **Location:** Added to dashboard layout (`src/app/(dashboard)/layout.tsx`)
+- **How it works:**
+  1. Subscribes to `profiles` table updates via Supabase Realtime
+  2. When a profile changes:
+     - **If it's the current user's profile:** Trigger `window.location.reload()` (picks up new permissions)
+     - **If it's another user's profile:** Dispatch `profile-updated` custom event (listeners can react without reload)
+  3. Automatically unsubscribes on unmount
+
+**Supabase Setup:** Realtime is already enabled on the project. No additional config needed.
+
+### Send Report Button (Header)
+
+**Location:** Top header, between Notifications bell and Logout button  
+**Component:** `src/components/SendReportButton.tsx`  
+**Visibility:** CEO only  
+**Icon:** Mail icon  
+**Behavior:**
+- Click → sends summary report via `sendSummaryReport()` (Server Action)
+- Shows loading state (pulsing icon) while sending
+- Displays result tooltip: ✅ (success) or ❌ (error message)
+- Permission check enforced server-side: `requireCeo()` in `reports.ts`
+
+**When it's used:**
+- Amit (CEO) can now send daily summary reports manually from any page
+- No need to navigate to `/settings` anymore
+- Quick access from the main header
+
+### Architecture
+
+```
+Dashboard Layout
+├── RealtimeProfileSync (hidden component)
+│   └── Listens to profiles table changes
+├── Header
+│   ├── NotificationsBell
+│   ├── SendReportButton (CEO only)
+│   └── Logout
+└── Main content
+```
+
+**Related files:**
+- `src/app/(dashboard)/layout.tsx` — imports both components
+- `src/app/actions/reports.ts` — `sendSummaryReport()` + `requireCeo()` check

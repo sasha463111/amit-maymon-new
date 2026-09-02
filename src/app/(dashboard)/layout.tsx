@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
+import { SendReportButton } from '@/components/SendReportButton';
+import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
 import { SidebarNav } from '@/components/SidebarNav';
 import { LogOut, Eye } from 'lucide-react';
@@ -116,6 +118,9 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-surface">
+      {/* Real-time sync for profile changes */}
+      {!isPreview && <RealtimeProfileSync userId={user.id} />}
+
       {isPreview && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-sm text-amber-900">
           מצב תצוגה מקדימה — ללא התחברות וללא מסד נתונים. הנתונים להמחשה בלבד.
@@ -158,6 +163,7 @@ export default async function DashboardLayout({
               )}
             </div>
             <NotificationsBell userId={user.id} />
+            <SendReportButton isCeo={actualRole === 'CEO'} />
             <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0" title="התנתק">
               <LogOut size={16} className="text-gray-500" />
             </a>
