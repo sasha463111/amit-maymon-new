@@ -20,6 +20,14 @@ import { createClient } from '@/lib/supabase/server';
 
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
+/**
+ * Encode Hebrew and other non-ASCII characters as HTML entities
+ * This fixes email encoding issues where Resend mangles UTF-8 Hebrew text
+ */
+function encodeHebrewAsEntities(text: string): string {
+  return text.replace(/[֐-׿]/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
 async function requireCeo(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' as const };
@@ -92,7 +100,11 @@ async function buildReportHtml(supabase: Awaited<ReturnType<typeof createClient>
   // renders as mojibake. Real bug, caught live: the first test send arrived
   // with garbled text because this used to be a bare <div> fragment with no
   // <head>/charset at all.
-  return `<!DOCTYPE html>
+  //
+  // CRITICAL: Hebrew text is encoded as HTML entities (&#XXXX;) because Resend
+  // was mangling UTF-8 Hebrew even with charset=utf-8 headers. This ensures
+  // Hebrew renders correctly in all email clients.
+  const html = `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head>
   <meta charset="utf-8" />
@@ -100,22 +112,22 @@ async function buildReportHtml(supabase: Awaited<ReturnType<typeof createClient>
 </head>
 <body style="margin:0;padding:0;">
   <div dir="rtl" style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
-    <h2 style="color:#1a1a1a;">סיכום יומי — תהילה ניהול מוסך</h2>
+    <h2 style="color:#1a1a1a;">${encodeHebrewAsEntities('סיכום יומי — תהילה ניהול מוסך')}</h2>
     <p style="color:#666;font-size:13px;">${dateStr}</p>
     <table style="width:100%;border-collapse:collapse;margin-top:16px;">
       <thead>
         <tr style="background:#f5f5f5;">
-          <th style="padding:8px 12px;text-align:right;">סניף</th>
-          <th style="padding:8px 12px;">תיקים פתוחים</th>
-          <th style="padding:8px 12px;">ממתינים לסגירה</th>
-          <th style="padding:8px 12px;">הפניות מתואמות</th>
-          <th style="padding:8px 12px;">הפניות ללא תיאום</th>
+          <th style="padding:8px 12px;text-align:right;">${encodeHebrewAsEntities('סניף')}</th>
+          <th style="padding:8px 12px;">${encodeHebrewAsEntities('תיקים פתוחים')}</th>
+          <th style="padding:8px 12px;">${encodeHebrewAsEntities('ממתינים לסגירה')}</th>
+          <th style="padding:8px 12px;">${encodeHebrewAsEntities('הפניות מתואמות')}</th>
+          <th style="padding:8px 12px;">${encodeHebrewAsEntities('הפניות ללא תיאום')}</th>
         </tr>
       </thead>
       <tbody>
         ${rows}
         <tr style="font-weight:bold;">
-          <td style="padding:8px 12px;">סה"כ</td>
+          <td style="padding:8px 12px;">${encodeHebrewAsEntities('סה"כ')}</td>
           <td style="padding:8px 12px;text-align:center;">${totalOpen}</td>
           <td style="padding:8px 12px;text-align:center;">${totalClosure}</td>
           <td style="padding:8px 12px;text-align:center;">${totalCoord}</td>
@@ -124,11 +136,13 @@ async function buildReportHtml(supabase: Awaited<ReturnType<typeof createClient>
       </tbody>
     </table>
     <p style="color:#999;font-size:11px;margin-top:24px;">
-      "הפניות מתואמות/ללא תיאום" מחושב כרגע לפי האם יש טקסט בשדה הסטטוס של ההפנייה — לא שדה ייעודי. תגידו אם זה לא מדויק.
+      ${encodeHebrewAsEntities('"הפניות מתואמות/ללא תיאום" מחושב כרגע לפי האם יש טקסט בשדה הסטטוס של ההפנייה — לא שדה ייעודי. תגידו אם זה לא מדויק.')}
     </p>
   </div>
 </body>
 </html>`;
+
+  return html;
 }
 
 export async function sendSummaryReport() {
