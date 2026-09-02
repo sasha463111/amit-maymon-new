@@ -101,3 +101,4 @@ export default function RootLayout({
   );
 }
 // rebuild cache bust Wed Sep  2 14:45:22     2026
+// Deploy attempt 3 - force sync
