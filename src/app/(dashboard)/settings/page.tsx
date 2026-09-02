@@ -6,6 +6,7 @@ import { PermissionsTab } from './PermissionsTab';
 import { ChecklistTab } from './ChecklistTab';
 import { BodyworkAdvisorsTab } from './BodyworkAdvisorsTab';
 import { UsersTab } from './UsersTab';
+import { AuditTab } from './AuditTab';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 
 export default async function SettingsPage({
@@ -34,6 +35,7 @@ export default async function SettingsPage({
     tab === 'checklist' ? 'checklist' :
     tab === 'advisors' ? 'advisors' :
     tab === 'users' ? 'users' :
+    tab === 'audit' ? 'audit' :
     'permissions';
 
   const [permissionsResult, stepsResult, advisorsResult, usersResult, branchesResult] = await Promise.all([
@@ -108,6 +110,16 @@ export default async function SettingsPage({
         >
           👥 משתמשים
         </a>
+        <a
+          href="/settings?tab=audit"
+          className={`whitespace-nowrap px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
+            activeTab === 'audit'
+              ? 'border-indigo-600 text-indigo-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          📊 ביקורת
+        </a>
       </div>
 
       <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
@@ -117,8 +129,10 @@ export default async function SettingsPage({
           <ChecklistTab initialSteps={steps} />
         ) : activeTab === 'advisors' ? (
           <BodyworkAdvisorsTab initialAdvisors={advisors} />
-        ) : (
+        ) : activeTab === 'users' ? (
           <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} />
+        ) : (
+          <AuditTab />
         )}
       </div>
     </div>

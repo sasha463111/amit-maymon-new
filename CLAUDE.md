@@ -812,6 +812,49 @@ npx supabase db push                     # ← ברירת המחדל: מחיל �
 
 ---
 
+## 25. CEO Audit Dashboard (2026-09-02) 🆕
+
+**Status:** ✅ Implemented
+
+**Location:** `/settings` → New "📊 ביקורת" (Audit) tab
+
+**What it shows:**
+
+1. **👤 Users Tab** — User lifecycle timeline
+   - Creation date for each user
+   - Current role and branch assignments
+   - Sorted by creation date
+
+2. **📝 Changes Tab** — Profile modification history
+   - Tracks all profile changes (role, branch, name updates)
+   - Shows what changed and when
+   - Who made the change (changed_by field)
+
+3. **📊 Activity Tab** — User activity log
+   - Page visits and timestamps
+   - User actions performed
+   - Complete audit trail for compliance
+
+**Database Schema:**
+- `audit_log` table — captures profile change history
+- `activity_log` table — captures user actions and page visits
+- RLS policies — CEO-only access
+
+**Server Actions (audit.ts):**
+- `logActivity()` — log page visits (integrated with components)
+- `getAuditLogs()` — fetch profile change history
+- `getActivityLogs()` — fetch user activity
+- `getUserCreationTimeline()` — fetch user creation dates
+
+**UI Component:**
+- `AuditTab.tsx` — Three-tab interface with data loading
+- Real-time data fetching
+- Hebrew-localized dates
+
+**Use case:** Amit can audit all user actions, see when users were created, track profile changes, and monitor page visits for security/compliance.
+
+---
+
 ## 24. User Creation Form (2026-09-02) ✅
 
 **Status:** ✅ Implemented — Live
