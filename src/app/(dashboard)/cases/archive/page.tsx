@@ -73,7 +73,7 @@ export default async function CasesArchivePage({
   // CEO sees all branches; others only their branches (as array).
   const branchFilter = role === 'CEO' ? null : userBranchIds;
 
-  // Three independent counts so the user sees what's where.
+  // Three independent counts so the user sees what's where (archive queries)
   const baseSelect =
     'id, case_key, claim_number, customer_name, phone, insurance_company, opened_at, treatment_finished_at, closed_at, deleted_at, deleted_by, branch_id, cars(license_plate)';
 
