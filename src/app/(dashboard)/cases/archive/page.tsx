@@ -99,9 +99,9 @@ export default async function CasesArchivePage({
     .order('deleted_at', { ascending: false });
 
   if (branchFilter && branchFilter.length > 0) {
-    inClosureQuery.in('branch_id', branchFilter);
-    closedQuery.in('branch_id', branchFilter);
-    deletedQuery.in('branch_id', branchFilter);
+    inClosureQuery = inClosureQuery.in('branch_id', branchFilter);
+    closedQuery = closedQuery.in('branch_id', branchFilter);
+    deletedQuery = deletedQuery.in('branch_id', branchFilter);
   }
 
   // CEO sees deleted tab; others don't.

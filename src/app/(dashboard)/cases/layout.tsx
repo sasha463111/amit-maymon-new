@@ -17,6 +17,12 @@ export default async function CasesLayout({ children }: { children: React.ReactN
   const role = profile?.role ?? null;
   const branchIds = profile?.branch_ids ?? [];
   const isCeo = role === 'CEO';
+
+  // PAINTER should only access /painters, not /cases at all
+  if (role === 'PAINTER') {
+    redirect('/painters');
+  }
+
   const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO' || role === 'SERVICE_ADVISOR';
 
   let casesQuery = supabase

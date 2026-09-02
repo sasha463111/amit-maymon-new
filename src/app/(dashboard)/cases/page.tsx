@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import { SystemMessageBanner } from './SystemMessageBanner';
 
 // Rendered as CasesMasterDetail's `children` on the /cases index route.
@@ -8,15 +9,28 @@ import { SystemMessageBanner } from './SystemMessageBanner';
 export default async function CasesIndexPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  const role = (profileData as { role: string } | null)?.role ?? null;
+
+  // PAINTER should only access /painters, not /cases
+  if (role === 'PAINTER') {
+    redirect('/painters');
+  }
 
   let isCeo = false;
   let sysMessage: { id: string; message: string } | undefined;
   if (user) {
-    const [{ data: profileData }, { data: sysMessages }] = await Promise.all([
-      supabase.from('profiles').select('role').eq('id', user.id).single(),
+    const [{ data: sysMessages }] = await Promise.all([
       supabase.from('system_messages').select('id, message').eq('is_active', true).order('created_at', { ascending: false }).limit(1),
     ]);
-    isCeo = (profileData as { role: string } | null)?.role === 'CEO';
+    isCeo = role === 'CEO';
     sysMessage = (sysMessages ?? [])[0] as { id: string; message: string } | undefined;
   }
 
