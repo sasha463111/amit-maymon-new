@@ -98,10 +98,21 @@ export default async function CasesArchivePage({
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false });
 
-  if (branchFilter && branchFilter.length > 0) {
-    inClosureQuery = inClosureQuery.in('branch_id', branchFilter);
-    closedQuery = closedQuery.in('branch_id', branchFilter);
-    deletedQuery = deletedQuery.in('branch_id', branchFilter);
+  // CRITICAL: Always filter by branch for non-CEO users
+  // Do NOT rely on RLS alone — apply filter explicitly in query
+  if (role !== 'CEO') {
+    // For non-CEO, ALWAYS have a branch filter (never empty)
+    const branchIdsToFilter = branchFilter && branchFilter.length > 0 ? branchFilter : [];
+    if (branchIdsToFilter.length > 0) {
+      inClosureQuery = inClosureQuery.in('branch_id', branchIdsToFilter);
+      closedQuery = closedQuery.in('branch_id', branchIdsToFilter);
+      deletedQuery = deletedQuery.in('branch_id', branchIdsToFilter);
+    } else {
+      // Safety: If no branch IDs found, filter by impossible condition to block access
+      inClosureQuery = inClosureQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
+      closedQuery = closedQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
+      deletedQuery = deletedQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
+    }
   }
 
   // CEO sees deleted tab; others don't.
