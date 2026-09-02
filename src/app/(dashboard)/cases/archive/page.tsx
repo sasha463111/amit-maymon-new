@@ -77,7 +77,7 @@ export default async function CasesArchivePage({
   const baseSelect =
     'id, case_key, claim_number, customer_name, phone, insurance_company, opened_at, treatment_finished_at, closed_at, deleted_at, deleted_by, branch_id, cars(license_plate)';
 
-  const inClosureQuery = supabase
+  let inClosureQuery = supabase
     .from('cases')
     .select(baseSelect)
     .is('closed_at', null)
@@ -85,14 +85,14 @@ export default async function CasesArchivePage({
     .not('treatment_finished_at', 'is', null)
     .order('treatment_finished_at', { ascending: false });
 
-  const closedQuery = supabase
+  let closedQuery = supabase
     .from('cases')
     .select(baseSelect)
     .not('closed_at', 'is', null)
     .is('deleted_at', null)
     .order('closed_at', { ascending: false });
 
-  const deletedQuery = supabase
+  let deletedQuery = supabase
     .from('cases')
     .select(baseSelect)
     .not('deleted_at', 'is', null)
