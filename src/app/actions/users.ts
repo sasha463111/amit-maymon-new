@@ -145,6 +145,79 @@ export async function stopViewAsUser() {
   return { ok: true };
 }
 
+/**
+ * Create a new system user (CEO only).
+ * Creates both Auth user and profiles record atomically.
+ */
+export async function createNewSystemUser(params: {
+  email: string;
+  password: string;
+  full_name: string;
+  role: UserRole;
+  branch_ids: string[];
+}) {
+  const { error, supabase, userId: callerId } = await requireCeo();
+  if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
+
+  const { email, password, full_name, role, branch_ids } = params;
+
+  // Validate inputs
+  if (!email || !email.includes('@')) return { error: 'דוא"ל לא תקין' };
+  if (!password || password.length < 8) return { error: 'הסיסמה חייבת להיות לפחות 8 תווים' };
+  if (!full_name || full_name.trim().length === 0) return { error: 'שם מלא נדרש' };
+  if (!role) return { error: 'תפקיד נדרש' };
+
+  // CEO cannot have branches
+  if (role === 'CEO' && branch_ids.length > 0) {
+    return { error: 'מנכ"ל לא יכול להיות משויך לסניף' };
+  }
+
+  // Non-CEO must have at least one branch
+  if (role !== 'CEO' && branch_ids.length === 0) {
+    return { error: 'משתמש ללא CEO חייב להיות משויך לסניף אחד לפחות' };
+  }
+
+  // Try to create auth user via admin API
+  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // Auto-confirm email
+  });
+
+  if (authError) {
+    // Check if it's a duplicate email
+    if (authError.message.includes('already registered')) {
+      return { error: 'דוא"ל זה כבר רשום במערכת' };
+    }
+    return { error: `שגיאה ביצירת משתמש: ${authError.message}` };
+  }
+
+  if (!authUser.user?.id) {
+    return { error: 'שגיאה ביצירת משתמש - לא קיבלנו ID' };
+  }
+
+  // Create profile record
+  const { error: profileError } = await supabase.from('profiles').insert({
+    id: authUser.user.id,
+    full_name,
+    role,
+    branch_ids,
+    is_active: true,
+    is_bodywork_advisor: false,
+  });
+
+  if (profileError) {
+    // If profile creation fails, try to delete the auth user we just created
+    await supabase.auth.admin.deleteUser(authUser.user.id).catch(() => {
+      // Ignore delete errors
+    });
+    return { error: `שגיאה ביצירת פרופיל: ${profileError.message}` };
+  }
+
+  revalidatePath('/settings');
+  return { ok: true, userId: authUser.user.id, email };
+}
+
 export async function getViewAsState(): Promise<ViewAsState | null> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(VIEW_AS_COOKIE)?.value;

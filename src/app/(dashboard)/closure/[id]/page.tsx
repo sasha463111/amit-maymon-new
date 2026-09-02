@@ -19,11 +19,11 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, branch_id, sees_all_branches')
+    .select('role, branch_ids, sees_all_branches')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { role: string; branch_id: string | null; sees_all_branches?: boolean } | null;
+  const profile = profileData as { role: string; branch_ids: string[]; sees_all_branches?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
   if (!isPreview && profile?.role !== 'OFFICE' && profile?.role !== 'CEO') notFound();
 
@@ -36,7 +36,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
   if (!caseRow || (caseRow as { closed_at: string | null }).closed_at) notFound();
 
   const branchId = (caseRow as { branch_id: string }).branch_id;
-  if (profile && profile.role !== 'CEO' && !profile.sees_all_branches && profile.branch_id !== branchId) notFound();
+  if (profile && profile.role !== 'CEO' && !profile.sees_all_branches && !profile.branch_ids.includes(branchId)) notFound();
 
   const { data: runData } = await supabase
     .from('case_workflow_runs')

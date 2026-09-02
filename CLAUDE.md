@@ -600,7 +600,30 @@ User explicitly authorized: "Agents can test as long as they don't destroy/touch
 
 ---
 
-## 18b. QA Fixes — 2026-09-02 ✅
+## 18b. Critical Bug Fix — 2026-09-02 🔴
+
+**CRITICAL BUG:** Detail pages returning "No Access" when clicking referrals/cases/closure/painters
+
+**Root Cause:** After Migration 046 (multi-branch OFFICE support), `profiles.branch_id` was replaced with `profiles.branch_ids` (array). Four detail pages still queried for the old `branch_id` (singular), causing profile lookup to fail.
+
+**Affected Pages:**
+- `/referrals/[id]` — Shows "אין גישה לדף זה" instead of referral details
+- `/closure/[id]` — Shows "No access" instead of closure details
+- `/painters/[id]` — Shows "No access" instead of painter details
+- `/cases/[id]` — Shows "No access" instead of case details
+
+**Fix Applied:**
+1. Updated all 4 pages to select `branch_ids` instead of `branch_id`
+2. Changed branch access check from `profile.branch_id !== branchId` to `!profile.branch_ids.includes(branchId)`
+3. Updated type definitions to use `branch_ids: string[]`
+
+**Impact:** ✅ Users can now open any detail page without access errors
+
+**QA Finding:** Agents failed to test this workflow (entering referrals/closure → clicking detail). Recommending test enhancement to cover full navigation flows.
+
+---
+
+## 18c. QA Fixes — Previous Session (2026-09-02) ✅
 
 **Status:** 2/3 Issues Fixed, 1 Not a Bug
 

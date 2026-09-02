@@ -10,10 +10,10 @@ export default async function PainterCasePage({ params }: { params: { id: string
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('id, role, branch_id, full_name')
+    .select('id, role, branch_ids, full_name')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { id: string; role: string; branch_id: string | null; full_name: string | null } | null;
+  const profile = profileData as { id: string; role: string; branch_ids: string[]; full_name: string | null } | null;
 
   // Only PAINTER, SERVICE_MANAGER, CEO can access painter case page
   const allowed = ['PAINTER', 'SERVICE_MANAGER', 'CEO'];
