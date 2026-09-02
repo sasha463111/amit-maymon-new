@@ -1,0 +1,44 @@
+name: Daily Database Backup
+
+# Run daily at 2 AM UTC (4 AM Israel time)
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch: {} # Allow manual trigger for testing
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    name: Backup Supabase Database
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create backup directory
+        run: mkdir -p backups
+
+      - name: Backup database
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+          BACKUP_DATE: ${{ job.started_at }}
+        run: |
+          BACKUP_FILE="backups/backup_$(date +%Y%m%d_%H%M%S).sql"
+          pg_dump \
+            -h yhanmyvolpeiuxspcxmk.supabase.co \
+            -U postgres \
+            -d postgres \
+            -v \
+            > "$BACKUP_FILE"
+
+          echo "Backup created: $BACKUP_FILE"
+          ls -lh "$BACKUP_FILE"
+
+      - name: Upload backup to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 30
+
+      - name: Report status
+        run: echo "✅ Daily backup completed successfully"
