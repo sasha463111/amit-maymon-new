@@ -32,18 +32,34 @@
   - Remove unused imports
   - Clean up dead code
 
-## 4. Re-Push if Fixed
+## 4. Multi-Remote Push (CRITICAL)
+**⚠️ Vercel is connected to tdavidyan85/amit-maymon-new (tomer), NOT sasha463111 (origin)**
+
+After each commit, push to BOTH remotes:
+```bash
+git push origin main     # Backup to main repo (sasha463111)
+git push tomer main      # Primary for Vercel (tdavidyan85) ← VERCEL WATCHES THIS
+```
+
+Then verify Vercel picks up commit:
+- Check Vercel Deployments dashboard
+- If webhook fires → deployment auto-starts ✅
+- If not → trigger manual deployment with commit hash
+
+## 5. Re-Push if Fixed
 - Commit the fix: `fix: Auto-fixed [error type]`
-- Push to tomer main
+- Push to BOTH remotes (origin + tomer)
 - Verify build succeeds after re-push
 - Report final status
 
-## 5. Report to User
+## 6. Report to User
 **Success:** 
 ```
 ✅ Deployment Verified
 Commit: [hash]
 Build: SUCCESS
+Pushed to: origin (sasha463111) + tomer (tdavidyan85/Vercel)
+Vercel Status: [Deployment auto-triggered / Manual trigger needed]
 All systems go! 🚀
 ```
 
@@ -53,6 +69,16 @@ All systems go! 🚀
 Error: [exact error message]
 File: [path:line]
 Reason: [why auto-fix didn't work]
+Pushed to: origin + tomer (so commits are safe)
+Next steps: User manually fixes and re-pushes
+```
+
+**Critical Issue (GitHub/Vercel mismatch):**
+```
+⚠️ WARNING: Commits pushed to both remotes, but Vercel not picking up
+Commit: [hash] is on tomer/main (tdavidyan85)
+Vercel Status: Not detecting commit
+Recommendation: Manual deployment trigger or GitHub integration check
 ```
 
 ## Entry Point
