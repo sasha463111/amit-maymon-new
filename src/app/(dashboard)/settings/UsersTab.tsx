@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
 import { updateSystemUser, startViewAsUser, type SystemUser } from '@/app/actions/users';
 import { sendTestPushToSelf } from '@/app/actions/push';
-import { sendSummaryReport } from '@/app/actions/reports';
 import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
 
@@ -40,20 +39,6 @@ export function UsersTab({
   const [, startTransition] = useTransition();
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
   const [pushTestBusy, setPushTestBusy] = useState(false);
-  const [reportResult, setReportResult] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [reportBusy, setReportBusy] = useState(false);
-
-  async function handleSendReport() {
-    setReportBusy(true);
-    setReportResult(null);
-    const res = await sendSummaryReport();
-    if (res?.ok) {
-      setReportResult({ ok: true, msg: '✅ הדוח נשלח.' });
-    } else {
-      setReportResult({ ok: false, msg: `❌ ${res?.error ?? 'נכשל'}` });
-    }
-    setReportBusy(false);
-  }
 
   async function handleTestPush() {
     setPushTestBusy(true);
@@ -153,32 +138,6 @@ export function UsersTab({
             {pushTest && (
               <p className={`mt-2 text-xs rounded px-2 py-1 ${pushTest.ok ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'}`}>
                 {pushTest.msg}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Summary report — same "trigger + show result" pattern as the push test above */}
-      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-        <div className="flex items-start gap-3">
-          <UsersIcon size={18} className="text-emerald-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-emerald-900 mb-1">דוח סיכום יומי</p>
-            <p className="text-xs text-emerald-700 mb-3">
-              שולח דוח למייל עם כמות תיקים פתוחים, ממתינים לסגירה והפניות — לפי סניף.
-            </p>
-            <button
-              type="button"
-              onClick={() => void handleSendReport()}
-              disabled={reportBusy}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold disabled:opacity-50"
-            >
-              {reportBusy ? '⏳ שולח...' : 'שלח דוח עכשיו'}
-            </button>
-            {reportResult && (
-              <p className={`mt-2 text-xs rounded px-2 py-1 ${reportResult.ok ? 'bg-green-100 text-green-900' : 'bg-red-100 text-red-900'}`}>
-                {reportResult.msg}
               </p>
             )}
           </div>
