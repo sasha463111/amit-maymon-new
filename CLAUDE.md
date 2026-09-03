@@ -737,6 +737,23 @@ User explicitly authorized: "Agents can test as long as they don't destroy/touch
   ALTER TABLE profiles ADD COLUMN branch_ids uuid[];  -- ריק!
   ```
 
+**13. Autonomous Production Deployment (2026-09-03)** 🚀
+- **Standing Rule:** Deploy Validator Agent autonomously deploys to production after successful local build
+- **No manual approval needed** for each deployment (unless build fails)
+- **Flow:**
+  1. Claude makes code changes locally
+  2. Commits and pushes to both remotes (origin + tomer)
+  3. Deploy Validator Agent runs `npm run build`
+  4. If ✅ builds successfully → Auto-deploys to Vercel
+  5. If ❌ fails → Reports error, waits for fix
+- **Both remotes always:** Push to `origin` (sasha463111) AND `tomer` (tdavidyan85/Vercel watches this)
+- **Vercel configuration:** Connected to tdavidyan85/amit-maymon-new (tomer remote)
+- **Benefits:**
+  - Faster deployment cycle
+  - No human bottleneck
+  - Build failures caught immediately
+  - Agent reports all deployments for transparency
+
 ---
 
 ## 20. Email Setup (Resend) — 2026-09-01
