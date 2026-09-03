@@ -88,12 +88,18 @@ supabase/
 | `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; עכשיו יכולות לעבוד עם 2+ סניפים עם טאבים |
 | `CEO` | עמית | **כל הסניפים** | אישורים + גישה לכל + מחיקת תיקים + הגדרות; מקבל **כל** התראה במערכת כולל פעולות שהוא עצמו ביצע |
 | `PAINTER` | ארז | סניף שלו | צ'קליסט פחח (נכנס לעבודה, חלקים), בקשות תוספות, תוספות פחחות |
-| `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים | צפייה בלבד + יועצת פחח (מקבלת התראות) |
+| `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים | יועצת פחח: מעריכה אך עורכת workflow steps (עלאות קבצים, התקדמות שלבים), אך לא פרטי תיק (read-only on case details) |
 
 **CEO אינו מגביל branch** — `branch_ids = []` (ריק = כל הסניפים)
 **OFFICE staff עכשיו multi-branch** — `branch_ids` array (מיגרציה 046)
 
 **יועצי פחח** (`is_bodywork_advisor = true`): SERVICE_MANAGER + SERVICE_ADVISOR — מקבלים התראות על WASH ועל בקשות מהפחח.
+
+**SERVICE_ADVISOR Permissions (2026-09-04 clarified):**
+- ✅ Can edit: workflow steps (upload files, advance steps, QC assignments, enter-work checklist)
+- ❌ Cannot edit: case details (painter status, notes, customer info, insurance, etc.)
+- ✅ Can view: all case data, notifications
+- RLS enforced at database level via Server Actions
 
 ---
 
