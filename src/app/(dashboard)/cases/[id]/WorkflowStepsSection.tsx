@@ -113,6 +113,8 @@ export function WorkflowStepsSection({
   onDocumentsChange: Dispatch<SetStateAction<CaseDocument[]>>;
 }) {
   const router = useRouter();
+  // SERVICE_ADVISOR can edit workflow steps (upload files, advance steps)
+  // but cannot edit case details (handled in CaseDetailsSection with separate canEditDetails)
   const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR';
 
   // ?highlight=<step_key> — set on notification action_urls that point at a
