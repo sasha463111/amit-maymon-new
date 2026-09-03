@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
 import type { ClaimType, SubClaimType } from '@/types/database';
@@ -122,6 +123,18 @@ export function CreateCaseButton({
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
+
+    // Reload branches when insurance company changes
+    if (field === 'insurance_company') {
+      void (async () => {
+        const filtered = await getFilteredBranches(value);
+        setBranches(filtered);
+        // If current branch is no longer in filtered list, reset to first available
+        if (filtered.length > 0 && !filtered.find(b => b.id === form.branch_id)) {
+          setForm((f) => ({ ...f, branch_id: filtered[0].id }));
+        }
+      })();
+    }
   }
 
   // Cross-branch staff (sees_all_branches → no fixed branch) and CEOs have no

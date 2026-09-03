@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createReferral, uploadReferralDocument } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
 
@@ -46,6 +47,18 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
+
+    // Reload branches when insurance company changes
+    if (field === 'insurance_company') {
+      void (async () => {
+        const filtered = await getFilteredBranches(value);
+        setBranches(filtered);
+        // If current branch is no longer in filtered list, reset to first available
+        if (filtered.length > 0 && !filtered.find(b => b.id === form.branch_id)) {
+          setForm((f) => ({ ...f, branch_id: filtered[0].id }));
+        }
+      })();
+    }
   }
 
   async function handlePlateBlur() {
