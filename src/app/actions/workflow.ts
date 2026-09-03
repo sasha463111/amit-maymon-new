@@ -118,11 +118,11 @@ export async function createCase(input: CreateCaseInput) {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('id, role, branch_id')
+    .select('id, role, branch_ids')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { id: string; role: string; branch_id: string | null } | null;
+  const profile = profileData as { id: string; role: string; branch_ids: string[] } | null;
   const role = profile?.role as UserRole | undefined;
   if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') {
     return { error: 'אין הרשאה ליצירת תיק' };
