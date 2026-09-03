@@ -45,4 +45,4 @@ CREATE POLICY "CEO only - view activity log" ON activity_log
   );
 
 -- Insert into schema_migrations to track this migration
-INSERT INTO schema_migrations (version) VALUES ('20260902_audit_and_activity_logs') ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations (filename) VALUES ('20260902_audit_and_activity_logs.sql') ON CONFLICT (filename) DO NOTHING;
