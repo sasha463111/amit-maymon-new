@@ -956,3 +956,107 @@ Dashboard Layout
 **Related files:**
 - `src/app/(dashboard)/layout.tsx` — imports both components
 - `src/app/actions/reports.ts` — `sendSummaryReport()` + `requireCeo()` check
+
+---
+
+## 26. Standing Rules — מטא-עקרונות שלא משתנים
+
+Standing rules are permanent architectural decisions that shape how Claude Code works on this project. They are NOT feature requests or one-time fixes — they are policies that apply to every session, every deployment, and every codebase change.
+
+### 🔴 Standing Rule #1: Autonomous Production Deployment (2026-09-03)
+
+**Policy:** Deploy Validator Agent autonomously deploys to production after successful local build verification. **No manual approval needed.**
+
+**Flow:**
+1. Claude makes code changes locally
+2. Commits and pushes to BOTH remotes:
+   - `origin` (sasha463111/amit-maymon-new) — backup
+   - `tomer` (tdavidyan85/amit-maymon-new) — **Vercel watches this**
+3. Deploy Validator Agent automatically:
+   - Runs `npm run build` locally
+   - If ✅ **builds successfully** → Auto-deploys to Vercel production
+   - If ❌ **build fails** → Reports error + stops deployment
+4. Agent reports all deployments for transparency
+
+**Why this exists:** Manual approval after every build created a bottleneck that defeated the purpose of having autonomous agents.
+
+**Critical details:**
+- **Both remotes always:** `git push origin main && git push tomer main`
+- **Vercel configuration:** Connected to `tdavidyan85/amit-maymon-new`
+- **Build must pass locally** before production deployment
+- **No manual "Deploy to production" approval needed**
+
+**Related memories:**
+- `[[autonomous-deployment-rule]]` — Full standing rule details
+
+---
+
+### 🔴 Standing Rule #2: Documentation Sync on Every Production Push (2026-09-01)
+
+**Policy:** Every production push to `main` MUST update the project `.md` files in the SAME commit.
+
+**Files that must sync:**
+- `CLAUDE.md` — Technical architecture & implementation notes
+- `AGENTS.md` — Autonomous agent definitions & capabilities (if using agents)
+- `BUSINESS_PROCESS.md` — Process documentation (if it exists)
+- Individual agent documentation files in `.claude/agents/`
+
+**Why this exists:** Drift between code and documentation causes confusion. If the codebase changes, the documentation must change too, or developers (including Claude in future sessions) lose trust and navigate by guessing.
+
+**What counts as a "production change":**
+- Code logic changes that affect how features work
+- Schema migrations (database changes)
+- New features or removed features
+- Bug fixes that change observable behavior
+- Architecture refactors
+
+**What does NOT require doc updates:**
+- Comment-only changes
+- Linting/formatting fixes
+- Variable renames (internal refactors with no external impact)
+
+**Related memories:**
+- `[[amit-maymon-new-push-md-sync]]` — Full standing rule details
+
+---
+
+### 🔴 Standing Rule #3: Role-Based Notification Routing (2026-09-03)
+
+**Policy:** All notifications in the system MUST use `notifyRelevantParties()` router instead of `pushToOverseers()` or direct fan-out.
+
+**Core principle:** Each notification type maps to exactly one set of recipient roles, filtered by branch. No exceptions for "just this one" alert.
+
+**Routing table (canonical source: `NOTIFICATIONS_ROUTING.md`):**
+
+| Action Type | Primary Recipients | CEO Gets It? | Branch Filter |
+|---|---|---|---|
+| PENDING_APPROVAL | — | ✅ (audit) | All |
+| NEW_CASE | SERVICE_MANAGER | ✅ | Same |
+| ENTER_WORK | SERVICE_ADVISOR, PAINTER | ✅ | Same |
+| WASH_COMPLETE | SERVICE_ADVISOR | ✅ | Same |
+| READY_FOR_OFFICE | OFFICE | ✅ | Same |
+| CASE_CLOSED | OFFICE, SERVICE_MANAGER | ✅ | Same |
+| PAINTER_REQUEST | SERVICE_ADVISOR, PAINTER | ✅ | Same |
+| PARTS_ARRIVED | PAINTER | ✅ | Same |
+| APPROVAL_REJECTED | SERVICE_MANAGER | ✅ | Same |
+| APPROVAL_APPROVED | SERVICE_MANAGER | ✅ | Same |
+| EXTRA_CREATED | SERVICE_MANAGER | ✅ | Same |
+
+**Adding a new notification type:**
+1. Decide: What action triggers this? Who should see it?
+2. Add entry to routing table in `NOTIFICATIONS_ROUTING.md`
+3. Implement in `notifyRelevantParties()` function (`src/app/actions/push.ts`)
+4. Update trigger code to call `notifyRelevantParties(actionType, branchId, ...)`
+5. Test that wrong roles DON'T get it, right roles DO
+
+**Why this exists:**
+- **Before:** SERVICE_ADVISOR in Ashdod got notifications for Netivot cases (noise, irrelevant)
+- **After:** Only Netivot SERVICE_ADVISOR + CEO see it (focused, relevant)
+
+**Related files:**
+- `src/app/actions/push.ts` — `notifyRelevantParties()` function
+- `NOTIFICATIONS_ROUTING.md` — Complete routing architecture
+- `NOTIFICATIONS_AUDIT_COMPLETE.md` — Full audit of all 16 notification types
+
+**Related memories:**
+- `[[Notification-Routing-Architecture]]` — Design & rationale
