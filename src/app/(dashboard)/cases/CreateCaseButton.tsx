@@ -81,17 +81,25 @@ export function CreateCaseButton({
     branch_id: initialValues?.branch_id ?? branchIds?.[0] ?? '',
   });
   const [files, setFiles] = useState<File[]>([]);
-  const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
+  const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found' | 'error'>('idle');
+  const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
 
   async function handlePlateBlur() {
     const digits = form.plate_number.replace(/\D/g, '');
     if (!digits) {
       setVehicleLookupState('idle');
+      setVehicleLookupError(null);
       return;
     }
     setVehicleLookupState('loading');
+    setVehicleLookupError(null);
     const res = await lookupVehicleByPlate(form.plate_number);
-    if (res.error || (!res.vehicle_type && !res.vehicle_year)) {
+    if (res.error) {
+      setVehicleLookupState('error');
+      setVehicleLookupError(res.error);
+      return;
+    }
+    if (!res.vehicle_type && !res.vehicle_year) {
       setVehicleLookupState('not-found');
       return;
     }
@@ -101,6 +109,10 @@ export function CreateCaseButton({
       vehicle_year: res.vehicle_year ? String(res.vehicle_year) : f.vehicle_year,
     }));
     setVehicleLookupState('found');
+  }
+
+  async function handleRetryLookup() {
+    await handlePlateBlur();
   }
 
   // Calculate vehicle age from year
@@ -323,6 +335,18 @@ export function CreateCaseButton({
                       )}
                       {vehicleLookupState === 'not-found' && (
                         <span className="mr-2 text-xs font-normal text-amber-600">לא נמצא ברשימת משרד התחבורה</span>
+                      )}
+                      {vehicleLookupState === 'error' && (
+                        <span className="mr-2 inline-flex items-center gap-1 text-xs font-normal text-red-600">
+                          ⚠️ {vehicleLookupError}
+                          <button
+                            type="button"
+                            onClick={handleRetryLookup}
+                            className="ml-1 text-xs underline hover:text-red-700 font-medium"
+                          >
+                            נסה שוב
+                          </button>
+                        </span>
                       )}
                     </label>
                     <input
