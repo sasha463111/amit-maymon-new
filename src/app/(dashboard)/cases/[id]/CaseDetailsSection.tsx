@@ -202,8 +202,9 @@ export function CaseDetailsSection({
   initialPainterStatusOtherText: string | null;
   initialSubClaimTypeOtherText: string | null;
 }) {
-  const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR';
-  const canEditDetails = role !== 'PAINTER' && role !== null;
+  // SERVICE_ADVISOR is read-only (view-only access)
+  const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO';
+  const canEditDetails = role === 'SERVICE_MANAGER' || role === 'CEO';
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
