@@ -145,7 +145,11 @@ async function buildReportHtml(supabase: Awaited<ReturnType<typeof createClient>
   return html;
 }
 
-export async function sendSummaryReport() {
+export async function sendSummaryReport(params?: {
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+}) {
   const supabase = await createClient();
   const auth = await requireCeo(supabase);
   if ('error' in auth) return { error: auth.error };
@@ -153,14 +157,26 @@ export async function sendSummaryReport() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { error: 'RESEND_API_KEY לא מוגדר בשרת' };
 
+  // Get current user's email for default BCC
+  const { data: { user } } = await supabase.auth.getUser();
+  const userEmail = user?.email;
+
   const html = await buildReportHtml(supabase);
   const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+
+  // Use provided recipients, or fall back to defaults
+  const toRecipients = params?.to && params.to.length > 0 ? params.to : ['Amitm@toyota-tehila.co.il'];
+  const ccRecipients = params?.cc && params.cc.length > 0 ? params.cc : [];
+  const bccRecipients = params?.bcc && params.bcc.length > 0
+    ? params.bcc
+    : (userEmail ? [userEmail] : []);
 
   // Ensure proper UTF-8 encoding by using TextEncoder
   const payload = {
     from: 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>',
-    to: ['Amitm@toyota-tehila.co.il'],
-    bcc: ['tomerdavidyan@hotmail.com'],
+    to: toRecipients,
+    cc: ccRecipients.length > 0 ? ccRecipients : undefined,
+    bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
     subject: `סיכום יומי — תהילה ניהול מוסך — ${dateStr}`,
     html,
   };

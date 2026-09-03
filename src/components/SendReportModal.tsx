@@ -24,24 +24,40 @@ export function SendReportModal({ isOpen, onClose, userEmail, userName }: SendRe
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [bcc, setBcc] = useState('');
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string; role: string; email?: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      listSystemUsers().then((res) => {
-        setUsers((res.data || []) as any[]);
-      });
+      listSystemUsers()
+        .then((res) => {
+          if (res.data) {
+            setUsers(res.data);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load users:', err);
+          setResult({ ok: false, msg: '❌ שגיאה בטעינת רשימת המשתמשים' });
+        });
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   async function handleSend() {
+    if (toRecipients.length === 0) {
+      setResult({ ok: false, msg: '❌ יש לבחור לפחות נמען אחד' });
+      return;
+    }
+
     setLoading(true);
     setResult(null);
-    const res = await sendSummaryReport();
+    const res = await sendSummaryReport({
+      to: toRecipients,
+      cc: ccRecipients.length > 0 ? ccRecipients : undefined,
+      bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
+    });
     setLoading(false);
 
     if (res?.ok) {
@@ -58,17 +74,13 @@ export function SendReportModal({ isOpen, onClose, userEmail, userName }: SendRe
     }
   }
 
-  const addToField = (email: string, field: 'to' | 'cc' | 'bcc') => {
+  const addToField = (recipient: string, field: 'to' | 'cc' | 'bcc') => {
     const setter = field === 'to' ? setTo : field === 'cc' ? setCc : setBcc;
     const current = field === 'to' ? to : field === 'cc' ? cc : bcc;
 
-    // Don't add if already in field, and don't add Tomer to bcc (already there)
-    if (field === 'bcc' && email === userEmail) {
-      return; // Tomer already in bcc, can't add
-    }
-
-    if (!current.includes(email)) {
-      setter(current ? `${current}, ${email}` : email);
+    // Don't add if already in field
+    if (!current.includes(recipient)) {
+      setter(current ? `${current}, ${recipient}` : recipient);
     }
   };
 
