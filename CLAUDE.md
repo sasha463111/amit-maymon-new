@@ -25,7 +25,7 @@
 | **TailwindCSS** | 3.x | Styling |
 | **web-push** | — | Push notifications (VAPID) |
 | **next-pwa** | — | PWA support |
-| **Vercel** | — | Hosting, region: `iad1` (ראה סעיף 17 — הועבר מ-fra1, אל תחזיר) |
+| **Vercel** | — | Hosting, region: `iad1` |
 
 **Supabase Project URL:** `https://yhanmyvolpeiuxspcxmk.supabase.co`
 
@@ -39,19 +39,14 @@ src/
     (dashboard)/          # כל הדפים המוגנים (אחרי login)
       layout.tsx          # Header + navigation per role
       cases/               # רשימת תיקים + יצירת תיק
-        [id]/              # פרטי תיק (CaseDetailClientV2.tsx)
-          PainterRequestsSection.tsx  # בקשות פחח מוצגות בתוך התיק
       approvals/           # אישורי CEO
-      closure/             # סגירת תיקים (OFFICE + CEO), טאבים לפי סניף
-        [id]/
-      extras/              # תוספות פחחות — /new (PAINTER יוצר), /mine (הרשימה שלו), עמוד ראשי (SERVICE_MANAGER/CEO מנהלים, עם טאבים לפי סטטוס)
-      referrals/           # הפניות טרום-תיק (OFFICE + CEO)
-        [id]/
+      closure/             # סגירת תיקים
+      extras/              # תוספות פחחות
+      referrals/           # הפניות טרום-תיק
       notifications/       # התראות
-      painters/            # לוח פחח (CEO + PAINTER + SERVICE_MANAGER)
-        [id]/              # עמוד פחח נפרד לתיק
+      painters/            # לוח פחח
       settings/            # הגדרות (CEO בלבד)
-      go/[id]/             # ניתוב role-neutral להתראות (ראה סעיף 11)
+      go/[id]/             # ניתוב role-neutral להתראות
     actions/               # Server Actions
       workflow.ts          # יצירת תיק, השלמת שלב, מחיקה
       approvals.ts         # אישור/דחיית CEO
@@ -62,26 +57,25 @@ src/
       painter.ts           # צ'קליסט פחח + בקשות
       referrals.ts         # הפניות: CRUD, יומן מעקב, תזכורות
       settings.ts          # הגדרות הרשאות + workflow + יועצי פחח
-      push.ts              # Web Push: sendPushToUser, pushToOverseers
-      vehicleLookup.ts     # שליפת סוג/שנת רכב ממשרד התחבורה לפי לוחית
-      reports.ts           # דוח סיכום יומי (Resend), CEO-only
+      push.ts              # Web Push
+      vehicleLookup.ts     # שליפת סוג/שנת רכב
+      reports.ts           # דוח סיכום יומי
       auth.ts              # login/logout
     api/cron/
-      enter-work-reminders/route.ts  # 4 סבבי תזכורות — ראה סעיף 11
-    login/
+      enter-work-reminders/route.ts  # 4 סבבי תזכורות אוטומטיות
   lib/
     supabase/
       client.ts            # Browser client
       server.ts             # Server client (cookies)
-    recipients.ts           # branchRecipients() — helper לשליפת נמענים בסניף
+    recipients.ts           # branchRecipients() helper
   types/
     database.ts             # כל ה-types, enums, interfaces
   db/
-    migrations/             # SQL migrations 001–046 — היסטוריה קפואה (ראה סעיף 16). מיגרציות חדשות: supabase/migrations/
+    migrations/             # SQL migrations 001–046 (היסטוריה קפואה)
 supabase/
-  config.toml              # הגדרות ה-Supabase CLI (major_version=17, ports 54321-54324)
-  migrations/              # מיגרציות CLI עם timestamp — baseline: 20260901180001_remote_schema.sql (ראה סעיף 22)
-  _archive/                # remote_history_pre_rebaseline_2026-09-01.sql — 20 רשומות ההיסטוריה מלפני ה-re-baseline
+  config.toml              # הגדרות Supabase CLI
+  migrations/              # מיגרציות CLI עם timestamp
+  _archive/                # remote_history_pre_rebaseline
 ```
 
 ---
@@ -90,16 +84,16 @@ supabase/
 
 | Role | שם | גישה | מה הם עושים |
 |------|----|------|-------------|
-| `SERVICE_MANAGER` | ערן | סניף שלו (array) | מנהל workflow מקצועי: FixCar, אומדן, שמאי, כניסה לעבודה, QC, שטיפה; גם עונה על בקשות פחח (בתיק וב-`/painters/[id]`) |
-| `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; **עכשיו יכולות לעבוד עם שני סניפים (נתיבות + אשקלון) — טאבים בכל דף רשימה** |
-| `CEO` | עמית | **כל הסניפים** | אישורים + גישה לכל + מחיקת תיקים + הגדרות; מקבל **כל** התראה במערכת כולל על פעולות שהוא עצמו ביצע (מיגרציה 041 — עובד כפיד מעקב מלא) |
+| `SERVICE_MANAGER` | ערן | סניף שלו (array) | מנהל workflow מקצועי: FixCar, אומדן, שמאי, כניסה לעבודה, QC, שטיפה; עונה על בקשות פחח |
+| `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; עכשיו יכולות לעבוד עם 2+ סניפים עם טאבים |
+| `CEO` | עמית | **כל הסניפים** | אישורים + גישה לכל + מחיקת תיקים + הגדרות; מקבל **כל** התראה במערכת כולל פעולות שהוא עצמו ביצע |
 | `PAINTER` | ארז | סניף שלו | צ'קליסט פחח (נכנס לעבודה, חלקים), בקשות תוספות, תוספות פחחות |
-| `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים אם `sees_all_branches=true` | צפייה בלבד + יועצת פחח (מקבלת התראות) |
+| `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים | צפייה בלבד + יועצת פחח (מקבלת התראות) |
 
-**CEO אינו מגביל branch** — `branch_ids = []` בפרופיל שלו (ריק = כל הסניפים).
-**OFFICE staff עכשיו multi-branch** — `branch_ids` array (מיגרציה 046: `branch_id` → `branch_ids[]`)
+**CEO אינו מגביל branch** — `branch_ids = []` (ריק = כל הסניפים)
+**OFFICE staff עכשיו multi-branch** — `branch_ids` array (מיגרציה 046)
 
-**יועצי פחח (`is_bodywork_advisor = true`):** SERVICE_MANAGER + SERVICE_ADVISOR — מקבלים התראות על WASH ועל בקשות מהפחח, ומוצגים ברשימה בבקרת איכות.
+**יועצי פחח** (`is_bodywork_advisor = true`): SERVICE_MANAGER + SERVICE_ADVISOR — מקבלים התראות על WASH ועל בקשות מהפחח.
 
 ---
 
@@ -118,21 +112,21 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 |---|----------|---------|-------|
 | 0 | `OPEN_CASE` | פתיחת תיק | אוטומטי DONE בפתיחה |
 | 1 | `FIXCAR_PHOTOS` | צילום FixCar | **חובה:** fixcar_link |
-| 2 | `WHEELS_CHECK` | טפסי גלגלים | SKIPPED אוטומטית אם גיל רכב ≤ 2 שנים; קישור או קובץ; **אין** אישור CEO חוסם (הוסר 044) — רק התראת FYI לעמית בסיום |
+| 2 | `WHEELS_CHECK` | טפסי גלגלים | SKIPPED אוטומטית אם גיל רכב ≤ 2 שנים |
 | 3 | `PREP_ESTIMATE` | אומדן | אופציה להעלות קובץ אומדן |
 | 4 | `SEND_TO_APPRAISER` | שליחה לשמאי | — |
 | 5 | `WAIT_APPRAISER_APPROVAL` | המתנה לאישור שמאי | `requires_ceo_approval = true` |
-| 6 | `ENTER_WORK` | כניסה לעבודה | אזהרה אם `parts_status ≠ AVAILABLE`; תזכורת אוטומטית אם לא סומן כנכנס לעבודה (ראה סעיף 11) |
+| 6 | `ENTER_WORK` | כניסה לעבודה | אזהרה אם `parts_status ≠ AVAILABLE` |
 | 7 | `ISSUE_CATALOG_NUMBERS` | ניפוק מק"טים | — |
 | 8 | `PARTS_DISCOUNTS` | הנחות חלקים ועבודות | — |
-| 9 | `QUALITY_CONTROL` | בקרת איכות | popup לבחירת יועץ מ-`bodywork_advisors` |
-| 10 | `WASH` | שטיפה | בסיום → התראה ליועצי פחח |
+| 9 | `QUALITY_CONTROL` | בקרת איכות | popup לבחירת יועץ |
+| 10 | `WASH` | שטיפה | התראה ליועצי פחח בסיום |
 | 11 | `SEND_COMPLETION_PHOTOS` | שליחת תמונות לשמאי גמר | — |
-| 12 | `READY_FOR_OFFICE` | מוכן למשרד | בסיום → התראה ל-OFFICE בסניף + פתיחת closure workflow אוטומטית; תזכורת אוטומטית אם לא נפתח תוך שעה (ראה סעיף 11) |
+| 12 | `READY_FOR_OFFICE` | מוכן למשרד | התראה ל-OFFICE + פתיחת closure workflow אוטומטית |
 
 **חסימות:**
 - `READY_FOR_OFFICE`: חסום אם יש extras IN_TREATMENT, או אישורי CEO חסרים/נדחו
-- `CLOSE_CASE` (שלב הסגירה): **אין** חסימת אישור נפרדת משלו (הוסרה ב-Session 6) — רק בדיקה משותפת שאין extras ב-IN_TREATMENT. אישור `ESTIMATE_AND_DETAILS` כבר נדרש קודם לכן, ב-`SEND_COMPLETION_PHOTOS`/`READY_FOR_OFFICE` שב-workflow המקצועי — לא כאן
+- `CLOSE_CASE`: רק בדיקה משותפת שאין extras ב-IN_TREATMENT
 
 ---
 
@@ -147,13 +141,25 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 
 **פותח אוטומטית** כשמשלימים `READY_FOR_OFFICE` ב-workflow המקצועי.
 
-ה-`CASE_CLOSURE` approval בוטל. אישור CEO היחיד הוא `ESTIMATE_AND_DETAILS` (אמצע ה-workflow המקצועי). OFFICE יכול לסגור תיק ישירות ללא אישור נוסף.
+---
 
-**עמוד `/closure`** מציג רק תיקים עם `deleted_at IS NULL` ו-workflow מקצועי COMPLETED; ל-CEO יש טאבים לסינון לפי סניף (הכל/נתיבות/אשקלון), אותו קומפוננט (`SegmentedControl`) כמו ב-`/cases`.
+## 8. עמודים לפי Role
+
+| Role | עמודים |
+|------|--------|
+| SERVICE_MANAGER | `/cases`, `/cases/[id]`, `/painters/[id]` (עונה לבקשות פחח), `/extras`, `/notifications` |
+| OFFICE | `/cases`, `/cases/[id]`, `/closure`, `/referrals`, `/notifications` |
+| CEO | **הכל** + `/approvals`, `/painters`, `/painters/[id]`, `/referrals`, `/settings` |
+| PAINTER | `/painters` (רשימה), `/painters/[id]` (תיק פחח), `/extras/new`, `/extras/mine` |
+| SERVICE_ADVISOR | `/cases` (read-only), `/notifications` |
+
+כל התראה "לפי תיק" מנותבת דרך `/go/[caseId]` שמפנה כל role לעמוד הנכון לו.
 
 ---
 
-## 8. DB Schema — טבלאות עיקריות
+<important if="you need to understand or modify database schema, tables, or migrations">
+
+## 9. DB Schema — טבלאות עיקריות
 
 ### `cases` — תיק תיקון
 | עמודה | סוג | הערות |
@@ -169,12 +175,12 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `insurance_company` | text | |
 | `appraiser_name` | text | |
 | `event_date` | date | |
-| `sub_claim_type` | enum | POLICY/THIRD_PARTY/MILITARY/OTHER (037 הוסיפה MILITARY/OTHER) |
+| `sub_claim_type` | enum | POLICY/THIRD_PARTY/MILITARY/OTHER |
 | `insurance_type` | enum | COMPREHENSIVE/THIRD_PARTY/PRIVATE/OTHER |
 | `claim_type` | enum | PRIVATE/ACCIDENT/FLOOD |
 | `fixcar_link` | text | |
 | `wheels_check_link` | text | |
-| `painter_status` | text | IN_WORK/WAITING_PARTS/PARTS_ARRIVED/READY_FOR_RELEASE/OTHER (034 הוסיפה OTHER + `painter_status_other_text`) |
+| `painter_status` | text | IN_WORK/WAITING_PARTS/PARTS_ARRIVED/READY_FOR_RELEASE/OTHER |
 | `parts_ordered` | bool | |
 | `parts_arrived` | bool | |
 | `qc_assignee` | text | שם יועץ שביצע QC |
@@ -186,10 +192,10 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `treatment_finished_at` | timestamptz | מתי הושלם workflow מקצועי |
 | `closed_at` | timestamptz | מתי נסגר התיק |
 | `created_by` | uuid FK→profiles | |
-| `deleted_at` / `deleted_by` | timestamptz / uuid | **Soft delete** — null = פעיל. **כל שאילתת SELECT על cases חייבת לסנן `deleted_at IS NULL`** — נשכח בעבר ב-`/closure` וב-`/extras/new`, תוקן |
+| `deleted_at` / `deleted_by` | timestamptz / uuid | **Soft delete** — כל שאילתת SELECT על cases חייבת לסנן `deleted_at IS NULL` |
 | `enter_work_checklist_state` | jsonb | items שסומנו ב-ENTER_WORK |
 | `catalog_numbers_assignee` / `parts_discounts_assignee` / `completion_photos_assignee` | text | מי ביצע כל שלב |
-| `painter_reminder_sent_at` / `office_reminder_sent_at` | timestamptz | (035/038) שער חד-פעמי לתזכורות האוטומטיות — ראה סעיף 11 |
+| `painter_reminder_sent_at` / `office_reminder_sent_at` | timestamptz | שער חד-פעמי לתזכורות אוטומטיות |
 
 ### `profiles` — משתמשים
 | עמודה | סוג | הערות |
@@ -197,14 +203,14 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `id` | uuid = auth.uid() | |
 | `full_name` | text | |
 | `role` | enum user_role | |
-| `branch_ids` | uuid[] | **Multi-branch support (046):** array of branch UUIDs. Empty [] = CEO (כל הסניפים). SERVICE_MANAGER/OFFICE/PAINTER: 1+ סניף. OFFICE staff עכשיו יכולות להיות 2+ סניפים (אילנה, אביה עם נתיבות + אשקלון) |
+| `branch_ids` | uuid[] | **Multi-branch (046):** array של branch UUIDs. Empty [] = CEO (כל הסניפים). OFFICE staff יכולות להיות 2+ סניפים |
 | `is_active` | bool | |
 | `is_bodywork_advisor` | bool | האם מקבל התראות פחח + ברשימת QC |
-| `sees_all_branches` | bool | (028) לרוב ל-SERVICE_ADVISOR — רואה את כל הסניפים בלי להיות CEO |
+| `sees_all_branches` | bool | לרוב ל-SERVICE_ADVISOR — רואה כל הסניפים בלי להיות CEO |
 
 ### `cars`
 - `license_plate`, `make`, `model`, `year`, `vin`, `vehicle_type`, `first_registration_date`
-- ⚠️ **פתיחת תיק ממלאת רק `vehicle_type`** (תוצאת שליפת משרד התחבורה, למשל "טויוטה קורולה") — `make`/`model` נשארים כמעט תמיד ריקים בפועל, כי אין להם שדה נפרד בטופס יצירת תיק. כרטיס/כרטיסייה שמציג פרטי רכב (`PaintersBoard.tsx`, `ClosureCasesGrid.tsx`) צריך להעדיף `vehicle_type` ולהשתמש ב-`make`+`model` רק כ-fallback — נמצא ותוקן כ-bug אמיתי (2026-08-31): הכרטיסים הציגו כלום כמעט תמיד.
+- ⚠️ **פתיחת תיק ממלאת רק `vehicle_type`** — `make`/`model` נשארים כמעט תמיד ריקים בפועל
 
 ### `case_workflow_runs`
 - `case_id`, `workflow_type` (PROFESSIONAL/CLOSURE), `status` (ACTIVE/COMPLETED)
@@ -213,41 +219,35 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `run_id`, `step_key`, `state` (PENDING/ACTIVE/DONE/SKIPPED), `order_index`, `completed_by`, `completed_at`
 
 ### `ceo_approvals`
-- `case_id`, `approval_type` (ESTIMATE_AND_DETAILS/WHEELS_CHECK/CASE_CLOSURE — enum עדיין כולל את כל השלושה, אבל **רק ESTIMATE_AND_DETAILS עדיין בשימוש בפועל**: CASE_CLOSURE הוסר ב-Session 6, WHEELS_CHECK הוסר במיגרציה 044 — עמית ביקש שלא יידרש אישור, רק התראה), `status` (PENDING/APPROVED/REJECTED), `rejection_note`
+- `case_id`, `approval_type` (ESTIMATE_AND_DETAILS/WHEELS_CHECK/CASE_CLOSURE), `status` (PENDING/APPROVED/REJECTED), `rejection_note`
 - unique index על `(case_id, approval_type)` (020)
 
 ### `bodywork_extras`
 - `case_id`, `description`, `image_path`, `status` (IN_TREATMENT/REJECTED/DONE), `created_by`
 
 ### `notifications`
-- `user_id`, `case_id` (nullable — ריק להתראות שלא קשורות לתיק, כמו תזכורת הפניה), `type`, `title`, `body`, `read`, `triggered_by`, `action_url`
-- **fan-out (031/032/041):** כל INSERT מפעיל טריגר `fanout_notifications_to_ceos()` שמשכפל את ההתראה לכל CEO פעיל ולכל SERVICE_ADVISOR עם `sees_all_branches=true`. עד מיגרציה 041 הפועל (`triggered_by`) היה מוחרג מהעותק שלו; **מ-041 CEO לא מוחרג** — רואה גם התראות על פעולות שהוא עצמו ביצע. יועצים חוצי-סניף עדיין מוחרגים מפעולות שהם עצמם ביצעו. dedup: 10 שניות לפי `(user_id, case_id, type, title, triggered_by)`.
-- **push מקביל:** `pushToOverseers()` (`push.ts`) שולח web push לאותה קבוצה, עם אותו יוצא-מן-הכלל ל-CEO.
-- **action_url + ניתוב:** התראות "אישית" (`/approvals?highlight=`) הולכות ישר. התראות "לפי תיק" (`/cases/...` או `/painters/...`) עוברות דרך `/go/[caseId]?<querystring>` (`src/app/go/[id]/page.tsx`), שמנתב כל role לעמוד שהוא כן יכול לפתוח (PAINTER → `/painters/[id]`, כולם אחרים → `/cases/[id]`) ומעביר הלאה כל query string (למשל `?highlight=<painter_request id>`). **PainterRequestsSection** (בתוך `/cases/[id]`) קולט את אותו `?highlight=` בדיוק כמו `PainterCaseClient` (בתוך `/painters/[id]`) — שניהם גוללים ומדגישים את הבקשה הספציפית.
+- `user_id`, `case_id` (nullable), `type`, `title`, `body`, `read`, `triggered_by`, `action_url`
+- **fan-out (031/032/041):** כל INSERT מפעיל טריגר `fanout_notifications_to_ceos()` שמשכפל להתראה לכל CEO ולכל SERVICE_ADVISOR עם `sees_all_branches=true`
 
 ### `push_subscriptions` (021/022)
-- `user_id`, `endpoint`, `p256dh`, `auth`, `user_agent`, `last_used_at` — Web Push API subscriptions. RLS: `user_id = auth.uid() OR CEO`; קריאה עם service-role client כשהפועל אינו הנמען (ראה תיעוד ב-`push.ts`).
+- `user_id`, `endpoint`, `p256dh`, `auth`, `user_agent`, `last_used_at` — Web Push API subscriptions
+- RLS: `user_id = auth.uid() OR CEO`
 
 ### `audit_events`
 - `entity_type` (CASE/WORKFLOW_STEP/APPROVAL/EXTRA), `entity_id`, `action`, `user_id`, `payload`
 
 ### `painter_requests`
-- `case_id`, `description`, `request_type` (WORK/PARTS), `status` (PENDING/IN_PROGRESS/DONE/REJECTED — REJECTED נוסף ב-040), `response_note` (040 — הערה חופשית שמנהל השירות מקליד כשהוא סוגר בקשה), `created_by`, `reminder_sent_at` (038 — שער חד-פעמי לתזכורת אסקלציה)
-- **מוצג בשני מקומות:** `/painters/[id]` (לוח הפחח) וגם ישירות בתוך `/cases/[id]` (`PainterRequestsSection.tsx`) — שם מנהל שירות/CEO יכולים ללחוץ על בקשה פתוחה ולסמן בוצע/נדחה עם הערה, בלי לצאת מהתיק.
+- `case_id`, `description`, `request_type` (WORK/PARTS), `status` (PENDING/IN_PROGRESS/DONE/REJECTED), `response_note`, `created_by`, `reminder_sent_at`
 
 ### `painter_request_images`
 - `request_id`, `image_path` (bucket: `painter-images`)
 
 ### `referrals` (039) — הפניות טרום-תיק
-- `branch_id`, `customer_name`, `insurance_company`, `claim_type`, `vehicle_type`, `vehicle_year`, `plate_number`, `appraiser_name`, `phone`, `status_note` (תצוגה מקדימה — מסונכרן אוטומטית מהעדכון האחרון ביומן, **לא** ניתן לעריכה ישירה יותר, ראה 045), `status` (ACTIVE/CONVERTED/CANCELLED), `case_id` (מתמלא כשהופכת לתיק), `current_status_tag` (042 — דנורמליזציה של התגית האחרונה מהיומן, לצביעה ברשימה בלי שאילתה נוספת), `follow_up_date` / `follow_up_reminder_sent_at` (043 — תאריך תזכורת + שער חד-פעמי)
-- **צביעה בצהוב ב-`/referrals`:** referral עם `status='ACTIVE'` וגם `current_status_tag='AWAITING_PAPERWORK'`
-- **מספר רכב** מפעיל את אותה שליפה ממשרד התחבורה (`vehicleLookup.ts`) שקיימת בפתיחת תיק רגילה — ממלא סוג/שנת רכב אוטומטית
-- **טאבים לפי סניף** ב-`/referrals` (הכל/נתיבות/אשקלון) — אותו `SegmentedControl`/`ReferralsGrid.tsx` כמו ב-`/cases` וב-`/closure`
+- `branch_id`, `customer_name`, `insurance_company`, `claim_type`, `vehicle_type`, `vehicle_year`, `plate_number`, `appraiser_name`, `phone`
+- `status_note`, `status` (ACTIVE/CONVERTED/CANCELLED), `case_id`, `current_status_tag`, `follow_up_date`, `follow_up_reminder_sent_at`
 
 ### `referral_status_updates` (042) — יומן מעקב הפניה
-- `referral_id`, `status_tag` (AWAITING_REPLACEMENT_CAR/AWAITING_PAPERWORK/AWAITING_SCHEDULING/OTHER, nullable), `note`, `created_by`, `created_at`
-- שורה חדשה בכל עדכון — **לא** דורס את הקודם, בניגוד לאיך ש-`status_note` עבד פעם. תגית (אם נבחרה) וגם ההערה (אם הוזנה) מסונכרנות ל-`referrals.current_status_tag`/`status_note`.
-- **תיקון bug אמיתי (045):** עד הסשן הזה הייתה תיבת טקסט נפרדת בעמוד הפנייה לעריכת `status_note` ישירות, במקביל ליומן — עמית מילא אותה וציפה שהצביעה תעבוד, אבל הצביעה תלויה רק ב-`current_status_tag` שרק היומן מעדכן. התיבה הנפרדת הוסרה; כל עדכון סטטוס עובר עכשיו רק דרך היומן (`addReferralStatusUpdate`), וגם `createReferral`'s הערה הראשונית הופכת לשורה ראשונה ביומן. מיגרציה 045 backfill-ה הערות status_note קיימות שלא היה להן שורת יומן.
+- `referral_id`, `status_tag` (AWAITING_REPLACEMENT_CAR/AWAITING_PAPERWORK/AWAITING_SCHEDULING/OTHER), `note`, `created_by`, `created_at`
 
 ### `referral_documents`
 - `referral_id`, `file_name`, `file_path` (bucket: `referral-documents`), `file_size`, `mime_type`, `uploaded_by`
@@ -268,11 +268,11 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `name` — NETIVOT / ASHKELON
 
 ### `schema_migrations` (036)
-- `filename`, `applied_at` — מעקב פורמלי אחרי אילו מיגרציות רצו בפרודקשן. **כל מיגרציה חדשה חייבת לסיים ב-`INSERT INTO schema_migrations (filename) VALUES (...) ON CONFLICT (filename) DO NOTHING`.**
+- `filename`, `applied_at` — מעקב פורמלי אחרי אילו מיגרציות רצו בפרודקשן
 
 ---
 
-## 9. Storage Buckets
+## 10. Storage Buckets
 
 | Bucket | שימוש | גישה |
 |--------|--------|------|
@@ -280,15 +280,19 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `painter-images` | תמונות בקשות פחח | Private, authenticated |
 | `referral-documents` | מסמכים מצורפים להפניה | Private, authenticated, RLS לפי סניף ותפקיד (039) |
 
+</important>
+
 ---
 
-## 10. Server Actions — מפה מלאה
+<important if="you need to call or modify a Server Action">
+
+## 11. Server Actions — מפה מלאה
 
 ### `workflow.ts`
-- `createCase(input)` — יוצר car + case + workflow run + steps; גם מתריע לפחחי הסניף עם קישור `/go/[id]`
-- `completeActiveStep(caseId, stepId)` — מסמן שלב DONE, מפעיל הבא, לוגיקה מיוחדת לכל שלב
+- `createCase(input)` — יוצר car + case + workflow run + steps
+- `completeActiveStep(caseId, stepId)` — מסמן שלב DONE, מפעיל הבא
 - `returnToEstimate(caseId)` — מחזיר ל-PREP_ESTIMATE
-- `deleteCase(caseId)` — **soft delete** (deleted_at, CEO בלבד)
+- `deleteCase(caseId)` — **soft delete** (CEO בלבד)
 - `restoreCase(caseId)` — שחזור תיק מחוק (CEO בלבד)
 
 ### `approvals.ts`
@@ -301,7 +305,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 ### `documents.ts`
 - `uploadCaseDocument(formData)` — העלאה ל-storage + DB record
 - `deleteCaseDocument(id)` — מחיקה
-- `getSignedFileUrls(bucket, paths)` — signed URLs מרובים (נעשה גם reuse עבור referral-documents)
+- `getSignedFileUrls(bucket, paths)` — signed URLs מרובים
 
 ### `extras.ts`
 - `createExtra(input)` — יצירת תוספת פחח עם upload תמונה
@@ -309,16 +313,16 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 
 ### `painter.ts`
 - `updatePainterChecklist(caseId, updates)` — נכנס לעבודה / התקבל חלקים
-- `createPainterRequest(caseId, desc, type, images?)` — בקשת תוספת + התראה ליועצים, `action_url` עם `?highlight=<id>`
+- `createPainterRequest(caseId, desc, type, images?)` — בקשת תוספת + התראה
 - `getPainterRequests(caseId)`
-- `updatePainterRequestStatus(id, status, note?)` — סטטוס כולל `REJECTED`; `note` נשמר ב-`response_note` ומופיע בהתראה חזרה לפחח
+- `updatePainterRequestStatus(id, status, note?)` — סטטוס כולל `REJECTED`
 
 ### `referrals.ts`
-- `createReferral(input)` / `updateReferral(id, updates)` / `cancelReferral(id)` — CRUD בסיסי, OFFICE+CEO בלבד
-- `convertReferral(referralId, caseId)` — נקרא אחרי יצירת תיק מההפניה, מקשר ומעדכן status ל-CONVERTED
-- `addReferralStatusUpdate(id, statusTag, note)` — מוסיף שורה ליומן המעקב, מסנכרן `current_status_tag`
+- `createReferral(input)` / `updateReferral(id, updates)` / `cancelReferral(id)` — CRUD בסיסי
+- `convertReferral(referralId, caseId)` — נקרא אחרי יצירת תיק מההפניה
+- `addReferralStatusUpdate(id, statusTag, note)` — מוסיף שורה ליומן המעקב
 - `getReferralStatusUpdates(id)` — שולף את היומן
-- `setReferralFollowUpDate(id, date)` — קובע/מנקה תאריך תזכורת, מאפס את שער השליחה
+- `setReferralFollowUpDate(id, date)` — קובע/מנקה תאריך תזכורת
 - `uploadReferralDocument(formData)` / `deleteReferralDocument(id)`
 
 ### `settings.ts`
@@ -331,65 +335,74 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 
 ### `push.ts`
 - `savePushSubscription(sub)` / `removePushSubscription(endpoint)` — ניהול Push API subscription
-- `sendPushToUser(userId, payload)` — שולח web push לכל ה-subscriptions של משתמש בודד
-- `pushToOverseers(payload, excludeUserId?)` — שולח לכל CEO + SERVICE_ADVISOR; **CEO תמיד מקבל, גם אם `excludeUserId` הוא הוא עצמו** (מיגרציה 041)
-- `sendTestPushToSelf()` — כלי אבחון, נגיש מ-`/settings`
+- `sendPushToUser(userId, payload)` — שולח web push
+- `pushToOverseers(payload, excludeUserId?)` — שולח לכל CEO + SERVICE_ADVISOR
+- `sendTestPushToSelf()` — כלי אבחון
 
 ### `vehicleLookup.ts`
-- `lookupVehicleByPlate(plate)` — שולף סוג/שנת רכב מ-data.gov.il (מאגר משרד התחבורה); בשימוש גם ב-`CreateCaseButton` וגם בהפניות
+- `lookupVehicleByPlate(plate)` — שולף סוג/שנת רכב מ-data.gov.il
 
 ### `reports.ts`
-- `sendSummaryReport()` — דוח סיכום יומי דרך Resend, CEO-only, נשלח גם ידנית (כפתור ב-`/settings`) וגם דרך cron
+- `sendSummaryReport()` — דוח סיכום יומי דרך Resend, CEO-only
+
+</important>
 
 ---
 
-## 11. לוגיקת אירועים אוטומטיים (Automation)
+<important if="you need to understand the automation system or modify notification triggers and reminders">
+
+## 12. לוגיקת אירועים אוטומטיים (Automation)
 
 | טריגר | מה קורה |
 |-------|---------|
 | שלב `READY_FOR_OFFICE` הושלם | 1. התראה לכל OFFICE בסניף 2. יוצר CLOSURE workflow run עם 4 שלבים |
 | שלב `WASH` הושלם | התראה לכל `is_bodywork_advisor = true` בסניף |
 | שלב `WAIT_APPRAISER_APPROVAL` הושלם | יוצר `ESTIMATE_AND_DETAILS` approval אם לא קיים |
-| בקשת פחח נשלחת | התראה לכל `is_bodywork_advisor = true` בסניף, עם קישור `?highlight=` לבקשה עצמה |
-| מנהל שירות/CEO עונה לבקשת פחח | התראה חזרה לפחח שפתח את הבקשה, כולל ההערה שהוקלדה |
-| `SEND_COMPLETION_PHOTOS`/`READY_FOR_OFFICE` בלי אישור `ESTIMATE_AND_DETAILS` | חסימה + יצירת approval PENDING אם חסר. `CLOSE_CASE` עצמו לא בודק את זה שוב — רק extras IN_TREATMENT |
-| WHEELS_CHECK הושלם | התראת FYI לעמית (CEO) בלבד — **לא** יוצר `ceo_approvals` יותר (הוסר 044, עמית ביקש רק התראה, לא אישור חוסם) |
-| כל התראה נוצרת | fanout ל-CEO + יועצים חוצי-סניף (ראה סעיף 8, טבלת `notifications`) |
+| בקשת פחח נשלחת | התראה לכל `is_bodywork_advisor = true` בסניף |
+| מנהל שירות/CEO עונה לבקשת פחח | התראה חזרה לפחח שפתח את הבקשה |
+| `SEND_COMPLETION_PHOTOS`/`READY_FOR_OFFICE` בלי אישור `ESTIMATE_AND_DETAILS` | חסימה + יצירת approval PENDING |
+| WHEELS_CHECK הושלם | התראת FYI לעמית (CEO) בלבד |
+| כל התראה נוצרת | fanout ל-CEO + יועצים חוצי-סניף |
 
 ### תזכורות מתוזמנות — `/api/cron/enter-work-reminders` (038, 043)
-Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 דקות (GitHub Actions, לא Vercel Cron — Hobby plan לא תומך בתדירות הזו). כל סבב אידמפוטנטי (שער `*_sent_at`), אז תדירות הפינג לא קריטית.
+Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 דקות (GitHub Actions).
 
 | # | מה בודק | תנאי | מגבלה |
 |---|---------|------|--------|
-| 1 | `ENTER_WORK` הושלם אך `painter_entered_work_at` ריק | כל ~110 דק׳ | רק בשעות עבודה (9-17, לא שישי/שבת/חג) |
-| 2 | בקשת פחח PENDING | אחרי שעה | חד-פעמי; לא יותר מ-48 שעות אחורה (למניעת "הצפה" של בקשות ישנות) |
+| 1 | `ENTER_WORK` הושלם אך `painter_entered_work_at` ריק | כל ~110 דק׳ | רק בשעות עבודה (9-17) |
+| 2 | בקשת פחח PENDING | אחרי שעה | חד-פעמי; לא יותר מ-48 שעות אחורה |
 | 3 | תיק מוכן לסגירה, אף OFFICE לא פתח את ההתראה | אחרי שעה | חד-פעמי; לא יותר מ-48 שעות אחורה |
-| 4 | הפניה עם `follow_up_date` שהגיע | ביום שנקבע | חד-פעמי, בלי הגבלת גיל (תאריך נבחר במפורש, לא timestamp שיכול "להתיישן") |
+| 4 | הפניה עם `follow_up_date` שהגיע | ביום שנקבע | חד-פעמי, בלי הגבלת גיל |
 
-הפנייה שהופכת לתיק (`convertReferral`) יוצאת אוטומטית מהפול של סבב 4 — אין צורך לבטל תזכורת באופן ידני.
+</important>
 
 ---
 
-## 12. RLS Policy Pattern
+<important if="you need to modify or create RLS policies or understand branch-based access control">
+
+## 13. RLS Policy Pattern
 
 **כלל ראשי:** כל טבלה מוגנת לפי `branch_ids` של המשתמש (array), דרך פונקציות helper:
-- `public.get_my_branch_ids()` — ה-branch_ids array של המשתמש המחובר (046: היה `get_my_branch_id()` יחיד)
+- `public.get_my_branch_ids()` — ה-branch_ids array של המשתמש המחובר
 - `public.get_my_role()` — ה-role של המשתמש המחובר
-- `public.can_see_all_branches()` — true עבור CEO, ועבור כל role עם `sees_all_branches=true`
-- **RLS Operator (046):** `branch_id = ANY(public.get_my_branch_ids())` — בודק אם branch של הרשומה נמצא בarray של המשתמש
+- `public.can_see_all_branches()` — true עבור CEO ועבור כל role עם `sees_all_branches=true`
+- **RLS Operator (046):** `branch_id = ANY(public.get_my_branch_ids())` — בודק אם branch של הרשומה נמצא בarray
 
 ⚠️ **חשוב:** 
-- מיגרציה 018 הצהירה שהיא יוצרת `current_user_branch_id()`/`current_user_role()`, אבל בפועל הפונקציות הן `get_my_branch_id()`/`get_my_role()`.
-- **מיגרציה 046** שינתה את `get_my_branch_id()` ל-`get_my_branch_ids()` (plural, returns uuid[]) ועדכנה את כל ה-RLS policies להשתמש ב-`= ANY()` operator לתמיכה multi-branch.
-- לפני שסומכים על שם פונקציה — לוודא מול הפרודקשן בפועל: `POST {SUPABASE_URL}/rest/v1/rpc/<function_name>` עם ה-service-role key; `404`/`PGRST202` = לא קיימת.
+- מיגרציה 018 הצהירה שהיא יוצרת `current_user_branch_id()`/`current_user_role()`, אבל בפועל הפונקציות הן `get_my_branch_id()`/`get_my_role()`
+- **מיגרציה 046** שינתה את `get_my_branch_id()` ל-`get_my_branch_ids()` ועדכנה את כל ה-RLS policies להשתמש ב-`= ANY()` operator
 
-**Soft delete:** `cases_select` מסנן `deleted_at IS NULL` לכולם חוץ מ-CEO — וכל שאילתת select אחרת על cases צריכה לעשות את זה בעצמה גם ברמת האפליקציה (ה-RLS לא תמיד מספיק, ראה סעיף 8).
+**Soft delete:** `cases_select` מסנן `deleted_at IS NULL` — וכל שאילתת select אחרת על cases צריכה לעשות את זה בעצמה גם ברמת האפליקציה.
 
-**הרצת SQL (עודכן 2026-09-01):** קיים עכשיו Supabase CLI מקומי מקושר לפרויקט הפרוד (`supabase link`, ראה סעיף 22). אפשר להריץ מיגרציות דרך `supabase db push` או להמשיך להדביק ידנית ל-Supabase Dashboard → SQL Editor — **בכל מקרה: backup לפני (סעיף 19), ולעדכן את היסטוריית ה-CLI** (`supabase migration repair --status applied <ts>` אם הודבק ידנית). קוד האפליקציה עצמו עדיין בלי `DATABASE_URL`/Management API token. תמיד לכתוב מיגרציות עם `DROP POLICY/TRIGGER/CONSTRAINT IF EXISTS` לפני `CREATE`, כדי שהרצה חלקית שנכשלה לא תחסום ניסיון תיקון חוזר.
+**הרצת SQL:** קיים Supabase CLI מקומי מקושר לפרוד. הרצת מיגרציות דרך `supabase db push` או ידנית ב-SQL Editor, תמיד עם backup. תמיד לכתוב מיגרציות עם `DROP POLICY/TRIGGER/CONSTRAINT IF EXISTS` לפני `CREATE`.
+
+</important>
 
 ---
 
-## 13. ארכיטקטורת הקוד
+<important if="you are creating new components or refactoring existing patterns">
+
+## 14. ארכיטקטורת הקוד
 
 ### Server Component → Client Component Pattern
 ```
@@ -407,31 +420,14 @@ page.tsx (async Server Component)
 - שגיאה → revert
 - Reload מה-DB אחרי כל mutations
 
-### Client-Side Reload
-```typescript
-// בתוך CaseDetailClientV2: לא משתמשים ב-router.refresh() בכל שלב
-// כי גורם לflicker — במקום זה:
-await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
-```
-
 ### הודעות עם highlight/deep-link
-דפוס חוזר בכל המערכת (אישורים, שלבי workflow, בקשות פחח): `action_url` של התראה כולל `?highlight=<id>`, והקומפוננט הרלוונטי (`ApprovalsList`, `WorkflowStepsSection`, `PainterCaseClient`, `PainterRequestsSection`) קורא את הפרמטר עם `useSearchParams`, גולל אליו (`scrollIntoView`) ומדגיש אותו חזותית (`ring`). כל צרכן בודק בעצמו שה-id באמת קיים אצלו — אם לא, זה no-op שקט.
+דפוס חוזר בכל המערכת: `action_url` של התראה כולל `?highlight=<id>`, והקומפוננט הרלוונטי קורא את הפרמטר עם `useSearchParams`, גולל אליו ומדגיש אותו חזותית. כל צרכן בודק בעצמו שה-id קיים — אם לא, זה no-op שקט.
+
+</important>
 
 ---
 
-## 14. עמודים לפי Role
-
-| Role | עמודים |
-|------|--------|
-| SERVICE_MANAGER | `/cases`, `/cases/[id]`, `/painters/[id]` (עונה לבקשות פחח), `/extras`, `/notifications` |
-| OFFICE | `/cases`, `/cases/[id]`, `/closure`, `/referrals`, `/notifications` |
-| CEO | **הכל** + `/approvals`, `/painters`, `/painters/[id]`, `/referrals`, `/settings` |
-| PAINTER | `/painters` (רשימה), `/painters/[id]` (תיק פחח), `/extras/new`, `/extras/mine` |
-| SERVICE_ADVISOR | `/cases` (read-only), `/notifications` |
-
-כל התראה "לפי תיק" מנותבת קודם דרך `/go/[caseId]` שמפנה כל role לעמוד הנכון לו (ראה סעיף 8/13) — כך שאין צורך שכל role ידע את הנתיב הישיר של role אחר.
-
----
+<important if="you need to locate a specific module or understand file organization">
 
 ## 15. נתיבי קבצים קריטיים
 
@@ -439,529 +435,232 @@ await reloadStepsFromDB(); // קורא ל-Supabase client ישירות
 |------|-------------|
 | `src/app/(dashboard)/cases/[id]/CaseDetailClientV2.tsx` | הקומפוננט הכבד ביותר — צ'קליסט, פרטי תיק, בקשות פחח, מסמכים, אודיט |
 | `src/app/(dashboard)/cases/[id]/page.tsx` | Server Component — שולף הכל, מעביר ל-Client |
-| `src/app/(dashboard)/cases/[id]/PainterRequestsSection.tsx` | בקשות פחח בתוך התיק, כולל מודל בוצע/נדחה + הערה |
+| `src/app/(dashboard)/cases/[id]/PainterRequestsSection.tsx` | בקשות פחח בתוך התיק |
 | `src/app/actions/workflow.ts` | לוגיקת ה-workflow המרכזית |
 | `src/app/actions/referrals.ts` | הפניות, יומן מעקב, תזכורות |
-| `src/app/actions/push.ts` | Web Push + fan-out ל-overseers |
-| `src/app/api/cron/enter-work-reminders/route.ts` | כל תזכורות ה-cron (4 סבבים, ראה סעיף 11) |
+| `src/app/actions/push.ts` | Web Push + fan-out לנמעני התראות |
+| `src/app/api/cron/enter-work-reminders/route.ts` | כל תזכורות ה-cron (4 סבבים) |
 | `src/app/go/[id]/page.tsx` | ניתוב role-neutral להתראות |
 | `src/types/database.ts` | כל ה-types — הראשון לעדכן בשינויי schema |
-| `src/db/migrations/` | מיגרציות SQL 001–046 — **היסטוריה קפואה**. מיגרציות חדשות ב-`supabase/migrations/` (סעיף 22) |
-| `supabase/migrations/` | מיגרציות CLI חדשות — baseline `20260901180001_remote_schema.sql` = מצב הפרוד ב-046 |
+| `src/db/migrations/` | מיגרציות SQL 001–046 — היסטוריה קפואה |
+| `supabase/migrations/` | מיגרציות CLI חדשות — baseline `20260901180001_remote_schema.sql` |
 | `src/app/(dashboard)/layout.tsx` | Navigation לפי role |
 | `src/app/(dashboard)/painters/[id]/PainterCaseClient.tsx` | ממשק הפחח הנפרד |
-| `src/app/(dashboard)/painters/PaintersBoard.tsx` | לוח כרטיסי הפחחים (`/painters`) — `carLineFor()` מעדיף `vehicle_type` |
-| `src/app/(dashboard)/referrals/[id]/ReferralDetailClient.tsx` | פרטי הפנייה, יומן מעקב, תאריך תזכורת |
+| `src/app/(dashboard)/painters/PaintersBoard.tsx` | לוח כרטיסי הפחחים |
+| `src/app/(dashboard)/referrals/[id]/ReferralDetailClient.tsx` | פרטי הפנייה, יומן מעקב |
 | `src/app/(dashboard)/referrals/ReferralsGrid.tsx` | רשימת הפניות + טאבי סניף |
 | `src/app/(dashboard)/settings/BodyworkAdvisorsTab.tsx` | ניהול יועצי פחח |
 
+</important>
+
 ---
 
-## 16. Migrations — היסטוריה & Hotfixes
+<important if="you are creating a new migration or need to understand migration history">
 
-### 🔥 Hotfix 2026-09-01: Referrals RLS Multi-Branch Fix
-**Problem:** OFFICE staff (Ilana) with multi-branch support couldn't see referrals from second branch  
-**Root Cause:** RLS policies used singular `get_my_branch_id()` instead of array `get_my_branch_ids()`  
-**Fix Applied:** Updated 3 policies on `referrals` table:
-- `referrals_select`: Changed `branch_id = get_my_branch_id()` → `branch_id = ANY(get_my_branch_ids())`
-- `referrals_insert`: Same change
-- `referrals_update`: Same change
-
-**Verification:** SQL test confirms Ilana now sees 8 referrals (5 ashkelon + 3 netivot), 17 cases (6+11)
+## 16. Migrations — היסטוריה
 
 | Migration | תוכן |
 |-----------|------|
 | 001 | Schema ראשוני, enums, RLS |
 | 002 | Storage policies |
 | 003-004 | Schema align, seed branches |
-| 005 / 005b | case_documents + storage, verification gaps |
-| 006 | שדות חדשים בתיק: customer_name, phone, insurance_company, appraiser_name, event_date, wheels_check_link, sub_claim_type |
+| 005 / 005b | case_documents + storage |
+| 006 | שדות חדשים בתיק |
 | 007 | AIRMAIL_PENDING לparts_status |
 | 008 | עדכון workflow steps |
 | 009 | role_permissions + workflow_step_templates |
-| 010-012 | RLS fixes ל-CEO, requires_ceo_approval |
-| 013 | painter_status, parts_ordered, qc_assignee, estimate_link, appraiser_status |
+| 010-012 | RLS fixes ל-CEO |
+| 013 | painter_status, parts_ordered, qc_assignee |
 | 014 | performance indexes |
 | 015 | closure_checklist_state (jsonb) |
 | 016 | appraiser_status column |
-| 017 | soft delete, is_bodywork_advisor, painter_requests, painter_request_images, document_type |
-| 018 | fix RLS recursion (⚠️ שם הפונקציות בפועל שונה מהמתועד בקובץ — ראה סעיף 12) |
-| 019 | restore CEO bypass for profiles + audit_events |
-| 020 | enter_work_checklist_state, catalog/parts/photos assignees, notifications.triggered_by + action_url |
-| 021-022 / 022b | push_subscriptions + עדכון + branch-scoped storage RLS |
-| 023 | מניעת race condition ב-CLOSURE workflow |
-| 024-025 | security hardening + performance indexes + search_path |
-| 026 / 026b | Realtime על notifications + תיקון profiles_select |
-| 027 / 027b | timestamps לצ'קליסט פחח + CEO מקבל כל התראה (הבסיס למיגרציה 041) |
-| 028 | `sees_all_branches` — גישה חוצת-סניף בלי להיות CEO |
-| 030 | `branch_recipients()` — resolver אחיד לנמעני התראות בסניף |
-| 031-032 | fan-out התראות ל-CEO/יועצים חוצי-סניף (טריגר `fanout_notifications_to_ceos`) |
-| 033 | storage cross-branch access |
-| 034 | painter_status='OTHER' + טקסט חופשי |
-| 035 | עמודת מעקב לתזכורת ENTER_WORK |
-| 036 | `schema_migrations` — מעקב פורמלי אחרי מיגרציות שרצו |
+| 017 | soft delete, is_bodywork_advisor, painter_requests |
+| 018 | fix RLS recursion |
+| 019 | restore CEO bypass for profiles |
+| 020 | enter_work_checklist_state, assignees |
+| 021-022 / 022b | push_subscriptions |
+| 023 | race condition prevention |
+| 024-025 | security hardening |
+| 026 / 026b | Realtime על notifications |
+| 027 / 027b | timestamps לצ'קליסט פחח |
+| 028 | `sees_all_branches` |
+| 030 | `branch_recipients()` |
+| 031-032 | fan-out התראות |
+| 033 | storage cross-branch |
+| 034 | painter_status='OTHER' |
+| 035 | תזכורת ENTER_WORK |
+| 036 | `schema_migrations` |
 | 037 | sub_claim_type: MILITARY/OTHER |
-| 038 | escalation reminders — בקשת פחח / תיק ממתין לסגירה |
-| 039 | מודול הפניות (`referrals`, `referral_documents`) |
-| 040 | painter_requests: סטטוס REJECTED + `response_note` |
-| 041 | CEO מקבל התראות גם על פעולות שהוא עצמו ביצע |
-| 042 | יומן מעקב הפניות (`referral_status_updates`) + `current_status_tag` |
-| 043 | תאריך תזכורת להפניה (`follow_up_date` + `follow_up_reminder_sent_at`) |
-| 044 | WHEELS_CHECK מפסיק לדרוש אישור CEO — מנקה approvals PENDING קיימים מסוג זה |
-| 045 | Backfill: `status_note` ישן → שורת יומן ראשונה ב-`referral_status_updates` |
-| **046** | **Multi-branch OFFICE staff:** `profiles.branch_id` (single) → `branch_ids[]` (array); כל RLS policies עדכונות להשתמש ב-ANY() operator; OFFICE staff (אילנה, אביה) עכשיו יכולות להיות 2+ סניפים עם טאבים בכל דף |
+| 038 | escalation reminders |
+| 039 | מודול הפניות |
+| 040 | painter_requests REJECTED + `response_note` |
+| 041 | CEO מקבל התראות על פעולות עצמו |
+| 042 | יומן מעקב הפניות |
+| 043 | תאריך תזכורת להפניה |
+| 044 | WHEELS_CHECK בלי אישור CEO |
+| 045 | Backfill status_note ישן |
+| **046** | **Multi-branch OFFICE staff:** `profiles.branch_id` → `branch_ids[]` |
 
-> **2026-09-01 — CLI re-baseline:** מ-046 והלאה עוברים ל-Supabase CLI. `src/db/migrations/001–046` קפואים כהיסטוריה; ה-baseline החדש הוא `supabase/migrations/20260901180001_remote_schema.sql` (= מצב הפרוד ב-046). מיגרציות חדשות ב-`supabase/migrations/` בלבד. ראה סעיף 22.
+> **2026-09-01 — CLI re-baseline:** מ-046 והלאה עוברים ל-Supabase CLI. `src/db/migrations/001–046` קפואים כהיסטוריה; ה-baseline החדש הוא `supabase/migrations/20260901180001_remote_schema.sql` (= מצב הפרוד ב-046).
+
+</important>
 
 ---
+
+<important if="you are deploying to production or configuring Git/Vercel">
 
 ## 17. גיט ו-Deploy
 
 - **Repository:** GitHub (sasha463111/amit-maymon-new)
 - **Branch:** `main` — זו הסביבה החיה, אין staging. פוש ל-`main` = דיפלוי לפרודקשן.
-- **Deploy:** Vercel **native Git integration** — כל פוש ל-`main` מדפלייר אוטומטית **שני** פרויקטי Vercel (`amit-maymon-new` + `amit-maymon-new-iyub`) ששניהם מחוברים לאותו repo. אין GitHub Action לדיפלוי (הוסר — היה מיותר ותקוע על טוקן ישן).
-- **GitHub Actions שכן קיים:** `.github/workflows/enter-work-reminders.yml` — מפינג את ה-cron route כל 30 דקות (לא קשור לדיפלוי).
-- **מיגרציות DB הן שלב נפרד לגמרי מהדיפלוי** — פוש קוד לא מריץ SQL. מריצים דרך `supabase db push` או ידנית ב-SQL Editor, תמיד עם backup (ראה סעיף 12 + 22).
-- **Vercel Region:** `iad1` (הועבר מ-fra1 כדי לעקוף replica lag ישן של Supabase — commit `c26b715`. אל תחזיר ל-fra1.)
+- **Deploy:** Vercel **native Git integration** — כל פוש ל-`main` מדפלייר אוטומטית שני פרויקטי Vercel
+- **GitHub Actions שכן קיים:** `.github/workflows/enter-work-reminders.yml` — מפינג את ה-cron route כל 30 דקות
+- **מיגרציות DB הן שלב נפרד** — פוש קוד לא מריץ SQL. מריצים דרך `supabase db push` או ידנית
+- **Vercel Region:** `iad1` (הועבר מ-fra1, אל תחזיר)
+
+</important>
 
 ---
+
+<important if="you need to test locally with real user accounts">
 
 ## 18. משתמשי בדיקה
 
 התחברות היא **email בלבד, בלי סיסמה** — `signInWithPassword` עם סוד משותף (`EMAIL_ONLY_LOGIN_PASSWORD` ב-`.env.local`).
 
-חשבונות בדיקה אמיתיים (אחד לכל role, מאומתים בעבר בדפדפן חי) מתועדים כ-`QA_ACCOUNT_*` בהערה ב-`.env.local` — **לא מועתקים לכאן בכוונה** (ההערה עצמה אומרת "never commit these anywhere else"). לבדיקה חיה — לפתוח את `.env.local` מקומית.
+חשבונות בדיקה אמיתיים (אחד לכל role) מתועדים כ-`QA_ACCOUNT_*` בהערה ב-`.env.local` — **לא מועתקים לכאן בכוונה**. לבדיקה חיה — לפתוח את `.env.local` מקומית.
 
 ---
 
-## 18. QA Testing Architecture (2026-09-01) ✅
+## 19. QA Testing Architecture (2026-09-01) ✅
 
 **Status:** ✅ FULLY AUTONOMOUS — No approval gates needed
 
-Comprehensive automated QA testing framework with Master Tester Agent + 5 specialized role agents:
-
-**Master Tester Agent (Orchestrator)**
-- Location: `.claude/agents/qa-master-tester.md`
-- Role: Spawns all 5 role-specific test agents + synthesizes results
-- Operation: **Fully autonomous** (no human approval between steps)
-- Read-only constraint: Only verifies, never modifies data
-
-**Specialized Test Agents (5 total)**
-- `qa-office-tester.md` — OFFICE staff multi-branch (Ilana: 8 referrals, 17 cases, branch tabs)
-- `qa-service-manager-tester.md` — SERVICE_MANAGER single-branch (Aran: 11 cases, workflow)
-- `qa-ceo-tester.md` — CEO full-access (Amit: all data, admin functions, approvals)
-- `qa-painter-tester.md` — PAINTER limited-access (Arez: own work requests only)
-- `qa-service-advisor-tester.md` — SERVICE_ADVISOR read-only (Knarit: case viewing only)
-
-Each agent tests independently:
-- Page access control (can they see this page?)
-- Data visibility (RLS: correct filtering by branch/permission)
-- Feature availability (buttons, forms, workflows)
-- Permission enforcement (no unauthorized data access)
-- Console errors (no red errors during testing)
-- Cross-branch isolation (multi-branch agents see only their branches)
-
-**Test Specification**
-- Location: `QA_TEST_SPEC.md`
-- Scope: 240+ lines of detailed per-role requirements
-- Data validation: Case/referral/approval counts
-- RLS verification: No cross-branch data leakage
-- Feature testing: Read-only, no modifications
+Master Tester Agent + 5 specialized role agents:
+- `qa-office-tester.md` — OFFICE staff multi-branch
+- `qa-service-manager-tester.md` — SERVICE_MANAGER single-branch
+- `qa-ceo-tester.md` — CEO full-access
+- `qa-painter-tester.md` — PAINTER limited-access
+- `qa-service-advisor-tester.md` — SERVICE_ADVISOR read-only
 
 **How to Run (Fully Autonomous)**
 ```bash
-# Just spawn the Master Tester Agent
 Agent(qa-master-tester)
-
-# It immediately:
-# 1. Spawns 5 role-specific agents (OFFICE/SM/CEO/PAINTER/ADVISOR)
-# 2. Each agent logs in and tests independently
-# 3. Collects all reports automatically
-# 4. Generates FINAL MASTER QA REPORT
-
-# NO approval gates
-# NO waiting for human input
-# NO credentials relay needed
+# Spawns 5 agents, tests independently, generates FINAL MASTER QA REPORT
 ```
 
-**Authorization (One-Time)**
-User explicitly authorized: "Agents can test as long as they don't destroy/touch/change anything"
-- Applies to all future autonomous testing runs
-- No per-run approval needed
-- Read-only constraint enforced in code
-
-**Output**
-- Individual role PASS/FAIL status
-- Data counts verification (actual vs expected)
-- RLS violation check
-- Console errors detected
-- Critical issues summary
-- Final recommendations
+</important>
 
 ---
 
-## 18b. Critical Bug Fix — 2026-09-02 🔴 (ONGOING)
+<important if="you are modifying code, schema, or deploying">
 
-**CRITICAL BUG:** Detail pages returning "No Access" when clicking referrals/cases/closure/painters
+## 20. כללי עבודה עם הפרויקט
 
-**Root Cause:** After Migration 046 (multi-branch OFFICE support), `profiles.branch_id` was replaced with `profiles.branch_ids` (array). Four detail pages still queried for the old `branch_id` (singular), causing profile lookup to fail.
-
-**Affected Pages:**
-- `/referrals/[id]` — Shows "אין גישה לדף זה" instead of referral details
-- `/closure/[id]` — Shows "No access" instead of closure details
-- `/painters/[id]` — Shows "No access" instead of painter details
-- `/cases/[id]` — Shows "No access" instead of case details
-
-**Fixes Applied:**
-1. Updated all 4 pages to select `branch_ids` instead of `branch_id` ✅
-2. Changed branch access check from `profile.branch_id !== branchId` to `!profile.branch_ids.includes(branchId)` ✅
-3. Updated type definitions to use `branch_ids: string[]` ✅
-4. Added null-safety checks: if profile query fails → redirect to login (not silent "No Access") ✅
-5. Added debug logging to `/referrals/[id]` to diagnose actual permission errors (commit 095c3af) ✅
-6. Fixed TypeScript type error in `createNewSystemUser` (users.ts line 200): cast profile insert as `any` for Supabase compatibility ✅
-
-**Status:** 🔄 In Testing — Deployed to production, awaiting user verification of debug logs
-**QA Finding:** Agents failed to test full navigation workflows (enter page → click detail)
-
----
-
-## 18c. QA Fixes — Previous Session (2026-09-02) ✅
-
-**Status:** 2/3 Issues Fixed, 1 Not a Bug
-
-### Fixed Issues
-
-**Issue #1: PAINTER Access Control — /cases Page ✅ FIXED**
-- **Problem:** PAINTER could access /cases page when should be blocked
-- **Root Cause:** No role check at page/layout level
-- **Fix:** Added role check in both:
-  - `src/app/(dashboard)/cases/page.tsx` (line 12-14): `if (role === 'PAINTER') redirect('/painters')`
-  - `src/app/(dashboard)/cases/layout.tsx` (line 19-21): Same redirect guard
-- **Result:** PAINTER now immediately redirected to /painters, cannot access /cases
-
-**Issue #2: PAINTER Settings Access — Proper Error Handling ✅ FIXED**
-- **Problem:** PAINTER accessing /settings redirected to /cases (silent, bad UX)
-- **Root Cause:** Settings already had redirect, but /cases itself was unprotected
-- **Fix:** Coupled with Issue #1 fix — /settings redirect still works, and now /cases also blocks PAINTER
-- **Result:** PAINTER cannot access /cases or /settings, proper access denied behavior
-
-**Issue #3: SERVICE_MANAGER Archive RLS — Not a Bug ✅ CLARIFIED**
-- **Initial Report:** SERVICE_MANAGER saw Ashkelon cases in archive (should see Netivot only)
-- **Investigation Finding:** Test account `T@toyota-tehila.co.il` configured with:
-  - `branch_ids: [Ashkelon UUID, Netivot UUID]`
-  - `sees_all_branches: true`
-- **Root Cause:** Account is intentionally multi-branch, so it sees all branches (correct behavior)
-- **Status:** Not a bug — RLS working as designed. System has robust multi-layer defense:
-  - Database RLS policies ✅
-  - Application-level explicit filtering ✅
-  - Safety fallback to impossible UUID ✅
-- **No code change needed** — System security is robust and correct
-
-### Files Modified
-- `src/app/(dashboard)/cases/page.tsx` — Added PAINTER redirect guard
-- `src/app/(dashboard)/cases/layout.tsx` — Added PAINTER redirect guard (double protection)
-- `src/app/(dashboard)/cases/archive/page.tsx` — Added RLS safeguard (defensive, not necessary but good practice)
-
-### Deployment
-- Commit: 293e0e7 (RLS safeguard) + earlier commits for access control
-- Status: Ready for production ✅
-
----
-
-## 19. כללי עבודה עם הפרויקט
-
-1. **UI/UX חדש** → תמיד להשתמש ב-Stitch MCP (`mcp__stitch__*`) לפני כתיבת קומפוננטים, אם זמין
-2. **שינויי DB** → `supabase migration new <name>` → כותבים SQL עם `DROP ... IF EXISTS` לפני `CREATE`, מסתיים ב-INSERT ל-`schema_migrations` → בודקים מקומית (`supabase db reset`) → מריצים לפרוד (`supabase db push` או SQL Editor + `migration repair --status applied`), עם backup קודם. ראה סעיף 12 + 22
-3. **RLS** → כל שינוי schema חייב לעדכן policies בהתאם, ולהשתמש בשמות הפונקציות האמיתיים (`get_my_branch_id`/`get_my_role`/`can_see_all_branches`)
+1. **UI/UX חדש** → תמיד להשתמש ב-Stitch MCP לפני כתיבת קומפוננטים
+2. **שינויי DB** → `supabase migration new <name>` → SQL עם `DROP ... IF EXISTS` → בדיקה מקומית (`supabase db reset`) → הרצה לפרוד (`supabase db push` או SQL Editor + `migration repair --status applied`)
+3. **RLS** → כל שינוי schema חייב לעדכן policies בהתאם
 4. **types/database.ts** → לעדכן ראשון בכל שינוי schema
 5. **Server Actions** → `'use server'` בראש, תמיד לאמת role לפני פעולה
-6. **Soft delete** → תמיד לסנן `.is('deleted_at', null)` בכל שאילתת SELECT על cases (ובכל שאילתה שמצטרפת ל-cases, כמו extras/closure)
+6. **Soft delete** → תמיד לסנן `.is('deleted_at', null)` בכל שאילתת SELECT על cases
 7. **הוספת עמוד** → לעדכן navigation ב-`layout.tsx` לפי role
-8. **התראות שמצביעות על משהו ספציפי בתוך עמוד** → להשתמש בדפוס `?highlight=<id>` הקיים (ראה סעיף 13), לא להמציא מנגנון חדש
-9. **לפני פוש לפרודקשן** → `npx tsc --noEmit` + `npm run build` (לא בזמן ש-`npm run dev` רץ) + בדיקה חיה עם דפדפן אמיתי; לנקות כל נתוני בדיקה מה-DB אחרי
+8. **התראות שמצביעות על משהו ספציפי** → להשתמש בדפוס `?highlight=<id>` הקיים
+9. **לפני פוש לפרודקשן** → `npx tsc --noEmit` + `npm run build` + בדיקה חיה
 
-### 🚨 **BACKUP BEFORE EVERY PUSH** (2026-09-01)
+</important>
+
+---
+
+<important if="you are pushing to production or managing database operations">
+
+## 21. Backup & Safety
+
+### 🚨 **BACKUP BEFORE EVERY PUSH**
 
 **10. סטנדינג ריל: Backup לפני כל Push לפרודקשן** ⚠️
 - **לפני כל `git push origin main`** חייב להוצא backup של מסד הנתונים!
 - **רוץ:** `.\SqlBackup\backup-before-push.ps1`
 - ה-script ירוץ backup אוטומטי, יבדוק שהצליח, ויבקש אישור לפני push
-- **אם backup נכשל:** אל תדחוף! תקן את הבעיה קודם (ודא `pg_dump` מותקן)
+- **אם backup נכשל:** אל תדחוף! תקן את הבעיה קודם
 - Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup`
 - **Auto-cleanup:** backups ישנים מ-30 ימים יוחקו אוטומטית
 
-**11. Backup Implementation** 📅
-- **Pre-Push Manual Backup (Standing Rule):** לפני כל `git push origin main`, הריץ: `.\SqlBackup\backup-before-push.ps1`
-  - Script ירוץ backup אוטומטי + יבדוק הצלחה + יבקש אישור לפני push
-  - Backups נשמרים ב-`C:\GitHub\amit-maymon-new\SqlBackup\` עם timestamp
-  - Log file: `C:\GitHub\amit-maymon-new\SqlBackup\backup_log.txt`
-  - Auto-cleanup: backups ישנים מ-30 ימים יוחקו אוטומטית
+### Daily Automatic Backups
+- GitHub Actions workflow — runs daily at 2 AM UTC
+- Backup artifacts stored for 30 days
+- Manual trigger available via GitHub UI
 
-- **Daily Automatic Backup (✅ Now Live):** GitHub Actions workflow — runs daily at 2 AM UTC
-  - Workflow: `.github/workflows/daily-backup.yml`
-  - Uses PostgreSQL `pg_dump` on GitHub-hosted runner
-  - Backup artifacts stored for 30 days in GitHub Actions
-  - Manual trigger available via GitHub UI (`Actions` → `Daily Database Backup` → `Run workflow`)
-  - **Setup Required (One-time):**
-    1. Go to GitHub repo: Settings → Secrets and variables → Actions
-    2. Add new secret: `SUPABASE_PASSWORD`
-    3. Value: The Supabase database password (from `.env.local` SUPABASE_DB_PASSWORD)
-  - **Why GitHub Actions instead of Task Scheduler:** No local credential issues, free tier, cloud-native, same pattern as existing `enter-work-reminders` workflow
-- **Recovery:** אם יש data loss (כמו Migration 046):
-  ```bash
-  # 1. שחזור מ-backup
-  pg_restore -d postgres://user:pass@host/db C:\GitHub\amit-maymon-new\SqlBackup\backup_YYYYMMDD_HHMMSS.sql
-  # 2. או SQL manual restore
-  UPDATE profiles SET branch_ids = ARRAY[...] WHERE id = ...;
-  ```
-
-**12. Migration Best Practices** (תוקן אחרי Migration 046 failure) 🔧
+### Migration Best Practices
 - **תמיד** ליצור column חדשה **לפני** הורדת הישנה
 - **תמיד** לעשות BACKFILL של נתונים קודם
 - **תמיד** לבדוק אם יש data loss אחרי migration
-- דוגמה (✅ RIGHT):
-  ```sql
-  -- ✅ צור column חדשה
-  ALTER TABLE profiles ADD COLUMN branch_ids uuid[] NOT NULL DEFAULT '{}';
-  
-  -- ✅ Backfill נתונים
-  UPDATE profiles SET branch_ids = ARRAY[branch_id] WHERE branch_id IS NOT NULL;
-  
-  -- ✅ Drop הישנה
-  ALTER TABLE profiles DROP COLUMN branch_id;
-  ```
-- דוגמה (❌ WRONG — כמו Migration 046):
-  ```sql
-  -- ❌ ישירות drop — data loss!
-  ALTER TABLE profiles DROP COLUMN branch_id;
-  ALTER TABLE profiles ADD COLUMN branch_ids uuid[];  -- ריק!
-  ```
 
-**13. Autonomous Production Deployment (2026-09-03)** 🚀
-- **Standing Rule:** Deploy Validator Agent autonomously deploys to production after successful local build
-- **No manual approval needed** for each deployment (unless build fails)
-- **Flow:**
-  1. Claude makes code changes locally
-  2. Commits and pushes to both remotes (origin + tomer)
-  3. Deploy Validator Agent runs `npm run build`
-  4. If ✅ builds successfully → Auto-deploys to Vercel
-  5. If ❌ fails → Reports error, waits for fix
-- **Both remotes always:** Push to `origin` (sasha463111) AND `tomer` (tdavidyan85/Vercel watches this)
-- **Vercel configuration:** Connected to tdavidyan85/amit-maymon-new (tomer remote)
-- **Benefits:**
-  - Faster deployment cycle
-  - No human bottleneck
-  - Build failures caught immediately
-  - Agent reports all deployments for transparency
+</important>
 
 ---
 
-## 20. Email Setup (Resend) — 2026-09-01
-
-**Status:** 🔄 In Progress  
-**Domain:** toyota-tehila.co.il (דוח סיכום יומי via reports@toyota-tehila.co.il)  
-**Service:** Resend API (RESEND_API_KEY in .env.local)  
-
-**DNS Records Status:**
-- ✅ DKIM (TXT): resend._domainkey
-- ✅ SPF (TXT): v=spf1 include:amazonses.com ~all
-- ✅ MX: feedback-smtp.ap-northeast-1.amazonses.com
-- ✅ DMARC (TXT): v=DMARC1; p=none;
-
-**Next:** Hosting provider adds records → wait 5-30 min → Resend verification → Test `/settings` → "שלח דוח סיכום"
-
----
-
-## 21. Supabase Region (הערה חשובה)
-
-**הפרויקט הנוכחי אינו בפרנקפורט.** אי אפשר להעביר project קיים.
-כדי לשפר latency עתידית: צור project חדש ב-`eu-central-1`, הרץ כל המיגרציות, עדכן `.env.local` + Vercel env vars (ראה `SUPABASE_MIGRATION_GUIDE.md` בשורש הריפו — זה תכנון עתידי, לא בתהליך).
-
----
+<important if="you are running migrations, managing the local stack, or applying schema changes">
 
 ## 22. Supabase CLI + Local Dev (הוקם 2026-09-01)
 
 **סטטוס:** מותקן, מקושר לפרוד, ו-local stack מאומת עובד.
 
 ### הקמה
-- `supabase` הוא devDependency (`package.json`). מפעילים עם `npx supabase <cmd>` מ-`C:\GitHub\amit-maymon-new`.
-- דרישות מקדימות: Docker Desktop (WSL2 backend) חייב לרוץ.
-- מקושר לפרוד: `supabase link --project-ref yhanmyvolpeiuxspcxmk`. סיסמת ה-DB שמורה ב-keyring של Windows מאז ה-link — פקודות `db pull` / `migration` / `db dump` מתחברות בלי לשאול.
-- `config.toml`: `major_version = 17` (תואם לפרוד — Postgres engine 17).
-
-### Re-baseline של היסטוריית המיגרציות
-טבלת `supabase_migrations.schema_migrations` בפרוד הכילה 20 רשומות חלקיות (מיגרציות ~016–029 שהורצו דרך Supabase MCP `apply_migration` באפריל–יוני 2026; 001–015 ו-030–046 מעולם לא נרשמו שם — הורצו ידנית ב-SQL Editor). ב-2026-09-01:
-1. גיבוי מלא של הפרוד → `C:\Backups\CRM\pre-cli-rebaseline_2026-09-01\` (schema + data + roles).
-2. ארכיון של 20 הרשומות עם ה-SQL המלא → `supabase/_archive/remote_history_pre_rebaseline_2026-09-01.sql`.
-3. `supabase migration repair --status reverted <20 versions>` — ניקה את הרישום (רק metadata; סכמה/דאטה לא נגעו).
-4. `supabase db pull` → יצר `supabase/migrations/20260901180001_remote_schema.sql` = מצב הפרוד המלא ב-046 (22 טבלאות, 56 policies, 16 functions). זו נקודת ההתחלה של ה-CLI.
-5. אומת: `supabase start` הפעיל DB מקומי טרי והחיל את ה-baseline נקי, ספירת אובייקטים זהה לפרוד.
-
-`src/db/migrations/001–046` נשארים כהיסטוריה קפואה — לא מומרים, לא נמחקים.
+- `supabase` הוא devDependency. מפעילים `npx supabase <cmd>` מ-`C:\GitHub\amit-maymon-new`
+- דרישות מקדימות: Docker Desktop (WSL2 backend) חייב לרוץ
+- מקושר לפרוד: `supabase link --project-ref yhanmyvolpeiuxspcxmk`
+- `config.toml`: `major_version = 17` (תואם לפרוד)
 
 ### Workflow למיגרציה חדשה
 ```
-npx supabase migration new <name>       # יוצר supabase/migrations/<ts>_<name>.sql
-# כותבים SQL: DROP ... IF EXISTS לפני CREATE, מסתיים ב-INSERT ל-schema_migrations
-npx supabase db reset                    # מחיל את הכל מאפס על ה-DB המקומי — בדיקה
-# ... בודקים מול הסטאק המקומי ...
-# backup לפרוד: .\SqlBackup\backup-before-push.ps1 (או supabase db dump)
-npx supabase db push                     # ← ברירת המחדל: מחיל לפרוד + מעדכן היסטוריה
+npx supabase migration new <name>
+# כותבים SQL: DROP ... IF EXISTS לפני CREATE
+npx supabase db reset                # בדיקה מקומית
+# ... בודקים ...
+# backup לפרוד
+npx supabase db push                 # הרצה לפרוד
 ```
-> **מסלול הפרוד (נקבע 2026-09-01):**
-> 1. **ברירת מחדל — `supabase db push`.** תמיד לנסות קודם.
-> 2. **Fallback — SQL Editor ידני**, כשה-push לא מתאפשר (חסום ע"י מנגנון ההרשאות של Claude, בעיית חיבור, או צריך הרצה חלקית/ידנית). אחרי הדבקה ידנית **חובה** לסנכרן את היסטוריית ה-CLI:
->    `npx supabase migration repair --status applied <ts>`
->
-> בשני המקרים: backup לפני, וה-migration file נשמר תמיד ב-`supabase/migrations/`.
 
 ### פקודות שימושיות
-- `npx supabase status` — URLs + keys של הסטאק המקומי (API 54321, DB 54322, Studio 54323, Mailpit 54324)
-- `npx supabase stop` — עוצר (שומר נתונים מקומיים); `--no-backup` מאפס
-- `npx supabase db diff -f <name>` — מייצר מיגרציה מהפרש סכמה מקומי
+- `npx supabase status` — URLs + keys של הסטאק המקומי
+- `npx supabase stop` — עוצר (שומר נתונים)
+- `npx supabase db diff -f <name>` — מייצר מיגרציה מהפרש סכמה
 - `npx supabase gen types typescript --linked > src/types/database.gen.ts` — types מהפרוד
-- `npx supabase db dump --linked -f <file>` (+ `--data-only` / `--role-only`) — גיבוי
+- `npx supabase db dump --linked -f <file>` — גיבוי
 
-### מגבלות ידועות
-- `supabase login` (רענון token) ו-הפעלת Docker Desktop דורשים אינטראקציה ידנית.
-- `supabase migration repair` / `db push` (כתיבה לפרוד) עלולים להיחסם ע"י מנגנון ההרשאות של Claude — המשתמש מריץ, או מוסיפים כלל הרשאה.
-- החומרה (i7-3770K) איטית ל-local stack; זה עובד אבל לא מהיר.
+</important>
 
 ---
 
-## 25. CEO Audit Dashboard (2026-09-02) 🆕
+<important if="you need to modify user management or audit features">
 
-**Status:** ✅ Implemented
+## 23. Live Features
 
-**Location:** `/settings` → New "📊 ביקורת" (Audit) tab
-
-**What it shows:**
-
-1. **👤 Users Tab** — User lifecycle timeline
-   - Creation date for each user
-   - Current role and branch assignments
-   - Sorted by creation date
-
-2. **📝 Changes Tab** — Profile modification history
-   - Tracks all profile changes (role, branch, name updates)
-   - Shows what changed and when
-   - Who made the change (changed_by field)
-
-3. **📊 Activity Tab** — User activity log
-   - Page visits and timestamps
-   - User actions performed
-   - Complete audit trail for compliance
-
-**Database Schema:**
-- `audit_log` table — captures profile change history
-- `activity_log` table — captures user actions and page visits
-- RLS policies — CEO-only access
-
-**Server Actions (audit.ts):**
-- `logActivity()` — log page visits (integrated with components)
-- `getAuditLogs()` — fetch profile change history
-- `getActivityLogs()` — fetch user activity
-- `getUserCreationTimeline()` — fetch user creation dates
-
-**UI Component:**
-- `AuditTab.tsx` — Three-tab interface with data loading
-- Real-time data fetching
-- Hebrew-localized dates
-
-**Use case:** Amit can audit all user actions, see when users were created, track profile changes, and monitor page visits for security/compliance.
-
----
-
-## 24. User Creation Form (2026-09-02) ✅
-
-**Status:** ✅ Implemented — Live
-
-**Location:** `/settings` → Users Tab → "משתמש חדש" button
-
-**What it does:**
-- CEO can create new users directly from the web UI (no Supabase Dashboard needed)
+### User Creation Form ✅
+- CEO can create new users directly from the web UI
 - Form collects: email, password, full name, role, branch assignment(s)
 - Creates both Auth user and profile record atomically
-- Shows success/error message immediately
+- Validation: email format, password minimum 8 chars, role+branch constraints
+- Error handling: duplicate email detection, atomic creation
 
-**Components:**
-- `src/components/AddUserForm.tsx` — Form component (Client)
-- `src/app/actions/users.ts:createNewSystemUser()` — Server Action
-- Integrated into `src/app/(dashboard)/settings/UsersTab.tsx`
+### CEO Audit Dashboard ✅
+- `/settings` → New "📊 ביקורת" (Audit) tab
+- Users Tab: user lifecycle timeline
+- Changes Tab: profile modification history
+- Activity Tab: user activity log
+- Database Schema: `audit_log` table (profile changes), `activity_log` table (page visits)
 
-**Validation:**
-- Email format check
-- Password minimum 8 characters
-- Full name required
-- CEO cannot be assigned branches
-- Non-CEO must have at least one branch
+### Real-Time Sync + Send Report Button ✅
+- **Real-Time Profile Sync:** When CEO changes user roles/branches, all logged-in users see updates immediately
+- **Send Report Button:** Top header, CEO only, sends summary report via `sendSummaryReport()` Server Action
 
-**Error handling:**
-- Duplicate email detection
-- Atomic creation (if profile fails, auth user is deleted)
-- User-friendly error messages in Hebrew
+</important>
 
 ---
 
-## 23. Real-Time Sync + Send Report Button (2026-09-02) ✅
+## 24. Standing Rules — מטא-עקרונות שלא משתנים
 
-**Status:** ✅ Implemented — Live
-
-### Real-Time Profile Sync (Supabase Realtime)
-
-**Goal:** When CEO changes user roles/branches/names in `/settings`, all logged-in users see updates immediately without page refresh.
-
-**Implementation:**
-- **Component:** `src/components/RealtimeProfileSync.tsx` — Client component
-- **Location:** Added to dashboard layout (`src/app/(dashboard)/layout.tsx`)
-- **How it works:**
-  1. Subscribes to `profiles` table updates via Supabase Realtime
-  2. When a profile changes:
-     - **If it's the current user's profile:** Trigger `window.location.reload()` (picks up new permissions)
-     - **If it's another user's profile:** Dispatch `profile-updated` custom event (listeners can react without reload)
-  3. Automatically unsubscribes on unmount
-
-**Supabase Setup:** Realtime is already enabled on the project. No additional config needed.
-
-### Send Report Button (Header)
-
-**Location:** Top header, between Notifications bell and Logout button  
-**Component:** `src/components/SendReportButton.tsx`  
-**Visibility:** CEO only  
-**Icon:** Mail icon  
-**Behavior:**
-- Click → sends summary report via `sendSummaryReport()` (Server Action)
-- Shows loading state (pulsing icon) while sending
-- Displays result tooltip: ✅ (success) or ❌ (error message)
-- Permission check enforced server-side: `requireCeo()` in `reports.ts`
-
-**When it's used:**
-- Amit (CEO) can now send daily summary reports manually from any page
-- No need to navigate to `/settings` anymore
-- Quick access from the main header
-
-### Architecture
-
-```
-Dashboard Layout
-├── RealtimeProfileSync (hidden component)
-│   └── Listens to profiles table changes
-├── Header
-│   ├── NotificationsBell
-│   ├── SendReportButton (CEO only)
-│   └── Logout
-└── Main content
-```
-
-**Related files:**
-- `src/app/(dashboard)/layout.tsx` — imports both components
-- `src/app/actions/reports.ts` — `sendSummaryReport()` + `requireCeo()` check
-
----
-
-## 26. Standing Rules — מטא-עקרונות שלא משתנים
-
-Standing rules are permanent architectural decisions that shape how Claude Code works on this project. They are NOT feature requests or one-time fixes — they are policies that apply to every session, every deployment, and every codebase change.
+Standing rules are permanent architectural decisions that shape how Claude Code works on this project. They are **NOT** feature requests or one-time fixes — they are policies that apply to every session, every deployment, and every codebase change.
 
 ### 🔴 Standing Rule #1: Autonomous Production Deployment (2026-09-03)
 
@@ -986,9 +685,6 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 - **Build must pass locally** before production deployment
 - **No manual "Deploy to production" approval needed**
 
-**Related memories:**
-- `[[autonomous-deployment-rule]]` — Full standing rule details
-
 ---
 
 ### 🔴 Standing Rule #2: Documentation Sync on Every Production Push (2026-09-01)
@@ -997,8 +693,6 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 
 **Files that must sync:**
 - `CLAUDE.md` — Technical architecture & implementation notes
-- `AGENTS.md` — Autonomous agent definitions & capabilities (if using agents)
-- `BUSINESS_PROCESS.md` — Process documentation (if it exists)
 - Individual agent documentation files in `.claude/agents/`
 
 **Why this exists:** Drift between code and documentation causes confusion. If the codebase changes, the documentation must change too, or developers (including Claude in future sessions) lose trust and navigate by guessing.
@@ -1014,9 +708,6 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 - Comment-only changes
 - Linting/formatting fixes
 - Variable renames (internal refactors with no external impact)
-
-**Related memories:**
-- `[[amit-maymon-new-push-md-sync]]` — Full standing rule details
 
 ---
 
@@ -1058,5 +749,3 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 - `NOTIFICATIONS_ROUTING.md` — Complete routing architecture
 - `NOTIFICATIONS_AUDIT_COMPLETE.md` — Full audit of all 16 notification types
 
-**Related memories:**
-- `[[Notification-Routing-Architecture]]` — Design & rationale
