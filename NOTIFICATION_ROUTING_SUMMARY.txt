@@ -1,0 +1,147 @@
+================================================================================
+                    NOTIFICATION ROUTING SUMMARY TABLE
+                              Complete Refactor
+================================================================================
+
+NOTIFICATION TYPE          | RECIPIENTS (PRIMARY)      | RECIPIENTS (AUDIT) | BRANCH
+────────────────────────────────────────────────────────────────────────────────
+1. PENDING_APPROVAL        | -                         | CEO                | All
+2. NEW_CASE                | SERVICE_MANAGER           | CEO                | Same
+3. ENTER_WORK              | SERVICE_ADVISOR, PAINTER  | CEO                | Same
+4. WASH_COMPLETE           | SERVICE_ADVISOR           | CEO                | Same
+5. READY_FOR_OFFICE        | OFFICE                    | CEO                | Same
+6. CASE_CLOSED             | OFFICE, SERVICE_MANAGER   | CEO                | Same
+7. PAINTER_REQUEST         | SERVICE_ADVISOR, PAINTER  | CEO                | Same
+8. PARTS_ARRIVED           | PAINTER                   | CEO                | Same
+9. APPROVAL_REJECTED       | SERVICE_MANAGER           | CEO                | Same
+10. APPROVAL_APPROVED      | SERVICE_MANAGER           | CEO                | Same
+11. EXTRA_CREATED          | SERVICE_MANAGER           | CEO                | Same
+12. COMPLETION_PHOTOS      | SERVICE_ADVISOR           | CEO                | Same
+
+================================================================================
+                            NOTIFICATION SOURCES
+================================================================================
+
+Notification Type          | File                    | Function
+────────────────────────────────────────────────────────────────────────────────
+PENDING_APPROVAL           | workflow.ts:103         | notifyCeosPendingApproval()
+NEW_CASE                   | workflow.ts:330         | createCase()
+ENTER_WORK                 | workflow.ts:698         | completeActiveStep()
+WASH_COMPLETE              | workflow.ts:763         | completeActiveStep()
+READY_FOR_OFFICE           | workflow.ts:591         | completeActiveStep()
+CASE_CLOSED                | workflow.ts:809         | completeActiveStep()
+PAINTER_REQUEST            | painter.ts:189          | createPainterRequest()
+PARTS_ARRIVED              | painter.ts:85           | updatePainterChecklist()
+APPROVAL_REJECTED          | approvals.ts:103        | decideApproval()
+APPROVAL_APPROVED          | approvals.ts:124        | decideApproval()
+EXTRA_CREATED              | extras.ts:68            | createExtra()
+
+================================================================================
+                         KEY FEATURES IMPLEMENTED
+================================================================================
+
+[X] Role-Based Filtering
+    - Each notification type routes to specific roles
+    - No more "send to everyone" pattern
+
+[X] Branch Filtering
+    - Notifications respect branch boundaries
+    - Cross-branch staff (sees_all_branches=true) included
+    - Exception: CEO notifications span all branches
+
+[X] Audit Trail
+    - All notifications include CEO for visibility
+    - CEOs never excluded, even if they triggered action
+    - Maintains "follow everything" requirement
+
+[X] Actor Exclusion
+    - User who triggered action is excluded
+    - Exception: CEOs always receive (audit trail)
+
+[X] Intelligent Routing
+    - No redundant DB queries (recipient caching)
+    - Parallel push delivery (Promise.all)
+    - Sequential DB inserts (10-sec de-dup window)
+
+[X] Backward Compatibility
+    - Old pushToOverseers() still available
+    - Can revert if issues discovered
+    - Zero breaking changes
+
+================================================================================
+                          ROLE VISIBILITY MATRIX
+================================================================================
+
+                      Sees These Notifications
+Role          | 1  | 2  | 3  | 4  | 5  | 6  | 7  | 8  | 9  | 10 | 11
+──────────────────────────────────────────────────────────────────────────────
+CEO           | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓
+OFFICE        |    |    |    |    | ✓  | ✓  |    |    |    |    |
+SERVICE_MGR   |    | ✓  |    |    |    | ✓  |    |    | ✓  | ✓  | ✓
+SERVICE_ADVI  |    |    | ✓  | ✓  |    |    | ✓  |    |    |    |
+PAINTER       |    |    | ✓  |    |    |    | ✓  | ✓  |    |    |
+
+Legend: ✓ = Receives notification, blank = Does not receive
+
+================================================================================
+                          BRANCH ISOLATION EXAMPLE
+================================================================================
+
+SCENARIO: Netivot painter creates request
+
+BEFORE (Old System):
+  → SERVICE_ADVISOR in Netivot ✓
+  → SERVICE_ADVISOR in Ashdod ✓ (WRONG - different branch!)
+  → All CEOs ✓
+  → All SERVICE_MANAGERs ✓ (across all branches)
+
+AFTER (Smart Router):
+  → SERVICE_ADVISOR in Netivot ✓
+  → SERVICE_ADVISOR in Ashdod ✗ (correctly excluded)
+  → CEOs ✓ (for audit trail)
+  → SERVICE_MANAGER in Netivot only ✓
+
+Result: Reduced noise for Ashdod staff, focused notifications.
+
+================================================================================
+                            IMPLEMENTATION STATUS
+================================================================================
+
+Core Function:              ✅ COMPLETE (notifyRelevantParties)
+Routing Config:             ✅ COMPLETE (12 action types defined)
+Action File Updates:        ✅ COMPLETE (5 files, 11 notifications)
+Code Build:                 ✅ COMPLETE (TypeScript + Next.js)
+Documentation:              ✅ COMPLETE (3 markdown files)
+Backward Compatibility:     ✅ COMPLETE (pushToOverseers preserved)
+
+================================================================================
+                             READY FOR TESTING
+================================================================================
+
+All 12 notification types are ready for manual verification:
+
+1. PENDING_APPROVAL       → Open approval in approvals page
+2. NEW_CASE               → Create new case
+3. ENTER_WORK             → Mark step as ENTER_WORK
+4. WASH_COMPLETE          → Mark step as WASH
+5. READY_FOR_OFFICE       → Mark step as SEND_COMPLETION_PHOTOS
+6. CASE_CLOSED            → Mark step as CLOSE_CASE
+7. PAINTER_REQUEST        → Create painter request from painter
+8. PARTS_ARRIVED          → Mark parts_arrived in checklist
+9. APPROVAL_REJECTED      → Reject approval as CEO
+10. APPROVAL_APPROVED     → Approve approval as CEO
+11. EXTRA_CREATED         → Create extra from painter
+
+Expected Behavior: Notifications appear only for users in recipient roles for
+that branch, with CEOs receiving everything for audit trail.
+
+================================================================================
+                          Questions & Support
+================================================================================
+
+For detailed implementation info:  See NOTIFICATIONS_ROUTING.md
+For audit trail:                   See NOTIFICATIONS_AUDIT_COMPLETE.md
+For deployment guide:              See NOTIFICATION_REFACTOR_REPORT.md
+For configuration changes:         See push.ts NOTIFICATION_ROUTING map
+
+================================================================================

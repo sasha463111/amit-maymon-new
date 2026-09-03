@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import type { ApprovalDecisionInput } from '@/types/database';
 import { APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS } from '@/types/database';
@@ -100,7 +100,8 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
-    await pushToOverseers({ title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id);
+    // Notify SERVICE_MANAGER + CEO for audit trail
+    await notifyRelevantParties('APPROVAL_REJECTED', branchId, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id, managers as { id: string; role: string }[]);
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
     const managers = (await branchRecipients(supabase, branchId))
@@ -121,7 +122,8 @@ export async function decideApproval(input: ApprovalDecisionInput) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
-    await pushToOverseers({ title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id);
+    // Notify SERVICE_MANAGER + CEO for audit trail
+    await notifyRelevantParties('APPROVAL_APPROVED', branchId, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id, managers as { id: string; role: string }[]);
   }
 
   // Auto-complete READY_FOR_OFFICE when all required approvals are approved

@@ -306,6 +306,8 @@ export async function sendPushToUser(userId: string, payload: { title: string; b
  * of that same guarantee, so the CEO and the service advisor get a push for
  * every event, not just the ones their role is the direct target of. Reads the
  * overseer list with the service client (bypasses RLS). Fire-and-forget.
+ *
+ * DEPRECATED: Use notifyRelevantParties() instead for role-based + branch-filtered routing.
  */
 export async function pushToOverseers(
   payload: { title: string; body?: string; url?: string; tag?: string },
@@ -331,4 +333,152 @@ export async function pushToOverseers(
   // about for sendPushToUser. Parallelized across recipients so N overseers
   // doesn't mean N sequential round-trips.
   await Promise.all(targets.map((o) => sendPushToUser(o.id, payload)));
+}
+
+/**
+ * Smart notification router: sends push notifications ONLY to relevant parties
+ * based on action type and branch context. Ensures:
+ *
+ * 1. Role-based filtering — only recipients relevant to the action type get alerted
+ * 2. Branch filtering — staff outside the case's branch don't get notified
+ * 3. Audit trail — CEOs always receive notifications for full visibility
+ * 4. Exclusion — the actor is excluded unless they're a CEO (whose feed is an audit log)
+ *
+ * Action Type Routing Table:
+ * - PENDING_APPROVAL: CEO (all branches)
+ * - NEW_CASE: SERVICE_MANAGER (same branch)
+ * - ENTER_WORK: SERVICE_ADVISOR + PAINTER (same branch)
+ * - WASH_COMPLETE: SERVICE_ADVISOR (same branch)
+ * - READY_FOR_OFFICE: OFFICE (same branch)
+ * - CASE_CLOSED: OFFICE + SERVICE_MANAGER (same branch)
+ * - PAINTER_REQUEST: SERVICE_ADVISOR + PAINTER (same branch)
+ * - PARTS_ARRIVED: PAINTER (same branch)
+ * - APPROVAL_REJECTED: SERVICE_MANAGER (same branch)
+ * - APPROVAL_APPROVED: SERVICE_MANAGER (same branch)
+ * - EXTRA_CREATED: SERVICE_MANAGER (same branch)
+ * - COMPLETION_PHOTOS: SERVICE_ADVISOR (same branch)
+ */
+export type NotificationActionType =
+  | 'PENDING_APPROVAL'
+  | 'NEW_CASE'
+  | 'ENTER_WORK'
+  | 'WASH_COMPLETE'
+  | 'READY_FOR_OFFICE'
+  | 'CASE_CLOSED'
+  | 'PAINTER_REQUEST'
+  | 'PARTS_ARRIVED'
+  | 'APPROVAL_REJECTED'
+  | 'APPROVAL_APPROVED'
+  | 'EXTRA_CREATED'
+  | 'COMPLETION_PHOTOS';
+
+interface NotificationRoutingConfig {
+  roles: string[];
+  includeCeo: boolean; // if true, always send to CEO for audit trail
+}
+
+const NOTIFICATION_ROUTING: Record<NotificationActionType, NotificationRoutingConfig> = {
+  PENDING_APPROVAL: { roles: ['CEO'], includeCeo: false },
+  NEW_CASE: { roles: ['SERVICE_MANAGER'], includeCeo: true },
+  ENTER_WORK: { roles: ['SERVICE_ADVISOR', 'PAINTER'], includeCeo: true },
+  WASH_COMPLETE: { roles: ['SERVICE_ADVISOR'], includeCeo: true },
+  READY_FOR_OFFICE: { roles: ['OFFICE'], includeCeo: true },
+  CASE_CLOSED: { roles: ['OFFICE', 'SERVICE_MANAGER'], includeCeo: true },
+  PAINTER_REQUEST: { roles: ['SERVICE_ADVISOR', 'PAINTER'], includeCeo: true },
+  PARTS_ARRIVED: { roles: ['PAINTER'], includeCeo: true },
+  APPROVAL_REJECTED: { roles: ['SERVICE_MANAGER'], includeCeo: true },
+  APPROVAL_APPROVED: { roles: ['SERVICE_MANAGER'], includeCeo: true },
+  EXTRA_CREATED: { roles: ['SERVICE_MANAGER'], includeCeo: true },
+  COMPLETION_PHOTOS: { roles: ['SERVICE_ADVISOR'], includeCeo: true },
+};
+
+/**
+ * Send push notifications only to relevant parties based on action type.
+ * Implements the smart routing table above.
+ *
+ * @param actionType The type of action that triggered the notification
+ * @param branchId The branch context (for filtering recipients)
+ * @param payload The push notification content
+ * @param excludeUserId The user who triggered the action (excluded unless CEO)
+ * @param branchRecipients Optional pre-fetched list of branch recipients to avoid extra queries
+ */
+export async function notifyRelevantParties(
+  actionType: NotificationActionType,
+  branchId: string | null | undefined,
+  payload: { title: string; body?: string; url?: string; tag?: string },
+  excludeUserId?: string,
+  branchRecipients?: { id: string; role: string; is_bodywork_advisor?: boolean | null }[]
+) {
+  const config = NOTIFICATION_ROUTING[actionType];
+  if (!config) {
+    console.warn('[notifyRelevantParties] unknown action type:', actionType);
+    return;
+  }
+
+  const db = getServiceClient() ?? (await createClient());
+
+  // Determine target roles
+  let targetRoles = [...config.roles];
+  if (config.includeCeo && !targetRoles.includes('CEO')) {
+    targetRoles.push('CEO');
+  }
+
+  // Fetch recipients
+  let recipients: { id: string; role: string }[] = [];
+
+  if (config.includeCeo && targetRoles.includes('CEO')) {
+    // For CEO (audit trail) + branch-specific roles: fetch both
+    const { data: ceos } = await db
+      .from('profiles')
+      .select('id, role')
+      .eq('role', 'CEO')
+      .eq('is_active', true);
+    recipients.push(...((ceos ?? []) as { id: string; role: string }[]));
+
+    // Fetch branch-specific roles
+    const nonCeoRoles = targetRoles.filter((r) => r !== 'CEO');
+    if (nonCeoRoles.length > 0 && branchId) {
+      // Use branchRecipients parameter if provided, otherwise fetch from DB
+      if (branchRecipients && branchRecipients.length > 0) {
+        recipients.push(
+          ...branchRecipients
+            .filter((r) => nonCeoRoles.includes(r.role))
+            .map((r) => ({ id: r.id, role: r.role }))
+        );
+      } else {
+        // Fallback: fetch branch recipients via RPC
+        const { data: branchStaff } = await db.rpc('branch_recipients' as never, { p_branch: branchId } as never);
+        recipients.push(
+          ...(((branchStaff ?? []) as { id: string; role: string }[]).filter((r) =>
+            nonCeoRoles.includes(r.role)
+          ))
+        );
+      }
+    }
+  } else if (branchId) {
+    // Branch-scoped notification only (no CEO included)
+    if (branchRecipients && branchRecipients.length > 0) {
+      recipients.push(
+        ...branchRecipients
+          .filter((r) => targetRoles.includes(r.role))
+          .map((r) => ({ id: r.id, role: r.role }))
+      );
+    } else {
+      const { data: branchStaff } = await db.rpc('branch_recipients' as never, { p_branch: branchId } as never);
+      recipients.push(
+        ...(((branchStaff ?? []) as { id: string; role: string }[]).filter((r) =>
+          targetRoles.includes(r.role)
+        ))
+      );
+    }
+  }
+
+  // Filter out the actor (except CEOs, whose feed is an audit trail)
+  const targets = recipients.filter((r) => r.role === 'CEO' || r.id !== excludeUserId);
+
+  // Remove duplicates by ID
+  const uniqueTargets = Array.from(new Map(targets.map((t) => [t.id, t])).values());
+
+  // Send push to all targets in parallel
+  await Promise.all(uniqueTargets.map((t) => sendPushToUser(t.id, payload)));
 }

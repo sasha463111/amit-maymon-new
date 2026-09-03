@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushToOverseers } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
@@ -100,7 +100,8 @@ async function notifyCeosPendingApproval(
     if (notifErr) console.error('[notifications] insert failed', notifErr);
     await sendPushToUser(ceo.id, { title, body, url, tag: `approval-${caseId}` });
   }
-  await pushToOverseers({ title, body, url, tag: `approval-${caseId}` }, triggeredBy);
+  // CEO-only notification for approvals pending (audit trail)
+  await notifyRelevantParties('PENDING_APPROVAL', null, { title, body, url, tag: `approval-${caseId}` }, triggeredBy);
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -327,7 +328,8 @@ export async function createCase(input: CreateCaseInput) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(staff.id, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` });
     }
-    await pushToOverseers({ title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id);
+    // Notify SERVICE_MANAGER in branch + CEO for audit trail
+    await notifyRelevantParties('NEW_CASE', branchId, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id, branchStaff);
   }
 
   return { caseId: String(caseId) };
@@ -588,7 +590,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
-    await pushToOverseers({ title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id);
+    // Notify OFFICE staff + CEO for audit trail
+    await notifyRelevantParties('READY_FOR_OFFICE', caseNotif?.branch_id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id, officeUsers as { id: string; role: string }[]);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
     // index `uniq_case_workflow_runs_one_closure_per_case` so a concurrent
@@ -695,7 +698,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
-    await pushToOverseers({ title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id);
+    // Notify PAINTER + SERVICE_ADVISOR + CEO for audit trail
+    await notifyRelevantParties('ENTER_WORK', ew?.branch_id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id, ewBranchUsers);
   }
 
   // WHEELS_CHECK: FYI notification to the CEO only — explicit request (2026-08-31)
@@ -760,7 +764,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` });
     }
-    await pushToOverseers({ title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` }, user.id);
+    // Notify SERVICE_ADVISOR + CEO for audit trail
+    await notifyRelevantParties('WASH_COMPLETE', washCase?.branch_id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` }, user.id, advisors as { id: string; role: string }[]);
   }
 
   // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).
@@ -806,7 +811,9 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       if (notifErr) console.error('[notifications] insert failed', notifErr);
       await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
     }
-    await pushToOverseers({ title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id);
+    // Notify OFFICE + SERVICE_MANAGER + CEO for audit trail
+    const allBranchMgmt = branchMgmt as { id: string; role: string }[];
+    await notifyRelevantParties('CASE_CLOSED', cc?.branch_id, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id, allBranchMgmt);
   }
 
   // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the
