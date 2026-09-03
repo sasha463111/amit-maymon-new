@@ -827,22 +827,35 @@ export function WorkflowStepsSection({
                     )}
                   </div>
 
-                  {canEdit && !isDone && !isSkipped && (
-                    <button
-                      type="button"
-                      disabled={isStepInFlight(s.id) || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
-                      onClick={() => void handleComplete(s)}
-                      className={`rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
-                        isBlocked
-                          ? 'px-3 py-1.5 text-xs bg-orange-500 text-white hover:bg-orange-600'
-                          : isActive
-                            ? 'px-5 py-2.5 text-sm bg-accent text-accent-on hover:bg-accent-strong shadow-sm'
-                            : 'px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                      title={isBlocked ? blockReason : undefined}
-                    >
-                      {completingStepId === s.id ? 'מבצע...' : isBlocked ? 'חסום' : 'סמן בוצע'}
-                    </button>
+                  {canEdit && !isSkipped && (
+                    <>
+                      {!isDone && (
+                        <button
+                          type="button"
+                          disabled={isStepInFlight(s.id) || (isBlocked && !STEPS_REQUIRING_LINK.has(s.step_key) && !STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key))}
+                          onClick={() => void handleComplete(s)}
+                          className={`rounded-md font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+                            isBlocked
+                              ? 'px-3 py-1.5 text-xs bg-orange-500 text-white hover:bg-orange-600'
+                              : isActive
+                                ? 'px-5 py-2.5 text-sm bg-accent text-accent-on hover:bg-accent-strong shadow-sm'
+                                : 'px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                          title={isBlocked ? blockReason : undefined}
+                        >
+                          {completingStepId === s.id ? 'מבצע...' : isBlocked ? 'חסום' : 'סמן בוצע'}
+                        </button>
+                      )}
+                      {isDone && STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key) && (
+                        <button
+                          type="button"
+                          onClick={() => setWheelsCheckPanelStepId(s.id)}
+                          className="px-3 py-1.5 text-xs bg-purple-600 text-white hover:bg-purple-700 rounded-md font-bold transition-colors"
+                        >
+                          ✏️ עדכן קובץ
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 

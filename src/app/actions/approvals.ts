@@ -102,6 +102,41 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     }
     // Notify SERVICE_MANAGER + CEO for audit trail
     await notifyRelevantParties('APPROVAL_REJECTED', branchId, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id, managers as { id: string; role: string }[]);
+
+    // Revert step on ESTIMATE_AND_DETAILS rejection: allow SERVICE_MANAGER to re-submit
+    const approvalType = (approvalTypeRow as { approval_type: string } | null)?.approval_type;
+    if (approvalType === 'ESTIMATE_AND_DETAILS') {
+      const { data: runData } = await supabase
+        .from('case_workflow_runs')
+        .select('id')
+        .eq('case_id', approval.case_id)
+        .eq('workflow_type', 'PROFESSIONAL')
+        .eq('status', 'ACTIVE')
+        .maybeSingle();
+      if (runData) {
+        const run = runData as { id: string };
+        const { data: stepData } = await supabase
+          .from('case_workflow_steps')
+          .select('id')
+          .eq('run_id', run.id)
+          .eq('step_key', 'WAIT_APPRAISER_APPROVAL')
+          .eq('state', 'DONE')
+          .maybeSingle();
+        if (stepData) {
+          await supabase
+            .from('case_workflow_steps')
+            .update({ state: 'ACTIVE', completed_by: null, completed_at: null } as never)
+            .eq('id', (stepData as { id: string }).id);
+          await supabase.from('audit_events').insert({
+            entity_type: 'WORKFLOW_STEP',
+            entity_id: (stepData as { id: string }).id,
+            action: 'REVERTED_ON_REJECTION',
+            user_id: user.id,
+            payload: { approval_id: input.approval_id, reason: 'estimate_approval_rejected' },
+          } as never);
+        }
+      }
+    }
   } else if (input.status === 'APPROVED') {
     // Notify branch SERVICE_MANAGERs that the approval went through, so they can continue.
     const managers = (await branchRecipients(supabase, branchId))
