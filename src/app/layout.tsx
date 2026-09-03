@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Heebo, JetBrains_Mono } from 'next/font/google';
 import { PushSubscriber } from '@/components/PushSubscriber';
@@ -23,7 +23,6 @@ export const metadata: Metadata = {
   title: 'Tehila Bodyshop CRM',
   description: 'Bodyshop repair workflow management',
   manifest: '/manifest.json',
-  themeColor: '#B03C2F',
   icons: {
     icon: [
       { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
@@ -36,12 +35,14 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'תהילה',
   },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#B03C2F',
 };
 
 // Inline cleanup runs on every page load BEFORE any other JS. Purpose: wipe
