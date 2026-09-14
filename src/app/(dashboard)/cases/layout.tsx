@@ -23,7 +23,9 @@ export default async function CasesLayout({ children }: { children: React.ReactN
     redirect('/painters');
   }
 
-  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO' || role === 'SERVICE_ADVISOR';
+  // Only SERVICE_MANAGER, OFFICE, CEO can create cases
+  // SERVICE_ADVISOR is read-only (can view cases + edit workflow steps only)
+  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
 
   let casesQuery = supabase
     .from('cases')

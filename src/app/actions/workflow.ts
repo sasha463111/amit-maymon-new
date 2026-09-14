@@ -125,7 +125,9 @@ export async function createCase(input: CreateCaseInput) {
 
   const profile = profileData as { id: string; role: string; branch_ids: string[] } | null;
   const role = profile?.role as UserRole | undefined;
-  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') {
+  // Only SERVICE_MANAGER, OFFICE, CEO can create cases
+  // SERVICE_ADVISOR is read-only (can view + edit workflow steps but not create)
+  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO') {
     return { error: 'אין הרשאה ליצירת תיק' };
   }
 
