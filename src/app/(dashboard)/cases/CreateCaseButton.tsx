@@ -141,7 +141,8 @@ export function CreateCaseButton({
   // default branch, so they must pick one — otherwise branch_id is empty and
   // createCase rejects it with "סניף לא תקין". OFFICE staff with multiple
   // branches should also pick for each case (branch_ids array).
-  const needsBranchPicker = isCeo || branchIds.length === 0;
+  // Show picker if: CEO (any branch), no branches, or multiple branches to choose from
+  const needsBranchPicker = isCeo || branchIds.length !== 1;
 
   async function handleOpen() {
     setOpen(true);

@@ -38,7 +38,8 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
     branch_id: branchIds?.[0] ?? '',
   });
 
-  const needsBranchPicker = isCeo || branchIds.length === 0;
+  // Show branch picker if: CEO (any branch), no branches, or multiple branches to choose from
+  const needsBranchPicker = isCeo || branchIds.length !== 1;
   // Same Ministry of Transport plate lookup as opening an accident case
   // (CreateCaseButton) — referrals previously required typing vehicle type
   // by hand even though the same auto-fill already exists elsewhere.
