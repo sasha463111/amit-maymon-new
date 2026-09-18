@@ -17,18 +17,49 @@ jobs:
       - name: Create backup directory
         run: mkdir -p backups
 
+      # Fails fast with a clear message instead of burning ~5 min on a
+      # connection timeout, which is how this silently broke before.
+      - name: Verify database password secret is present
+        run: |
+          if [ -z "${{ secrets.SUPABASE_PASSWORD }}" ]; then
+            echo "::error::SUPABASE_PASSWORD secret is not set. Add it under"
+            echo "::error::Settings > Secrets and variables > Actions."
+            echo "::error::Value = the Supabase database password"
+            echo "::error::(Supabase dashboard > Settings > Database)."
+            exit 1
+          fi
+          echo "Secret present."
+
       - name: Backup database
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
-          BACKUP_DATE: ${{ job.started_at }}
         run: |
           BACKUP_FILE="backups/backup_$(date +%Y%m%d_%H%M%S).sql"
+
+          # Connect through the Session-mode pooler, NOT db.<ref>.supabase.co.
+          # Supabase dropped IPv4 from the direct database endpoint, and GitHub
+          # Actions runners are IPv4-only, so a direct connection just times out
+          # after ~5 minutes (which is exactly what happened here every day).
+          # Pooler user is "postgres.<project-ref>", not plain "postgres".
+          #
+          # --no-owner / --no-privileges: role grants belong to Supabase and are
+          # not restorable into a fresh project, so omitting them keeps the dump
+          # replayable.
           pg_dump \
-            -h yhanmyvolpeiuxspcxmk.supabase.co \
-            -U postgres \
+            -h aws-0-ap-south-1.pooler.supabase.com \
+            -p 5432 \
+            -U postgres.yhanmyvolpeiuxspcxmk \
             -d postgres \
-            -v \
+            --no-owner \
+            --no-privileges \
             > "$BACKUP_FILE"
+
+          # A dump that connected but produced nothing is worse than a loud
+          # failure, because the artifact still uploads and looks like a backup.
+          if [ ! -s "$BACKUP_FILE" ]; then
+            echo "::error::Backup file is empty - treating as failure."
+            exit 1
+          fi
 
           echo "Backup created: $BACKUP_FILE"
           ls -lh "$BACKUP_FILE"
