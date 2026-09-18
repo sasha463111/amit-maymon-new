@@ -146,7 +146,7 @@ export type BodyworkAdvisor = {
   id: string;
   full_name: string;
   role: string;
-  branch_id: string | null;
+  branch_ids: string[] | null;
   is_bodywork_advisor: boolean;
 };
 
@@ -157,7 +157,7 @@ export async function getBodyworkAdvisors(): Promise<{ data: BodyworkAdvisor[]; 
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_id, is_bodywork_advisor')
+    .select('id, full_name, role, branch_ids, is_bodywork_advisor')
     .in('role', ['SERVICE_MANAGER', 'SERVICE_ADVISOR'])
     .eq('is_active', true)
     .order('full_name');

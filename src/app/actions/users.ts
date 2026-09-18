@@ -103,7 +103,7 @@ export async function updateSystemUser(
 
 export interface ViewAsState {
   role: UserRole;
-  branchId: string | null;
+  branchIds: string[];
   userId: string;
   userName: string;
 }
@@ -119,10 +119,10 @@ export async function startViewAsUser(userId: string) {
 
   const { data: target } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_id')
+    .select('id, full_name, role, branch_ids')
     .eq('id', userId)
     .single();
-  const t = target as { id: string; full_name: string; role: UserRole; branch_id: string | null } | null;
+  const t = target as { id: string; full_name: string; role: UserRole; branch_ids: string[] | null } | null;
   if (!t) return { error: 'משתמש לא נמצא' };
 
   const cookieStore = await cookies();
@@ -130,7 +130,7 @@ export async function startViewAsUser(userId: string) {
     VIEW_AS_COOKIE,
     JSON.stringify({
       role: t.role,
-      branchId: t.branch_id,
+      branchIds: t.branch_ids ?? [],
       userId: t.id,
       userName: t.full_name,
     }),

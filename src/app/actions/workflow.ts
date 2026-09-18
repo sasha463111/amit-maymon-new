@@ -346,10 +346,10 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('id, role, branch_id, sees_all_branches')
+    .select('id, role, branch_ids, sees_all_branches')
     .eq('id', user.id)
     .single();
-  const profile = profileData as { id: string; role: string; branch_id: string | null; sees_all_branches?: boolean } | null;
+  const profile = profileData as { id: string; role: string; branch_ids: string[] | null; sees_all_branches?: boolean } | null;
   const role = profile?.role as UserRole | undefined;
 
   const { data: caseData } = await supabase
@@ -363,7 +363,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   // Explicit branch check. RLS already prevents cross-branch writes, but
   // without this the action would silently no-op and return {ok:true} to a
   // manager acting on another branch's case. Fail loudly instead. CEO exempt.
-  if (role !== 'CEO' && !profile?.sees_all_branches && profile?.branch_id !== caseRow.branch_id) {
+  if (role !== 'CEO' && !profile?.sees_all_branches && !profile?.branch_ids?.includes(caseRow.branch_id)) {
     return { error: 'אין הרשאה לתיק זה (סניף אחר)' };
   }
 
