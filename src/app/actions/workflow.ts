@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
+import { hasPermission } from '@/lib/permissions';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
   APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS,
@@ -125,9 +126,10 @@ export async function createCase(input: CreateCaseInput) {
 
   const profile = profileData as { id: string; role: string; branch_ids: string[] } | null;
   const role = profile?.role as UserRole | undefined;
-  // Only SERVICE_MANAGER, OFFICE, CEO can create cases
-  // SERVICE_ADVISOR is read-only (can view + edit workflow steps but not create)
-  if (role !== 'SERVICE_MANAGER' && role !== 'OFFICE' && role !== 'CEO') {
+  // Who may create a case is governed by Settings > Permissions
+  // (role_permissions.create_case), not hard-coded here. Defaults to
+  // SERVICE_MANAGER / OFFICE / CEO; the CEO can change it.
+  if (!(await hasPermission(supabase, 'create_case'))) {
     return { error: 'אין הרשאה ליצירת תיק' };
   }
 
@@ -376,9 +378,15 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   if (!runData) return { error: 'לא נמצא workflow פעיל' };
   const run = runData as { id: string; workflow_type: string };
 
+  // Closure and professional steps are two separate permissions in
+  // Settings > Permissions, so they are checked independently.
   const isClosure = run.workflow_type === 'CLOSURE';
-  if (isClosure && role !== 'OFFICE' && role !== 'CEO') return { error: 'רק משרד יכול להשלים שלבי סגירה' };
-  if (!isClosure && role !== 'SERVICE_MANAGER' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') return { error: 'רק מנהל שירות או יועץ שירות יכול להשלים שלב' };
+  if (isClosure && !(await hasPermission(supabase, 'complete_closure_step'))) {
+    return { error: 'אין הרשאה להשלים שלבי סגירה' };
+  }
+  if (!isClosure && !(await hasPermission(supabase, 'complete_professional_step'))) {
+    return { error: 'אין הרשאה להשלים שלב מקצועי' };
+  }
 
   let activeStep: { id: string; step_key: string; order_index: number } | null = null;
 

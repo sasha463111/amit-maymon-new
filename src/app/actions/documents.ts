@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { hasPermission } from '@/lib/permissions';
 
 /**
  * Batch-create signed URLs for storage objects. Used by the case detail page,
@@ -87,6 +88,12 @@ export async function uploadCaseDocument(formData: FormData) {
   // For multi-branch staff, check if the case's branch is in their branch_ids array
   if (userRole !== 'CEO' && !userSeesAll && !userBranchIds.includes(caseBranchId)) {
     return { error: 'אין גישה לתיק זה' };
+  }
+
+  // Branch access alone is not enough — whether this ROLE may upload at all is
+  // governed by Settings > Permissions (role_permissions.upload_documents).
+  if (!(await hasPermission(supabase, 'upload_documents'))) {
+    return { error: 'אין הרשאה להעלות מסמכים' };
   }
 
   // Upload file to storage. Path is namespaced by caseId so RLS can scope by prefix.
@@ -182,13 +189,20 @@ export async function deleteCaseDocument(documentId: string) {
   const userRole = (profile as { role: string }).role;
   const caseBranchId = (caseRow as { branch_id: string }).branch_id;
 
-  // Check permissions: user uploaded it, or SERVICE_MANAGER/OFFICE/CEO in same branch
-  // For multi-branch staff, check if the case's branch is in their branch_ids array
+  // You may always remove a file you uploaded yourself — that is not a
+  // delegated permission and stays outside the matrix.
+  const isOwnUpload = docRow.uploaded_by === user.id;
+
+  // Deleting SOMEONE ELSE'S file needs both reach (CEO / cross-branch / the
+  // case is in one of your branches) AND the delete_documents permission from
+  // Settings > Permissions. Defaults to SERVICE_MANAGER / OFFICE / CEO.
+  const canReachCase =
+    userRole === 'CEO' ||
+    (profile as { sees_all_branches?: boolean }).sees_all_branches === true ||
+    userBranchIds.includes(caseBranchId);
+
   const canDelete =
-    docRow.uploaded_by === user.id ||
-    (userRole === 'CEO') ||
-    ((profile as { sees_all_branches?: boolean }).sees_all_branches === true) ||
-    (userBranchIds.includes(caseBranchId) && (userRole === 'SERVICE_MANAGER' || userRole === 'OFFICE'));
+    isOwnUpload || (canReachCase && (await hasPermission(supabase, 'delete_documents')));
 
   if (!canDelete) {
     return { error: 'אין הרשאה למחוק קובץ זה' };

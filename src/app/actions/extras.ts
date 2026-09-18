@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
+import { hasPermission } from '@/lib/permissions';
 import type { CreateExtraInput, UpdateExtraStatusInput } from '@/types/database';
 
 export async function createExtra(input: CreateExtraInput) {
@@ -92,8 +93,10 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
     .eq('id', user.id)
     .single();
   const profile = profileData as { role: string } | null;
-  if (profile?.role !== 'SERVICE_MANAGER' && profile?.role !== 'CEO') {
-    return { error: 'רק מנהל שירות יכול לעדכן סטטוס' };
+  // Governed by Settings > Permissions (role_permissions.manage_extras_status).
+  // Defaults to SERVICE_MANAGER / CEO.
+  if (!(await hasPermission(supabase, 'manage_extras_status'))) {
+    return { error: 'אין הרשאה לעדכן סטטוס תוספת' };
   }
 
   // Fetch the extra (so we know who the painter was) BEFORE updating, so we

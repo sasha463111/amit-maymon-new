@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { hasPermission } from '@/lib/permissions';
 import { CasesMasterDetail, type RailCase } from './CasesMasterDetail';
 import { PROFESSIONAL_STEP_LABELS as STEP_LABELS } from '@/types/database';
 
@@ -23,9 +24,9 @@ export default async function CasesLayout({ children }: { children: React.ReactN
     redirect('/painters');
   }
 
-  // Only SERVICE_MANAGER, OFFICE, CEO can create cases
-  // SERVICE_ADVISOR is read-only (can view cases + edit workflow steps only)
-  const canCreate = role === 'SERVICE_MANAGER' || role === 'OFFICE' || role === 'CEO';
+  // Button visibility follows Settings > Permissions (create_case) so the UI
+  // matches what the server action and RLS will actually allow.
+  const canCreate = await hasPermission(supabase, 'create_case');
 
   let casesQuery = supabase
     .from('cases')

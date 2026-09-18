@@ -2,19 +2,28 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
+import { hasPermission } from '@/lib/permissions';
 
-async function requireCeo() {
+/**
+ * Gate for every Settings mutation.
+ *
+ * Governed by Settings > Permissions (role_permissions.manage_settings), which
+ * defaults to CEO only. The CEO can delegate it.
+ *
+ * NOTE: manage_settings is effectively an admin grant — whoever holds it can
+ * edit the permission matrix itself, and so can grant themselves any of the
+ * other seven actions. It cannot be used to touch CEO permissions (blocked
+ * below) or to lock the CEO out (has_permission always returns true for CEO),
+ * but it should still be delegated deliberately.
+ */
+async function requireSettingsAccess() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' as string, supabase: null, userId: null };
 
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-  const role = (profileData as { role: string } | null)?.role;
-  if (role !== 'CEO') return { error: 'רק מנכ"ל יכול לגשת להגדרות' as string, supabase: null, userId: null };
+  if (!(await hasPermission(supabase, 'manage_settings'))) {
+    return { error: 'אין הרשאה לגשת להגדרות' as string, supabase: null, userId: null };
+  }
 
   return { error: null, supabase, userId: user.id };
 }
@@ -39,7 +48,7 @@ export async function updateRolePermission(
   action: string,
   enabled: boolean
 ): Promise<{ ok?: boolean; error?: string }> {
-  const { error: authError, supabase } = await requireCeo();
+  const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
   // CEO permissions are always enabled and cannot be changed
@@ -73,7 +82,7 @@ export async function updateWorkflowStep(
   id: string,
   updates: Partial<Pick<WorkflowStepTemplate, 'step_label' | 'order_index' | 'is_enabled' | 'requires_link' | 'requires_file_or_link' | 'requires_ceo_approval'>>
 ): Promise<{ ok?: boolean; error?: string }> {
-  const { error: authError, supabase } = await requireCeo();
+  const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
   const { error } = await supabase
@@ -90,7 +99,7 @@ export async function addWorkflowStep(step: {
   step_label: string;
   order_index: number;
 }): Promise<{ ok?: boolean; error?: string; id?: string }> {
-  const { error: authError, supabase } = await requireCeo();
+  const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
   if (!step.step_key?.trim()) return { error: 'מפתח שלב חובה' };
@@ -114,7 +123,7 @@ export async function addWorkflowStep(step: {
 }
 
 export async function removeWorkflowStep(id: string): Promise<{ ok?: boolean; error?: string }> {
-  const { error: authError, supabase } = await requireCeo();
+  const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
   // Prevent removing core steps
@@ -170,7 +179,7 @@ export async function toggleBodyworkAdvisor(
   profileId: string,
   isAdvisor: boolean
 ): Promise<{ ok?: boolean; error?: string }> {
-  const { error: authError, supabase } = await requireCeo();
+  const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
   const { error } = await supabase

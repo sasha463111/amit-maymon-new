@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { hasPermission } from '@/lib/permissions';
 import { getRolePermissions, getWorkflowStepTemplates, getBodyworkAdvisors } from '@/app/actions/settings';
 import { listSystemUsers } from '@/app/actions/users';
 import { PermissionsTab } from './PermissionsTab';
@@ -20,14 +21,13 @@ export default async function SettingsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  const profile = profileData as { role: string } | null;
-  if (profile?.role !== 'CEO') redirect('/cases');
+  // Access follows Settings > Permissions (manage_settings), so that delegating
+  // it actually lets someone in. Defaults to CEO only.
+  //
+  // Note: the Users tab stays CEO-only regardless — creating and editing
+  // accounts is not one of the eight delegatable actions, and users.ts enforces
+  // that separately.
+  if (!(await hasPermission(supabase, 'manage_settings'))) redirect('/cases');
 
   const resolvedParams = await searchParams;
   const { tab = 'permissions' } = resolvedParams;

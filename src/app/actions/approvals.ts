@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
+import { hasPermission } from '@/lib/permissions';
 import type { ApprovalDecisionInput } from '@/types/database';
 import { APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS } from '@/types/database';
 
@@ -20,7 +21,11 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     .eq('id', user.id)
     .single();
   const profile = profileData as { id: string; role: string } | null;
-  if (profile?.role !== 'CEO') return { error: 'רק מנכ"ל יכול לאשר/לדחות' };
+  // Governed by Settings > Permissions (role_permissions.decide_approvals).
+  // Defaults to CEO only.
+  if (!(await hasPermission(supabase, 'decide_approvals'))) {
+    return { error: 'אין הרשאה לאשר/לדחות' };
+  }
 
   const { data: approvalData } = await supabase
     .from('ceo_approvals')
