@@ -3,10 +3,12 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { CreateReferralInput, UpdateReferralInput } from '@/types/database';
+import { hasPermission } from '@/lib/permissions';
 
-// Only OFFICE + CEO touch referrals at all — matches the RLS gate in
-// migration 039 and the /closure page's precedent for office-only screens.
-async function requireOfficeOrCeo(supabase: Awaited<ReturnType<typeof createClient>>) {
+// Who may work with referrals is governed by Settings > Permissions
+// (role_permissions.create_referral), which defaults to OFFICE + CEO and
+// matches the RLS gate on referrals and its dependent tables.
+async function requireReferralAccess(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' as const };
   const { data: profileData } = await supabase
@@ -15,15 +17,16 @@ async function requireOfficeOrCeo(supabase: Awaited<ReturnType<typeof createClie
     .eq('id', user.id)
     .single();
   const profile = profileData as { id: string; role: string; branch_ids: string[]; sees_all_branches?: boolean } | null;
-  if (!profile || (profile.role !== 'OFFICE' && profile.role !== 'CEO')) {
-    return { error: 'רק משרד או מנכ"ל יכולים לנהל הפניות' as const };
+  if (!profile) return { error: 'פרופיל לא נמצא' as const };
+  if (!(await hasPermission(supabase, 'create_referral'))) {
+    return { error: 'אין הרשאה לנהל הפניות' as const };
   }
   return { user, profile };
 }
 
 export async function createReferral(input: CreateReferralInput) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
   if (!input.branch_id) return { error: 'סניף לא תקין' };
 
@@ -67,7 +70,7 @@ export async function createReferral(input: CreateReferralInput) {
 
 export async function updateReferral(referralId: string, updates: UpdateReferralInput) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   // Column allow-list, same reasoning as caseDetails.ts — the client passes
@@ -99,7 +102,7 @@ export async function updateReferral(referralId: string, updates: UpdateReferral
  */
 export async function setReferralFollowUpDate(referralId: string, date: string | null) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   const { error } = await supabase
@@ -116,7 +119,7 @@ export async function setReferralFollowUpDate(referralId: string, date: string |
 /** Manual cancel — soft (status flip), matches cases' deleted_at pattern. Referral drops out of the active list but stays for history. */
 export async function cancelReferral(referralId: string) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   const { error } = await supabase
@@ -137,7 +140,7 @@ export async function cancelReferral(referralId: string) {
  */
 export async function convertReferral(referralId: string, caseId: string) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   const { error } = await supabase
@@ -165,7 +168,7 @@ export type ReferralStatusTag = 'AWAITING_REPLACEMENT_CAR' | 'AWAITING_PAPERWORK
  */
 export async function addReferralStatusUpdate(referralId: string, statusTag: ReferralStatusTag | null, note: string) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
   if (!note.trim() && !statusTag) return { error: 'נדרש מצב או הערה' };
 
@@ -195,7 +198,7 @@ export async function addReferralStatusUpdate(referralId: string, statusTag: Ref
 
 export async function getReferralStatusUpdates(referralId: string) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { data: [], error: auth.error };
 
   const { data, error } = await supabase
@@ -217,7 +220,7 @@ export interface ReferralStatusUpdateRow {
 
 export async function uploadReferralDocument(formData: FormData) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   const referralId = formData.get('referral_id') as string;
@@ -264,7 +267,7 @@ export async function uploadReferralDocument(formData: FormData) {
 
 export async function deleteReferralDocument(documentId: string) {
   const supabase = await createClient();
-  const auth = await requireOfficeOrCeo(supabase);
+  const auth = await requireReferralAccess(supabase);
   if ('error' in auth) return { error: auth.error };
 
   const { data: doc } = await supabase

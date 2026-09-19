@@ -14,8 +14,19 @@ export default async function PaintersPage() {
     .single();
 
   const profileRole = (profile as { role: string } | null)?.role;
-  // PAINTER sees only their branch cases; CEO sees all
-  if (profileRole !== 'CEO' && profileRole !== 'PAINTER' && profileRole !== 'SERVICE_MANAGER') redirect('/cases');
+  // PAINTER sees only their branch cases; CEO sees all.
+  // SERVICE_ADVISOR is included because painter requests are routed to service
+  // advisors and bodywork advisors for a response (see painter.ts) — without
+  // access here, every one of those notifications deep-links to a page that
+  // bounces them straight back to /cases.
+  if (
+    profileRole !== 'CEO' &&
+    profileRole !== 'PAINTER' &&
+    profileRole !== 'SERVICE_MANAGER' &&
+    profileRole !== 'SERVICE_ADVISOR'
+  ) {
+    redirect('/cases');
+  }
 
   // Fetch all open cases with painter-relevant fields (exclude soft-deleted)
   const { data: cases } = await supabase

@@ -18,8 +18,9 @@ export default async function PainterCasePage({ params }: { params: { id: string
   // Safety check: profile should always exist if user is logged in
   if (!profile) redirect('/login');
 
-  // Only PAINTER, SERVICE_MANAGER, CEO can access painter case page
-  const allowed = ['PAINTER', 'SERVICE_MANAGER', 'CEO'];
+  // SERVICE_ADVISOR included: painter requests notify service/bodywork advisors
+  // and deep-link here, so they must be able to open what they were alerted to.
+  const allowed = ['PAINTER', 'SERVICE_MANAGER', 'CEO', 'SERVICE_ADVISOR'];
   if (!allowed.includes(profile.role)) redirect('/cases');
 
   const { data: caseData } = await supabase

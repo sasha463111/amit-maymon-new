@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { hasPermission } from '@/lib/permissions';
 import { NewReferralButton } from './NewReferralButton';
 import { ReferralsGrid, type ReferralRow } from './ReferralsGrid';
 
@@ -17,7 +18,8 @@ export default async function ReferralsPage() {
     .single();
   const profile = profileData as { role: string; branch_ids: string[] } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
-  if (!isPreview && profile?.role !== 'OFFICE' && profile?.role !== 'CEO') {
+  // Access follows Settings > Permissions (create_referral), default OFFICE + CEO.
+  if (!isPreview && !(await hasPermission(supabase, 'create_referral'))) {
     return (
       <div>
         <h1 className="text-2xl font-bold mb-4">הפניות</h1>

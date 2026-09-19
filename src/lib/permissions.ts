@@ -12,6 +12,7 @@ type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
  */
 export type PermissionAction =
   | 'create_case'
+  | 'create_referral'
   | 'complete_professional_step'
   | 'complete_closure_step'
   | 'decide_approvals'

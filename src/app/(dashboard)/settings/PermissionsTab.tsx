@@ -6,6 +6,7 @@ import type { RolePermission } from '@/types/database';
 
 const ACTION_LABELS: Record<string, string> = {
   create_case: 'פתיחת תיק',
+  create_referral: 'פתיחת הפנייה',
   complete_professional_step: 'השלמת שלב מקצועי',
   complete_closure_step: 'השלמת שלב סגירה',
   manage_settings: 'ניהול הגדרות',

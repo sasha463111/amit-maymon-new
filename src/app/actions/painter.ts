@@ -231,8 +231,11 @@ export async function updatePainterRequestStatus(
     .eq('id', user.id)
     .single();
   const role = (profileData as { role: string } | null)?.role;
-  if (role !== 'SERVICE_MANAGER' && role !== 'CEO') {
-    return { error: 'רק מנהל שירות יכול לעדכן סטטוס בקשה' };
+  // SERVICE_ADVISOR can respond too: painter requests are routed to service and
+  // bodywork advisors precisely so they can answer them, so the people the
+  // system asks to handle a request must be able to actually handle it.
+  if (role !== 'SERVICE_MANAGER' && role !== 'CEO' && role !== 'SERVICE_ADVISOR') {
+    return { error: 'אין הרשאה לעדכן סטטוס בקשה' };
   }
 
   // Fetch the request so we can notify the original painter + link back to the case.

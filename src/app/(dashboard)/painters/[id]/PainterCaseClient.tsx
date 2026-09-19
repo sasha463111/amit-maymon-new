@@ -636,7 +636,7 @@ export function PainterCaseClient({
               <PainterRequestItem
                 key={req.id}
                 req={req}
-                canManage={role === 'SERVICE_MANAGER' || role === 'CEO'}
+                canManage={role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR'}
                 isHighlighted={req.id === highlightId}
                 onStatusUpdate={(newStatus) => {
                   setRequests((prev) =>
