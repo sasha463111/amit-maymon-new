@@ -179,3 +179,57 @@ If issues arise:
 **Refactor Complete** ✅
 
 All notification types have been analyzed, audited, and updated to use the new smart routing system.
+
+---
+
+## 🔴 Incident: Every Notification Dead for 17 Days (2026-09-01 → 2026-09-18)
+
+**Symptom:** Zero notification rows created system-wide for 17 days, despite 20
+new referrals, 6 cases, 13 status updates and 2 painter requests in that window.
+No user-facing error was ever shown.
+
+**Root cause:** `branch_recipients()` — the SECURITY DEFINER RPC that resolves
+WHO to notify — still filtered on `profiles.branch_id`, the column dropped when
+profiles moved to the `branch_ids` array. Every call raised
+`ERROR 42703: column p.branch_id does not exist`.
+
+**Why it was silent:** `src/lib/recipients.ts` catches the RPC error,
+`console.error`s it and returns `[]`. Callers then loop over an empty array:
+
+```ts
+const branchStaff = (await branchRecipients(supabase, branchId)).filter(...)
+for (const staff of branchStaff) {        // 0 iterations
+  await supabase.from('notifications').insert(...)   // never ran
+  await sendPushToUser(...)                          // never ran
+}
+```
+
+**Blast radius:** Every notification type, every user — plus all four scheduled
+reminders (enter-work, painter escalation, office handoff, referral follow-up),
+which call the same RPC. Those cron runs reported success while completing in 8
+seconds doing nothing.
+
+**Fixed:** migration `20260918120000_fix_branch_recipients_multibranch`.
+
+**Lesson — swallowing an error to `[]` turns a loud failure into a silent one.**
+A recipient resolver that fails should be loud. When adding a similar helper,
+prefer failing closed and visibly over returning an empty list.
+
+---
+
+## 🔴 Incident: Advisors Notified About Pages They Could Not Open
+
+**Symptom:** נסיה (SERVICE_ADVISOR, bodywork advisor) received **98**
+notifications deep-linking to `/painters/<case>`. Every one bounced her to
+`/cases`.
+
+**Root cause:** `painter.ts` routes painter requests to SERVICE_ADVISOR and
+`is_bodywork_advisor` staff, but `/painters` and `/painters/[id]` allowed only
+PAINTER / SERVICE_MANAGER / CEO. `respondToPainterRequest()` refused advisors
+too, so even reaching the page would not have let her answer.
+
+**Fixed 2026-09-18:** SERVICE_ADVISOR may now open both pages and respond.
+
+**Rule going forward — routing and access must stay in sync.** If a role is
+added to a `NOTIFICATION_ROUTING` entry or a recipient filter, confirm that role
+can actually open the `action_url` the notification carries, and act on it.

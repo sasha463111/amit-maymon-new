@@ -262,7 +262,9 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - `case_id`, `file_name`, `file_path`, `file_size`, `mime_type`, `document_type`, `uploaded_by`
 
 ### `role_permissions`
-- `role`, `action`, `enabled` — מטריצת הרשאות דינמית
+- `role`, `action`, `enabled` — מטריצת הרשאות דינמית. **מקור האמת היחיד** להרשאות (2026-09-18). ראה Standing Rule #5.
+- 5 תפקידים × 9 פעולות = 45 שורות. הטבלה חייבת להישאר מלאה: שילוב חסר נחשב **אסור**.
+- נקראת אך ורק דרך `has_permission(action)` — לא לשאול את הטבלה ישירות בקוד.
 
 ### `workflow_step_templates`
 - `step_key`, `step_label`, `order_index`, `is_enabled`, `requires_link`, `requires_file_or_link`, `requires_ceo_approval`
@@ -925,3 +927,83 @@ After (2026-09-14): QA agents MUST validate that the system correctly handles BO
 - `.claude/agents/qa-master-tester.md` — Updated with new test cases
 - `DEPLOYMENT_CHECKLIST.md` — Updated with QA checklist
 
+
+---
+
+### 🔴 Standing Rule #5: Permissions Live in the Matrix, Never in Code (2026-09-18)
+
+**Policy:** `role_permissions` is the single source of truth for who may do what.
+Never hard-code a role list for one of the nine governed actions.
+
+**Root Cause:** The Settings permission screen was display-only for months. It
+rendered switches, the CEO flipped them, rows were saved — and nothing consulted
+them. Worse, the matrix showed SERVICE_ADVISOR as able to create cases and manage
+extras, which the code had always refused, so the CEO was reading a false picture.
+Separately, opening a referral was hard-coded to OFFICE/CEO and absent from the
+matrix entirely, so the reported "נסיה and ערן cannot open referrals" had no fix
+short of a code change.
+
+**The nine governed actions:**
+
+| action | Hebrew label | Default roles |
+|---|---|---|
+| `create_case` | פתיחת תיק | SERVICE_MANAGER, OFFICE, CEO |
+| `create_referral` | פתיחת הפנייה | OFFICE, CEO |
+| `complete_professional_step` | השלמת שלב מקצועי | SERVICE_MANAGER, SERVICE_ADVISOR, CEO |
+| `complete_closure_step` | השלמת שלב סגירה | OFFICE, CEO |
+| `decide_approvals` | אישור בקשות | CEO |
+| `upload_documents` | העלאת מסמכים | SERVICE_MANAGER, SERVICE_ADVISOR, OFFICE, CEO |
+| `delete_documents` | מחיקת מסמכים | SERVICE_MANAGER, OFFICE, CEO |
+| `manage_extras_status` | ניהול תוספות | SERVICE_MANAGER, CEO |
+| `manage_settings` | ניהול הגדרות | CEO |
+
+**How to check a permission:**
+
+```ts
+import { hasPermission } from '@/lib/permissions';
+if (!(await hasPermission(supabase, 'create_case'))) return { error: '...' };
+```
+
+```sql
+-- in RLS, ALWAYS AND-ed with the branch check, never replacing it
+WITH CHECK (has_permission('create_case') AND (get_my_role() = 'CEO' OR branch_id = ANY(get_my_branch_ids())))
+```
+
+**Four invariants that must never be broken:**
+
+1. **CEO is never gated.** `has_permission()` returns true for CEO before reading
+   the table, and `updateRolePermission()` refuses to edit CEO rows. No setting
+   can lock the owner out of their own system.
+2. **Branch isolation stays hard-coded.** The matrix decides WHICH ROLES; it must
+   never decide WHICH BRANCHES. Always AND the branch check alongside it.
+3. **Fail closed.** `hasPermission()` returns false on RPC error, and unknown
+   role/action pairs deny. A permission check that cannot run must block.
+4. **Grant a permission everywhere or nowhere.** A half-granted permission is
+   worse than none — the user gets a confusing mid-flow rejection. When adding an
+   action, wire ALL of: the server action, its RLS policy, dependent tables, any
+   storage helper, AND the UI gate that shows the button.
+
+**Adding a new action — the full checklist:**
+
+- [ ] Insert 5 rows (one per role) into `role_permissions` via migration
+- [ ] Add to `PermissionAction` union in `src/lib/permissions.ts`
+- [ ] Add Hebrew label to `ACTION_LABELS` in `settings/PermissionsTab.tsx`
+- [ ] Gate the server action with `hasPermission(...)`
+- [ ] Update the RLS policy (AND-ed with branch check)
+- [ ] Update dependent tables' policies and any `_storage_*` helper
+- [ ] Update the UI gate so the button/page matches what the server allows
+- [ ] Verify: `npx tsc --noEmit`, `npm run build`, re-query the policies in prod
+
+**Known deliberate exceptions (not in the matrix):**
+
+- **User account management** (`users.ts`) — CEO only, not delegatable.
+- **Painter requests** (`painter.ts`) — PAINTER creates; SERVICE_MANAGER /
+  SERVICE_ADVISOR / CEO respond. Advisors were locked out of `/painters` until
+  2026-09-18 despite being the ones notified; keep those roles in sync.
+- **`_storage_user_can_see_case()`** — branch-only on purpose. It backs read,
+  upload AND delete, so gating it on `upload_documents` would also block viewing.
+- **Deleting your own upload** — always allowed, outside the matrix.
+
+**Warning to relay when delegating:** `manage_settings` is effectively an admin
+grant. Whoever holds it can edit the matrix and thereby grant themselves the
+other eight. It cannot touch CEO rows or lock the CEO out.
