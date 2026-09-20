@@ -1007,3 +1007,63 @@ WITH CHECK (has_permission('create_case') AND (get_my_role() = 'CEO' OR branch_i
 **Warning to relay when delegating:** `manage_settings` is effectively an admin
 grant. Whoever holds it can edit the matrix and thereby grant themselves the
 other eight. It cannot touch CEO rows or lock the CEO out.
+
+---
+
+### 🔴 Standing Rule #6: Verify RLS by Impersonating, Never by Reasoning (2026-09-18)
+
+**Policy:** Never claim an RLS-protected flow works without executing it under
+that user's identity. Reading the policy and concluding it "should pass" is not
+verification — and neither is calling a helper as admin.
+
+**Root Cause:** During the upload incident, `_storage_user_can_see_referral()`
+was called directly from an admin session and returned `false`. That was
+reported as "the function is broken" when in fact `auth.uid()` is simply NULL
+outside a user session, so the JOIN matched nothing. Later, a "100% certain"
+check was run against `ilana@tehila.test` — a **disabled test account** — while
+the real user is `reception@toyota-tehila.co.il`. Both conclusions were wrong,
+and both were delivered with confidence.
+
+**How to actually test.** Postgres resolves `auth.uid()` from the JWT claim, so
+set it and run the real statement inside a transaction you roll back:
+
+```sql
+BEGIN;
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claims = '{"sub":"<user-uuid>","role":"authenticated"}';
+
+-- Then run the ACTUAL operation, not a helper function:
+INSERT INTO storage.objects (bucket_id, name, owner, metadata)
+VALUES ('referral-documents','<referral-id>/probe.pdf','<user-uuid>','{"size":1}'::jsonb);
+
+ROLLBACK;  -- always; this must never persist
+```
+
+If it inserts, the user can upload. If RLS rejects it, they cannot. No inference.
+
+**Rules:**
+
+1. **Test the operation, not the helper.** A helper returning true does not mean
+   the policy passes — the policy may AND several conditions together.
+2. **Test every layer.** A file upload crosses three: the server action's
+   `hasPermission`, `storage.objects` RLS, and the metadata table's RLS. All
+   three must pass; verify all three.
+3. **Confirm the row first.** Check the email against `auth.users` and that
+   `is_active` is true before trusting any result. Duplicate and disabled
+   accounts exist in this database.
+4. **Test the sad path too.** Confirm the roles that should be blocked ARE
+   blocked. A policy that allows everyone also "passes" the happy-path test.
+5. **Always ROLLBACK.** These probes run against production.
+
+**Verified upload matrix (2026-09-20), produced with the method above:**
+
+| Role | referral-documents | case-documents |
+|---|---|---|
+| CEO | ✅ | ✅ |
+| OFFICE | ✅ | ✅ |
+| SERVICE_MANAGER | 🚫 | ✅ |
+| SERVICE_ADVISOR | 🚫 | ✅ |
+| PAINTER | 🚫 | 🚫 |
+
+Re-run this matrix after any change to a storage policy, a `_storage_*` helper,
+or the permission matrix.
