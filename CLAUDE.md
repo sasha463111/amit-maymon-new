@@ -1055,15 +1055,26 @@ If it inserts, the user can upload. If RLS rejects it, they cannot. No inference
    blocked. A policy that allows everyone also "passes" the happy-path test.
 5. **Always ROLLBACK.** These probes run against production.
 
-**Verified upload matrix (2026-09-20), produced with the method above:**
+**Verified upload matrix (2026-09-20), produced with the method above.**
+There are FOUR buckets — testing only two is how the painter buckets stayed
+broken for days after the others were fixed:
 
-| Role | referral-documents | case-documents |
-|---|---|---|
-| CEO | ✅ | ✅ |
-| OFFICE | ✅ | ✅ |
-| SERVICE_MANAGER | 🚫 | ✅ |
-| SERVICE_ADVISOR | 🚫 | ✅ |
-| PAINTER | 🚫 | 🚫 |
+| Role | referral-documents | case-documents | painter-images | extras-images |
+|---|---|---|---|---|
+| CEO | ✅ | ✅ | ✅ | ✅ |
+| OFFICE | ✅ | ✅ | ✅ | ✅ |
+| SERVICE_MANAGER | 🚫 | ✅ | ✅ | ✅ |
+| SERVICE_ADVISOR | 🚫 | ✅ | ✅ | ✅ |
+| PAINTER | 🚫 | 🚫 | ✅ | ✅ |
+
+**Two different gates, on purpose.** `case-documents` is formal paperwork and
+requires `upload_documents`; `painter-images` / `extras-images` are photos of
+the work and require only case/branch access — a PAINTER has
+`upload_documents = false` yet must obviously be able to photograph the car.
+
+**Use the right parent id per bucket when probing:** `referral-documents` is
+keyed by `referral_id`, the other three by `case_id`. Passing a case id to the
+referral bucket returns BLOCK and looks exactly like a permissions bug.
 
 Re-run this matrix after any change to a storage policy, a `_storage_*` helper,
 or the permission matrix.
