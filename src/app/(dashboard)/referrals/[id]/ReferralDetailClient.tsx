@@ -303,7 +303,7 @@ export function ReferralDetailClient({
               <p className="text-xs text-gray-400 mr-[7.5rem] -mt-1">מאתר במשרד התחבורה...</p>
             )}
             {vehicleLookupState === 'not-found' && (
-              <p className="text-xs text-amber-600 mr-[7.5rem] -mt-1">לא נמצא ברשימת משרד התחבורה</p>
+              <p className="text-xs text-amber-600 mr-[7.5rem] -mt-1">לא נמצא במשרד התחבורה — נא להקליד ידנית</p>
             )}
           </div>
           <Field label="שנת רכב" value={fields.vehicle_year} onSave={(v) => void saveField('vehicle_year', v)} dir="ltr" />

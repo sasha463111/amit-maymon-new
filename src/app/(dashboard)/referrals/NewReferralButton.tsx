@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createReferral, uploadReferralDocument } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
@@ -44,6 +44,7 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
   // (CreateCaseButton) — referrals previously required typing vehicle type
   // by hand even though the same auto-fill already exists elsewhere.
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found' | 'error'>('idle');
+  const vehicleTypeRef = useRef<HTMLInputElement>(null);
   const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
 
   function set(field: string, value: string) {
@@ -79,6 +80,9 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
     }
     if (!res.vehicle_type && !res.vehicle_year) {
       setVehicleLookupState('not-found');
+      // Move the cursor to the field they now have to fill themselves. The
+      // message says "type it manually"; this saves them hunting for where.
+      vehicleTypeRef.current?.focus();
       return;
     }
     setForm((f) => ({
@@ -247,7 +251,9 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
                         </span>
                       )}
                       {vehicleLookupState === 'not-found' && (
-                        <span className="mr-2 text-xs font-normal text-amber-600">לא נמצא ברשימת משרד התחבורה</span>
+                        <span className="mr-2 text-xs font-normal text-amber-600">
+                          לא נמצא במשרד התחבורה — נא להקליד ידנית
+                        </span>
                       )}
                       {vehicleLookupState === 'error' && (
                         <span className="mr-2 inline-flex items-center gap-1 text-xs font-normal text-red-600">
@@ -262,7 +268,7 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
                         </span>
                       )}
                     </label>
-                    <input type="text" value={form.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} className={inputCls} placeholder="יונדאי i20" autoComplete="off" />
+                    <input ref={vehicleTypeRef} type="text" value={form.vehicle_type} onChange={(e) => set('vehicle_type', e.target.value)} className={inputCls} placeholder="יונדאי i20" autoComplete="off" />
                   </div>
                   <div>
                     <label className={labelCls}>שנת רכב</label>

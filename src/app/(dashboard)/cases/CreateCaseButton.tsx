@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
@@ -83,6 +83,7 @@ export function CreateCaseButton({
   });
   const [files, setFiles] = useState<File[]>([]);
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found' | 'error'>('idle');
+  const vehicleTypeRef = useRef<HTMLInputElement>(null);
   const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
 
   async function handlePlateBlur() {
@@ -102,6 +103,9 @@ export function CreateCaseButton({
     }
     if (!res.vehicle_type && !res.vehicle_year) {
       setVehicleLookupState('not-found');
+      // Move the cursor to the field they now have to fill themselves. The
+      // message says "type it manually"; this saves them hunting for where.
+      vehicleTypeRef.current?.focus();
       return;
     }
     setForm((f) => ({
@@ -348,7 +352,9 @@ export function CreateCaseButton({
                         </span>
                       )}
                       {vehicleLookupState === 'not-found' && (
-                        <span className="mr-2 text-xs font-normal text-amber-600">לא נמצא ברשימת משרד התחבורה</span>
+                        <span className="mr-2 text-xs font-normal text-amber-600">
+                          לא נמצא במשרד התחבורה — נא להקליד ידנית
+                        </span>
                       )}
                       {vehicleLookupState === 'error' && (
                         <span className="mr-2 inline-flex items-center gap-1 text-xs font-normal text-red-600">
@@ -364,6 +370,7 @@ export function CreateCaseButton({
                       )}
                     </label>
                     <input
+                      ref={vehicleTypeRef}
                       type="text"
                       value={form.vehicle_type}
                       onChange={(e) => set('vehicle_type', e.target.value)}
