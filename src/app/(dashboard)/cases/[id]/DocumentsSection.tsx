@@ -1,3 +1,7 @@
+'use client';
+
+import { useState } from 'react';
+
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
  * refactor). Upload/delete logic (state + the actual server-action calls)
@@ -29,6 +33,7 @@ export function DocumentsSection({
   uploadingDocument,
   onUploadFiles,
   onDeleteDocument,
+  onRotateDocument,
 }: {
   documents: CaseDocument[];
   signedDocUrls: Record<string, string>;
@@ -37,7 +42,27 @@ export function DocumentsSection({
   uploadingDocument: boolean;
   onUploadFiles: (files: File[]) => Promise<void>;
   onDeleteDocument: (docId: string) => Promise<void>;
+  /**
+   * Rotate the stored file 90° clockwise. Optional so screens that only
+   * display documents can omit it.
+   */
+  onRotateDocument?: (docId: string) => Promise<void>;
 }) {
+  // Purely visual: which card is mid-rotation, so the button can show a
+  // spinner and block a second press. The actual work lives in the parent's
+  // handler, matching how upload and delete are wired.
+  const [rotatingId, setRotatingId] = useState<string | null>(null);
+
+  async function handleRotate(docId: string) {
+    if (!onRotateDocument || rotatingId) return;
+    setRotatingId(docId);
+    try {
+      await onRotateDocument(docId);
+    } finally {
+      setRotatingId(null);
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl shadow-md border border-gray-200 p-3 sm:p-6">
       <div className="flex items-center justify-between mb-4">
@@ -166,6 +191,22 @@ export function DocumentsSection({
                     aria-label="מחק קובץ"
                   >
                     ✕
+                  </button>
+                )}
+                {/* Rotate — scanners sometimes save a page sideways or upside
+                    down. Each press turns it 90°, so four presses come back to
+                    the start and one control covers every orientation. Only
+                    offered for formats we can actually rewrite. */}
+                {canEdit && onRotateDocument && (isImage || isPdf) && (
+                  <button
+                    type="button"
+                    disabled={rotatingId === doc.id}
+                    onClick={() => void handleRotate(doc.id)}
+                    className="absolute top-1 left-8 w-6 h-6 rounded-full bg-white/90 text-gray-700 text-xs shadow-md hover:bg-gray-100 disabled:opacity-50 flex items-center justify-center"
+                    aria-label="סובב קובץ"
+                    title="סובב 90°"
+                  >
+                    {rotatingId === doc.id ? '…' : '⟳'}
                   </button>
                 )}
               </div>

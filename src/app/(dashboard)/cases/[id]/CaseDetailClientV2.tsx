@@ -227,6 +227,23 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
     setUploadingDocument(false);
   }
 
+  async function rotateDocumentHandler(docId: string) {
+    const { rotateDocument } = await import('@/app/actions/documents');
+    const res = await rotateDocument('case', docId);
+    if (res?.error) {
+      setDocumentError(res.error);
+      return;
+    }
+    setDocumentError(null);
+    // The file path never changes, so the browser would keep showing the
+    // cached pre-rotation copy. Fresh signed URLs give each preview a new
+    // query string, which is what actually busts that cache.
+    const { getSignedFileUrls } = await import('@/app/actions/documents');
+    const urls = await getSignedFileUrls('case-documents', localDocuments.map((d) => d.file_path));
+    setSignedDocUrls(urls);
+    router.refresh();
+  }
+
   async function deleteDocument(docId: string) {
     if (!confirm('האם אתה בטוח שברצונך למחוק קובץ זה?')) return;
     const res = await deleteCaseDocument(docId);
@@ -510,6 +527,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         uploadingDocument={uploadingDocument}
         onUploadFiles={uploadDocuments}
         onDeleteDocument={deleteDocument}
+        onRotateDocument={rotateDocumentHandler}
       />
 
       {/* ── ציר זמן ── */}

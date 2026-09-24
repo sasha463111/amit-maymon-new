@@ -231,3 +231,93 @@ export async function deleteCaseDocument(documentId: string) {
   revalidatePath(`/cases/${docRow.case_id}`);
   return { ok: true, error: null };
 }
+
+/**
+ * Rotate a stored document 90° clockwise, in place.
+ *
+ * Why this exists: scanners sometimes write a page upside-down or on its side
+ * with no rotation metadata, so the file genuinely IS wrong — the viewer is
+ * showing it faithfully. Chrome's own rotate button doesn't persist, so the
+ * next person to open it sees it sideways again. This rewrites the file, so it
+ * is fixed once for everyone.
+ *
+ * Each call advances 90°, so four clicks return to the original. That is
+ * deliberate: it handles upside-down (two clicks) and both sideways cases with
+ * the same single control, and needs no orientation picker.
+ *
+ * Automatic detection was considered and rejected — these scans contain no text
+ * layer and no scanner signature, so deciding "this is upside-down" would need
+ * OCR, and a wrong guess would silently corrupt a document that was fine.
+ */
+export async function rotateDocument(
+  kind: 'case' | 'referral',
+  documentId: string
+): Promise<{ ok?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+
+  const table = kind === 'case' ? 'case_documents' : 'referral_documents';
+  const bucket = kind === 'case' ? 'case-documents' : 'referral-documents';
+
+  // Rotating is a correction to an existing document, so it is gated on the
+  // same permission as putting the document there in the first place.
+  const permission = kind === 'case' ? 'upload_documents' : 'create_referral';
+  if (!(await hasPermission(supabase, permission))) {
+    return { error: 'אין הרשאה לערוך מסמך זה' };
+  }
+
+  const { data: docData } = await supabase
+    .from(table)
+    .select(kind === 'case' ? 'id, case_id, file_path, mime_type' : 'id, referral_id, file_path, mime_type')
+    .eq('id', documentId)
+    .single();
+
+  const doc = docData as { file_path: string; mime_type: string | null; case_id?: string; referral_id?: string } | null;
+  if (!doc) return { error: 'הקובץ לא נמצא' };
+
+  // RLS on the bucket decides whether this user may read/write the object;
+  // a failure here means they cannot reach this document's branch.
+  const { data: blob, error: dlError } = await supabase.storage.from(bucket).download(doc.file_path);
+  if (dlError || !blob) return { error: 'שגיאה בטעינת הקובץ' };
+
+  const input = Buffer.from(await blob.arrayBuffer());
+  const mime = doc.mime_type ?? '';
+  let output: Buffer;
+
+  try {
+    if (mime === 'application/pdf') {
+      const { PDFDocument, degrees } = await import('pdf-lib');
+      const pdf = await PDFDocument.load(input);
+      for (const page of pdf.getPages()) {
+        // Add to the existing angle rather than setting it, so repeated
+        // clicks keep advancing instead of snapping back to 90.
+        const current = page.getRotation().angle;
+        page.setRotation(degrees((current + 90) % 360));
+      }
+      output = Buffer.from(await pdf.save());
+    } else if (mime.startsWith('image/')) {
+      const sharp = (await import('sharp')).default;
+      // rotate(90) bakes the pixels, so the result is correct everywhere —
+      // including for anyone who downloads the file.
+      output = await sharp(input).rotate(90).toBuffer();
+    } else {
+      return { error: 'ניתן לסובב קבצי PDF ותמונות בלבד' };
+    }
+  } catch {
+    return { error: 'שגיאה בסיבוב הקובץ' };
+  }
+
+  // Overwrite the same path so every existing link keeps working.
+  const { error: upError } = await supabase.storage
+    .from(bucket)
+    .upload(doc.file_path, output, { upsert: true, contentType: mime || undefined });
+  if (upError) return { error: `שגיאה בשמירת הקובץ: ${upError.message}` };
+
+  if (kind === 'case' && doc.case_id) {
+    revalidatePath(`/cases/${doc.case_id}`);
+  } else if (doc.referral_id) {
+    revalidatePath(`/referrals/${doc.referral_id}`);
+  }
+  return { ok: true };
+}

@@ -200,6 +200,23 @@ export function ReferralDetailClient({
     router.refresh();
   }
 
+  async function handleRotateDocument(docId: string) {
+    const { rotateDocument } = await import('@/app/actions/documents');
+    const res = await rotateDocument('referral', docId);
+    if (res?.error) {
+      setDocumentError(res.error);
+      return;
+    }
+    setDocumentError(null);
+    // The file path never changes, so the browser would happily keep showing
+    // the cached pre-rotation copy. Requesting fresh signed URLs gives every
+    // preview a new query string, which is what actually busts that cache.
+    const { getSignedFileUrls } = await import('@/app/actions/documents');
+    const urls = await getSignedFileUrls('referral-documents', documents.map((d) => d.file_path));
+    setSignedDocUrls(urls);
+    router.refresh();
+  }
+
   async function handleCaseCreated(caseId: string) {
     await convertReferral(referral.id, caseId);
     router.push(`/cases/${caseId}`);
@@ -405,6 +422,7 @@ export function ReferralDetailClient({
         uploadingDocument={uploadingDocument}
         onUploadFiles={handleUploadFiles}
         onDeleteDocument={handleDeleteDocument}
+        onRotateDocument={handleRotateDocument}
       />
     </div>
   );
