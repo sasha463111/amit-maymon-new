@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { formatDate } from '@/lib/dates';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
@@ -180,7 +181,7 @@ export function DocumentsSection({
                       {DOC_TYPE_LABEL[docType] ?? docType}
                     </span>
                   )}
-                  <p className="text-[10px] text-gray-400">{fileSize} · {new Date(doc.created_at).toLocaleDateString('he-IL')}</p>
+                  <p className="text-[10px] text-gray-400">{fileSize} · {formatDate(doc.created_at)}</p>
                 </div>
                 {/* Delete (top-right corner, hover-revealed on touchscreens stays visible) */}
                 {canEdit && (

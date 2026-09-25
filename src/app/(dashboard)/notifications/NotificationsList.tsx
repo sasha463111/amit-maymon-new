@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { markRead, markAllRead } from '@/app/actions/notifications';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate } from '@/lib/dates';
 
 interface NotificationRow {
   id: string;
@@ -65,7 +66,7 @@ function getTypeColor(type: string | null): string {
   return (type && TYPE_COLOR[type]) ?? 'bg-gray-100 text-gray-500';
 }
 
-function formatDate(dateStr: string): string {
+function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -78,8 +79,8 @@ function formatDate(dateStr: string): string {
   if (diffMin < 1) return 'עכשיו';
   if (diffMin < 60) return `לפני ${diffMin} דקות — ${timeStr}`;
   if (diffHour < 24) return `לפני ${diffHour} שעות — ${timeStr}`;
-  if (diffDay < 7) return `${date.toLocaleDateString('he-IL')} ${timeStr}`;
-  return `${date.toLocaleDateString('he-IL')} ${timeStr}`;
+  if (diffDay < 7) return `${formatDate(date)} ${timeStr}`;
+  return `${formatDate(date)} ${timeStr}`;
 }
 
 function NotificationItem({
@@ -123,7 +124,7 @@ function NotificationItem({
           </p>
         )}
         <div className="flex items-center gap-2 mt-1.5">
-          <p className="text-xs text-gray-400">{formatDate(n.created_at)}</p>
+          <p className="text-xs text-gray-400">{formatRelativeTime(n.created_at)}</p>
           {isClickable && (
             <span className="text-xs text-brand-red font-medium">← פתח</span>
           )}

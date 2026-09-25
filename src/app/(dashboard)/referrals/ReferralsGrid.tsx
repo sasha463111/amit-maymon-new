@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
+import { formatIsoDate } from '@/lib/dates';
 
 export interface ReferralRow {
   id: string;
@@ -94,7 +95,7 @@ export function ReferralsGrid({
 
                   {r.follow_up_date && (
                     <span className="self-start px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[11px] font-medium">
-                      📅 תזכורת: {new Date(r.follow_up_date).toLocaleDateString('he-IL')}
+                      📅 תזכורת: {formatIsoDate(r.follow_up_date)}
                     </span>
                   )}
 

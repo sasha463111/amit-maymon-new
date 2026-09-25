@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { restoreCase } from '@/app/actions/workflow';
 import { RotateCcw } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate } from '@/lib/dates';
 
 type Row = {
   id: string;
@@ -18,19 +19,6 @@ type Row = {
   deleted_by_name: string;
   branch_name: string;
 };
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('he-IL', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-  } catch {
-    return '—';
-  }
-}
 
 export function ArchiveTable({ rows }: { rows: Row[] }) {
   const router = useRouter();

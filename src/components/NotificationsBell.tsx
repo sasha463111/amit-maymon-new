@@ -7,6 +7,7 @@ import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { markRead, markAllRead } from '@/app/actions/notifications';
 import { PushSubscriber } from '@/components/PushSubscriber';
+import { formatDate } from '@/lib/dates';
 
 interface Row {
   id: string;
@@ -45,14 +46,14 @@ function getIcon(type: string | null): string {
   return (type && TYPE_ICON[type]) ?? '🔔';
 }
 
-function formatDate(s: string): string {
+function formatRelativeTime(s: string): string {
   const d = new Date(s);
   const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
   if (diffMin < 1) return 'עכשיו';
   if (diffMin < 60) return `לפני ${diffMin} ד׳`;
   const diffH = Math.floor(diffMin / 60);
   if (diffH < 24) return `לפני ${diffH} ש׳`;
-  return d.toLocaleDateString('he-IL');
+  return formatDate(d);
 }
 
 export function NotificationsBell({ userId }: { userId: string }) {
@@ -337,7 +338,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
                             <p className="text-xs text-gray-600 leading-snug truncate">{n.body}</p>
                           )}
                           <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
-                            <span>{formatDate(n.created_at)}</span>
+                            <span>{formatRelativeTime(n.created_at)}</span>
                             {n.triggered_by_name && (
                               <>
                                 <span>·</span>

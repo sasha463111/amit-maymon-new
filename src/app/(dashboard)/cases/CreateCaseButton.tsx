@@ -7,6 +7,7 @@ import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
+import { DateField } from '@/components/DateField';
 import type { ClaimType, SubClaimType } from '@/types/database';
 
 interface Branch {
@@ -466,10 +467,9 @@ export function CreateCaseButton({
                   </div>
                   <div>
                     <label className={labelCls}>תאריך אירוע</label>
-                    <input
-                      type="date"
+                    <DateField
                       value={form.event_date}
-                      onChange={(e) => set('event_date', e.target.value)}
+                      onChange={(v) => set('event_date', v)}
                       className={inputCls}
                     />
                   </div>

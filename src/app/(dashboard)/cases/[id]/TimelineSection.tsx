@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/dates';
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
  * refactor). Pure presentational — the `timeline` array itself is still built
@@ -38,13 +39,7 @@ export function TimelineSection({ items }: { items: TimelineItem[] }) {
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
                       <span>🕐</span>
                       <span>
-                        {new Date(item.timestamp).toLocaleString('he-IL', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatDateTime(item.timestamp)}
                       </span>
                     </div>
                     {item.performedBy && (

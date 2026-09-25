@@ -11,7 +11,9 @@ import {
   type ReferralStatusTag, type ReferralStatusUpdateRow,
 } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { DateField } from '@/components/DateField';
 import type { Referral, ReferralDocument } from '@/types/database';
+import { formatDateTime } from '@/lib/dates';
 
 const STATUS_TAG_LABELS: Record<ReferralStatusTag, string> = {
   AWAITING_REPLACEMENT_CAR: 'ממתין לרכב חלופי',
@@ -329,13 +331,11 @@ export function ReferralDetailClient({
           <Field label="שמאי" value={fields.appraiser_name} onSave={(v) => void saveField('appraiser_name', v)} />
           <div className="flex items-center gap-2 py-1.5">
             <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">תזכורת מעקב:</span>
-            <input
-              type="date"
+            <DateField
               value={fields.follow_up_date}
-              onChange={(e) => setFields((f) => ({ ...f, follow_up_date: e.target.value }))}
+              onChange={(v) => setFields((f) => ({ ...f, follow_up_date: v }))}
               onBlur={() => { if (fields.follow_up_date !== (referral.follow_up_date ?? '')) void saveFollowUpDate(fields.follow_up_date); }}
-              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors"
-              dir="ltr"
+              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm focus-within:ring-1 focus-within:ring-blue-400 transition-colors"
             />
           </div>
         </div>
@@ -401,7 +401,7 @@ export function ReferralDetailClient({
                         </span>
                       )}
                       <span className="text-[11px] text-gray-400">
-                        {new Date(u.created_at).toLocaleString('he-IL')}
+                        {formatDateTime(u.created_at)}
                         {author?.full_name ? ` · ${author.full_name}` : ''}
                       </span>
                     </div>

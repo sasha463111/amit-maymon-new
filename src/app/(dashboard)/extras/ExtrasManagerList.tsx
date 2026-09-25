@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { updateExtraStatus } from '@/app/actions/extras';
 import type { ExtraStatus } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDateTime } from '@/lib/dates';
 
 interface ExtraRow {
   id: string;
@@ -156,7 +157,7 @@ export function ExtrasManagerList({ extras }: { extras: ExtraRow[] }) {
                 {e.description}
               </p>
               <p className="text-[10px] text-gray-400 mb-3">
-                {new Date(e.created_at).toLocaleString('he-IL')}
+                {formatDateTime(e.created_at)}
               </p>
               <div className="flex gap-2">
                 {e.status === 'IN_TREATMENT' && (

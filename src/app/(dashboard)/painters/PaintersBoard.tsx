@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
+import { formatDate } from '@/lib/dates';
 
 export interface PainterRow {
   id: string;
@@ -113,7 +114,7 @@ function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => vo
             {row.opened_at && (
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">נפתח בתאריך</p>
-                <p className="text-sm text-gray-700">{new Date(row.opened_at).toLocaleDateString('he-IL')}</p>
+                <p className="text-sm text-gray-700">{formatDate(row.opened_at)}</p>
               </div>
             )}
           </div>
@@ -185,7 +186,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
                         <span className="truncate max-w-[55%]">{row.appraiser_name ?? '—'}</span>
                         <span>
                           {row.branch_name && `${row.branch_name} · `}
-                          {row.opened_at ? new Date(row.opened_at).toLocaleDateString('he-IL') : '—'}
+                          {row.opened_at ? formatDate(row.opened_at) : '—'}
                         </span>
                       </div>
                     </button>

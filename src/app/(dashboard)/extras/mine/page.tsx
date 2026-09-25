@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDateTime } from '@/lib/dates';
 
 const STATUS_LABELS: Record<string, string> = {
   IN_TREATMENT: 'בטיפול',
@@ -153,7 +154,7 @@ export default async function ExtrasMinePage() {
                   {e.description}
                 </p>
                 <p className="text-[10px] text-gray-400 mt-2">
-                  {new Date(e.created_at).toLocaleString('he-IL')}
+                  {formatDateTime(e.created_at)}
                 </p>
               </div>
             </article>

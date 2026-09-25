@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { formatDate } from '@/lib/dates';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
@@ -34,7 +35,7 @@ export function CaseStatusBanner({
         <div className="flex-1">
           <p className="text-sm font-bold text-gray-700">תיק סגור</p>
           <p className="text-xs text-gray-500">
-            נסגר בתאריך {closedAt ? new Date(closedAt).toLocaleDateString('he-IL') : '—'}
+            נסגר בתאריך {closedAt ? formatDate(closedAt) : '—'}
           </p>
         </div>
       </div>
@@ -49,7 +50,7 @@ export function CaseStatusBanner({
           <p className="text-sm font-bold text-amber-900">הועבר למשרד — בתהליך סגירה</p>
           <p className="text-xs text-amber-700">
             הסתיים הטיפול המקצועי בתאריך{' '}
-            {treatmentFinishedAt ? new Date(treatmentFinishedAt).toLocaleDateString('he-IL') : '—'} —
+            {treatmentFinishedAt ? formatDate(treatmentFinishedAt) : '—'} —
             אילנה משלימה את הסגירה.
           </p>
         </div>

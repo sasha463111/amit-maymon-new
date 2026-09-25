@@ -1,10 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { DateField } from '@/components/DateField';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
 import type { PainterStatus } from '@/types/database';
 import { PAINTER_STATUS_LABELS, SUB_CLAIM_LABELS, INSURANCE_TYPE_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate, formatIsoDate } from '@/lib/dates';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (second step of the god-component
@@ -84,11 +86,9 @@ function EditableInfoRow({
     displayValue = displayMap[rawValue];
   }
   if (type === 'date' && rawValue) {
-    try {
-      displayValue = new Date(rawValue).toLocaleDateString('he-IL');
-    } catch {
-      displayValue = rawValue;
-    }
+    // String-formatted rather than new Date(...): an ISO date parses as UTC
+    // midnight, which can render as the previous day. Always DD/MM/YYYY.
+    displayValue = formatIsoDate(rawValue, rawValue);
   }
 
   return (
@@ -113,6 +113,14 @@ function EditableInfoRow({
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+          ) : type === 'date' ? (
+            <DateField
+              autoFocus
+              value={editValue}
+              onChange={onEditChange}
+              onBlur={onSave}
+              className="flex-1 border border-blue-400 rounded px-2 py-1 text-sm focus-within:ring-1 focus-within:ring-blue-400 min-w-0"
+            />
           ) : (
             <input
               autoFocus
@@ -355,7 +363,7 @@ export function CaseDetailsSection({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
         {/* Read-only fields */}
         <InfoRow label="סניף" value={branchName} />
-        <InfoRow label="נפתח" value={openedAt ? new Date(openedAt).toLocaleDateString('he-IL') : '—'} />
+        <InfoRow label="נפתח" value={openedAt ? formatDate(openedAt) : '—'} />
         <InfoRow label="גיל רכב" value={displayAge} />
 
         {/* Editable car fields */}

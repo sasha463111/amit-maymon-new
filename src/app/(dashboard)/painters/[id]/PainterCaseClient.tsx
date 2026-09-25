@@ -6,6 +6,7 @@ import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatu
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate } from '@/lib/dates';
 
 type PainterRequest = {
   id: string;
@@ -32,7 +33,7 @@ const REQUEST_STATUS_COLORS: Record<string, string> = {
 
 function formatCheckedAt(iso: string): string {
   const d = new Date(iso);
-  const date = d.toLocaleDateString('he-IL');
+  const date = formatDate(d);
   const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   return `סומן ב-${date}, ${time}`;
 }
@@ -103,7 +104,7 @@ function PainterRequestItem({
             {REQUEST_STATUS_LABELS[req.status] ?? req.status}
           </span>
           <span className="text-xs text-gray-400">
-            {new Date(req.created_at).toLocaleDateString('he-IL')}
+            {formatDate(req.created_at)}
           </span>
         </div>
         <p className="text-sm text-gray-700 break-words">{req.description}</p>
@@ -399,7 +400,7 @@ export function PainterCaseClient({
           {openedAt && (
             <div>
               <p className="text-xs text-gray-400 mb-0.5">תאריך פתיחה</p>
-              <p className="font-medium text-gray-700">{new Date(openedAt).toLocaleDateString('he-IL')}</p>
+              <p className="font-medium text-gray-700">{formatDate(openedAt)}</p>
             </div>
           )}
         </div>
@@ -412,7 +413,7 @@ export function PainterCaseClient({
             🔧 סומן &quot;נכנס לעבודה&quot; ע&quot;י{' '}
             <span className="font-semibold text-gray-700">{enterWorkCompletedByName ?? 'לא ידוע'}</span>
             {' · '}
-            {new Date(enterWorkCompletedAt).toLocaleDateString('he-IL')},{' '}
+            {formatDate(enterWorkCompletedAt)},{' '}
             {new Date(enterWorkCompletedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}

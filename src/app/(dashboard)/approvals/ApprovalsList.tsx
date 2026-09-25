@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { PROFESSIONAL_STEP_LABELS as STEP_LABELS, SUB_CLAIM_LABELS } from '@/types/database';
+import { formatDate } from '@/lib/dates';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
@@ -650,7 +651,7 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                         { label: 'דגם', value: caseInfo.car_model },
                         { label: 'שנה', value: caseInfo.vehicle_year?.toString() ?? null },
                         { label: 'מספר שלדה', value: caseInfo.car_vin },
-                        { label: 'תאריך פתיחה', value: caseInfo.opened_at ? new Date(caseInfo.opened_at).toLocaleDateString('he-IL') : null },
+                        { label: 'תאריך פתיחה', value: caseInfo.opened_at ? formatDate(caseInfo.opened_at) : null },
                         { label: 'סטטוס פחח', value: caseInfo.painter_status },
                       ].map(({ label, value }) => (
                         <div key={label} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
@@ -732,7 +733,7 @@ export function ApprovalsList({ approvals: initialApprovals }: { approvals: Appr
                             <div className="flex-1">
                               <p className="text-sm font-medium text-gray-800">{e.description}</p>
                               <p className="text-xs text-gray-400 mt-0.5">
-                                {new Date(e.created_at).toLocaleDateString('he-IL')}
+                                {formatDate(e.created_at)}
                               </p>
                             </div>
                             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusInfo.color}`}>

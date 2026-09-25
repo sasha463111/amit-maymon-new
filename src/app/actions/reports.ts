@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { formatDate } from '@/lib/dates';
 
 /**
  * Summary email report (#11). Sends via Resend's plain REST API — no SDK
@@ -93,7 +94,7 @@ async function buildReportHtml(supabase: Awaited<ReturnType<typeof createClient>
   const totalCoord = Array.from(coordByBranch.values()).reduce((a, b) => a + b, 0);
   const totalUncoord = Array.from(uncoordByBranch.values()).reduce((a, b) => a + b, 0);
 
-  const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const dateStr = formatDate(new Date());
 
   // Full HTML document with an explicit charset meta tag — without it, some
   // mail clients guess the wrong encoding for non-ASCII bytes and Hebrew
@@ -162,7 +163,7 @@ export async function sendSummaryReport(params?: {
   const userEmail = user?.email;
 
   const html = await buildReportHtml(supabase);
-  const dateStr = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const dateStr = formatDate(new Date());
 
   // Use provided recipients, or fall back to defaults
   const toRecipients = params?.to && params.to.length > 0 ? params.to : ['Amitm@toyota-tehila.co.il'];

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { restoreCase } from '@/app/actions/workflow';
 import { RotateCcw, FileText, Search, Clock, CheckCircle2, Trash2, ArrowUpDown } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate } from '@/lib/dates';
 
 export type ArchiveRow = {
   id: string;
@@ -24,19 +25,6 @@ export type ArchiveRow = {
 };
 
 type TabKey = 'in_closure' | 'closed' | 'deleted';
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('he-IL', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-  } catch {
-    return '—';
-  }
-}
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;

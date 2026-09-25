@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { updatePainterRequestStatus } from '@/app/actions/painter';
+import { formatDateTime } from '@/lib/dates';
 
 export interface PainterRequestRow {
   id: string;
@@ -112,7 +113,7 @@ export function PainterRequestsSection({
                   {r.response_note && (
                     <p className="text-xs text-gray-500 mt-1">💬 {r.response_note}</p>
                   )}
-                  <p className="text-[11px] text-gray-400 mt-1">{new Date(r.created_at).toLocaleString('he-IL')}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{formatDateTime(r.created_at)}</p>
                 </div>
                 {canRespond && isOpenStatus && (
                   <span className="text-xs text-accent-text font-semibold shrink-0">להגיב ←</span>

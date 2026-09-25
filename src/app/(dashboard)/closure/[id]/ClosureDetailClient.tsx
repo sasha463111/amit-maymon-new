@@ -8,6 +8,7 @@ import { uploadCaseDocument } from '@/app/actions/documents';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { formatDate } from '@/lib/dates';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
 // professional-workflow STEP_LABELS (types/database.ts's
@@ -79,7 +80,7 @@ type StepRow = { id: string; step_key: string; state: StepState; order_index: nu
 
 function formatStepCompletedAt(iso: string): string {
   const d = new Date(iso);
-  const date = d.toLocaleDateString('he-IL');
+  const date = formatDate(d);
   const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   return `הושלם ב-${date}, ${time}`;
 }
@@ -471,7 +472,7 @@ export function ClosureDetailClient({
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">תאריך פתיחה</p>
               <p className="text-sm font-semibold text-gray-700">
-                {new Date(openedAt).toLocaleDateString('he-IL')}
+                {formatDate(openedAt)}
               </p>
             </div>
           )}
