@@ -1078,3 +1078,51 @@ referral bucket returns BLOCK and looks exactly like a permissions bug.
 
 Re-run this matrix after any change to a storage policy, a `_storage_*` helper,
 or the permission matrix.
+
+---
+
+### 🔴 Standing Rule #7: Push to the Remote That Actually Deploys (2026-09-25)
+
+**Policy:** This repo has TWO remotes. Only one is connected to Vercel. After
+every push, verify the deploy remote received it.
+
+```bash
+./scripts/check-deploy-remote.sh
+```
+
+| remote | URL | deploys? |
+|---|---|---|
+| `origin` | `github.com/sasha463111/amit-maymon-new` | ❌ no |
+| `tomer` | `github.com/tdavidyan85/amit-maymon-new` | ✅ **production** |
+
+`main` tracks `origin`, so a plain `git push` goes to the remote that deploys
+**nothing** — and reports success. There is no error, no warning, and the
+commit really is pushed. It is simply pushed somewhere Vercel never sees.
+
+**Root Cause:** On 2026-09-25 this was found after **20 commits** had
+accumulated. Production had been serving code from 17.09 for over a week while
+database migrations were being applied live — so production was running OLD
+CODE against a NEW SCHEMA. That is worse than being merely out of date: the
+permission matrix, the notification fix and the RLS changes were live in the
+database while the code that understood them was not deployed.
+
+It went unnoticed because every signal said success: `git push` reported the
+commit, the build passed, and database changes took effect immediately (they
+are applied directly, not through Vercel), so parts of the system genuinely did
+improve.
+
+**Rules:**
+
+1. **Push to both.** `git remote set-url --add --push origin <both URLs>` makes
+   one push reach both. This is LOCAL config — it does not travel with the
+   repo, so re-apply it on any new machine.
+2. **Verify, don't assume.** Run the script above after pushing. "git push
+   succeeded" does not mean "deployed".
+3. **Suspect this first** when production behaves like an older build, or when
+   a database change works but the matching UI change doesn't.
+4. **Never conclude a fix is live** from a successful push alone — the only
+   proof is the deploy remote's HEAD matching local, or a Ready deployment in
+   Vercel.
+
+**Why two remotes exist:** not established. Do not delete either without
+checking with the owner — `origin` may be a collaborator's fork.
