@@ -31,7 +31,20 @@ function Field({
   dir?: 'ltr' | 'rtl';
 }) {
   const [local, setLocal] = useState(value);
+  // Shows "נשמר ✓" briefly after a save. Without it the field looks and
+  // behaves identically whether the edit was saved or silently dropped, which
+  // reads as "editing doesn't work" — reported from the office.
+  const [justSaved, setJustSaved] = useState(false);
   useEffect(() => setLocal(value), [value]);
+
+  function handleBlur() {
+    if (local === value) return;
+    onSave(local);
+    setJustSaved(true);
+    const t = setTimeout(() => setJustSaved(false), 2000);
+    return () => clearTimeout(t);
+  }
+
   return (
     <div className="flex items-center gap-2 py-1.5">
       <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">{label}:</span>
@@ -40,9 +53,14 @@ function Field({
         value={local}
         dir={dir}
         onChange={(e) => setLocal(e.target.value)}
-        onBlur={() => { if (local !== value) onSave(local); }}
-        className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors"
+        onBlur={handleBlur}
+        // A visible border at rest: previously the field was indistinguishable
+        // from plain text, so there was nothing to suggest it could be typed in.
+        className="flex-1 border border-gray-200 bg-white hover:border-gray-300 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors"
       />
+      <span className={`text-xs text-green-600 shrink-0 transition-opacity ${justSaved ? 'opacity-100' : 'opacity-0'}`}>
+        נשמר ✓
+      </span>
     </div>
   );
 }
