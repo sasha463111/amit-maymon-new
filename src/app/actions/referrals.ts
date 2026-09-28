@@ -78,6 +78,11 @@ export async function updateReferral(referralId: string, updates: UpdateReferral
   const ALLOWED = new Set([
     'customer_name', 'insurance_company', 'claim_type', 'vehicle_type',
     'vehicle_year', 'plate_number', 'appraiser_name', 'phone', 'status_note',
+    // branch_id is editable because picking the wrong branch when opening a
+    // referral is an easy mistake and was previously uncorrectable from the
+    // UI — it needed a manual database edit. RLS still decides whether this
+    // user may touch this referral at all.
+    'branch_id',
   ]);
   const patch: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(updates)) {

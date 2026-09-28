@@ -82,6 +82,11 @@ export function ReferralDetailClient({
     initialDocuments.map((d) => ({ id: d.id, file_name: d.file_name, file_path: d.file_path, file_size: d.file_size, mime_type: d.mime_type, created_at: d.created_at }))
   );
   const [signedDocUrls, setSignedDocUrls] = useState<Record<string, string>>({});
+  // Branch is editable because choosing the wrong one when opening a referral
+  // is easy to do and previously needed a database edit to undo.
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const [branchId, setBranchId] = useState(referral.branch_id);
+  const [branchSaving, setBranchSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
 
@@ -103,6 +108,30 @@ export function ReferralDetailClient({
       setSignedDocUrls(urls);
     })();
   }, [documents]);
+
+  useEffect(() => {
+    (async () => {
+      const { createClient } = await import('@/lib/supabase/client');
+      const { data } = await createClient().from('branches').select('id, name').order('name');
+      if (data) setBranches(data as { id: string; name: string }[]);
+    })();
+  }, []);
+
+  async function saveBranch(newBranchId: string) {
+    if (!newBranchId || newBranchId === branchId) return;
+    const previous = branchId;
+    setBranchId(newBranchId);          // optimistic
+    setBranchSaving(true);
+    const res = await updateReferral(referral.id, { branch_id: newBranchId });
+    setBranchSaving(false);
+    if (res?.error) {
+      setBranchId(previous);           // revert
+      setSaveError(res.error);
+      return;
+    }
+    setSaveError(null);
+    router.refresh();
+  }
 
   async function saveField(field: keyof typeof fields, value: string) {
     setFields((f) => ({ ...f, [field]: value }));
@@ -329,6 +358,20 @@ export function ReferralDetailClient({
           <Field label="חברת ביטוח" value={fields.insurance_company} onSave={(v) => void saveField('insurance_company', v)} />
           <Field label="סוג תביעה" value={fields.claim_type} onSave={(v) => void saveField('claim_type', v)} />
           <Field label="שמאי" value={fields.appraiser_name} onSave={(v) => void saveField('appraiser_name', v)} />
+          <div className="flex items-center gap-2 py-1.5">
+            <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">סניף:</span>
+            <select
+              value={branchId}
+              disabled={branchSaving || branches.length === 0}
+              onChange={(e) => void saveBranch(e.target.value)}
+              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors bg-transparent disabled:opacity-60"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            {branchSaving && <span className="text-xs text-gray-400">שומר…</span>}
+          </div>
           <div className="flex items-center gap-2 py-1.5">
             <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">תזכורת מעקב:</span>
             <DateField
