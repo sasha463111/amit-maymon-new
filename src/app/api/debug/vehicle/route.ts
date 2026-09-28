@@ -22,7 +22,10 @@ const DATASETS = [
 ];
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret');
+  // Header, not query string: the secret contains characters that change under
+  // URL encoding, which made the query-param comparison fail even with the
+  // correct value.
+  const secret = req.headers.get('x-debug-secret') ?? req.nextUrl.searchParams.get('secret');
   if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
