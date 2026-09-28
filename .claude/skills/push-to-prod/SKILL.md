@@ -7,12 +7,41 @@ description: Use when the user wants to push/ship/deploy local changes in the am
 
 ## Current state (verified 2026-08-27 — supersedes any earlier version of this file)
 
-- **`main` is the live production branch.** Push directly to `origin/main`.
+- **`main` is the live production branch.**
+- ⚠️ **TWO REMOTES EXIST, AND ONLY ONE DEPLOYS.** This is the trap in this repo:
+
+  | remote | URL | deploys? |
+  |---|---|---|
+  | `origin` | `github.com/sasha463111/amit-maymon-new` | ❌ no |
+  | `tomer` | `github.com/tdavidyan85/amit-maymon-new` | ✅ **production** |
+
+  `main` tracks `origin`, so a plain `git push` succeeds and deploys **nothing** —
+  no error, no warning. On 2026-09-25 this was found after **20 commits**: the
+  site had served code from 17.09 for over a week while database migrations were
+  applied live, leaving old code against a new schema.
+
+  `origin` is now configured to push to BOTH (`git remote set-url --add --push`),
+  so `git push origin main` reaches production. That config is LOCAL — it does
+  not travel with the repo. On any other machine, re-apply it or push to `tomer`
+  explicitly.
+
+  **Always verify after pushing:** `./scripts/check-deploy-remote.sh`
 - Vercel's **native Git integration** auto-deploys on every push to `main` — no manual `vercel --prod` step, no GitHub Action. Evidence: commit `1ac3d0b` (authored by the repo owner, sasha463111) removed the old GitHub Actions deploy workflow specifically because it was redundant — it used a stale token and always showed a false red X even though the native integration had already deployed successfully.
 - `claude/jovial-noether-550b34` is **not** the live branch. It was merged into `main`, and `main` is now ahead of it. If you see older guidance (including a previous version of this file, or a project skill) saying `claude/jovial-noether-550b34` is production and `main` should never be pushed to — that's stale. Don't follow it without checking current branch state first (`git log --oneline -5` on both, or ask the user).
 - Pushing straight to `main` is the actual normal working pattern here — both the repo owner's and other contributors' commits land on `main` directly and deploy without incident. Don't withhold a push to `main` as if it were unusual or risky by default; it's the established flow.
-- **Production is two separate Vercel projects sharing one Supabase database**: `amit-maymon-new` and `amit-maymon-new-iyub`. Both are connected via native Git integration to this same repo, so a single push to `main` deploys both — you don't need to trigger them separately.
-- **Database migrations are a fully separate, manual step.** Nothing under `src/db/migrations/` is applied by git push or by a Vercel deploy. If the change includes a new migration file, say so explicitly and tell the user which file needs to be run by hand in the Supabase SQL Editor before the deployed code will actually work — don't imply the push handled it.
+- **Production is ONE Vercel project**: `amit-maymon-new` (team `davit7`), served at both
+  `amit-maymon-new.vercel.app` and `amit-maymon-new-psi.vercel.app`.
+  (Corrected 2026-09-28: an earlier version of this file listed a second project,
+  `amit-maymon-new-iyub`. It no longer exists — `vercel project ls` shows one
+  project and `vercel teams ls` shows one team. Don't go looking for a second
+  deploy target.)
+- **Database migrations are a fully separate, manual step.** Nothing under
+  `supabase/migrations/` is applied by git push or by a Vercel deploy. Apply them
+  with `npx supabase db push --linked`, and say explicitly when a change needs it —
+  don't imply the push handled it.
+  (Note: `src/db/migrations/` is DEAD — 49 legacy files from before the Supabase
+  CLI, referenced nowhere in application code. The live directory is
+  `supabase/migrations/`. See SYSTEM_OVERVIEW.md section 9.2.)
 - There's a `SUPABASE_MIGRATION_GUIDE.md` in the repo root describing a *possible future* move of the whole Supabase project to `eu-central-1` (Frankfurt). As of this writing that hasn't happened — production still runs on the original project (`yhanmyvolpeiuxspcxmk`). Don't assume it's in progress; if it's relevant to what you're doing, check with the user.
 
 ## Steps
@@ -25,7 +54,7 @@ description: Use when the user wants to push/ship/deploy local changes in the am
    - Stage relevant files (avoid committing stray artifacts like `dev.log`, `.env.local`, `node_modules`, `tsconfig.tsbuildinfo` churn).
    - Write a commit message describing the actual change, ending with:
      ```
-     Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+     Co-Authored-By: Claude <noreply@anthropic.com>
      ```
    - Run `npx tsc --noEmit` (and ideally `npm run build`) before committing — this repo has no CI gate catching type errors before deploy.
 
