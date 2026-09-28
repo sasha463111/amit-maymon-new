@@ -61,7 +61,12 @@ async function queryDataset(resourceId: string, plate: number): Promise<LookupOu
   const maxRetries = 2;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(12000),
+        // Never serve this from a cache: a single empty or failed response
+        // would otherwise be replayed for every later lookup of that plate.
+        cache: 'no-store',
+      });
       if (!res.ok) {
         if (attempt < maxRetries) {
           await sleep(1000 * (attempt + 1)); // 1s, then 2s
@@ -93,6 +98,7 @@ export async function lookupVehicleByPlate(
 
   const plate = Number(digits);
   let anyDatasetUnreachable = false;
+  const outcomes: string[] = [];
 
   for (const dataset of MOT_DATASETS) {
     const outcome = await queryDataset(dataset.id, plate);
@@ -102,14 +108,29 @@ export async function lookupVehicleByPlate(
       // The heavy dataset has no kinuy_mishari (commercial name), only degem_nm.
       const vehicle_type =
         [record.tozeret_nm, record.kinuy_mishari || record.degem_nm].filter(Boolean).join(' ') || null;
-      return { vehicle_type, vehicle_year: record.shnat_yitzur ?? null };
+      const vehicle_year = record.shnat_yitzur ?? null;
+
+      // A matched row with no usable fields is NOT the same as "no such
+      // vehicle", and reporting it as not-found hides a data problem behind a
+      // message that blames the plate. Log it and keep looking.
+      if (!vehicle_type && !vehicle_year) {
+        console.error('[lookupVehicleByPlate] matched but empty', {
+          plate, dataset: dataset.label, keys: Object.keys(record),
+        });
+        continue;
+      }
+      return { vehicle_type, vehicle_year };
     }
 
+    outcomes.push(`${dataset.label}=${outcome.kind}`);
     if (outcome.kind === 'unreachable') anyDatasetUnreachable = true;
     // 'absent' → fall through to the next dataset
   }
 
   // Only claim the vehicle doesn't exist if every dataset actually answered.
+  console.error('[lookupVehicleByPlate] no result', {
+    plate, outcomes, anyDatasetUnreachable,
+  });
   return {
     vehicle_type: null,
     vehicle_year: null,
