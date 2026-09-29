@@ -56,10 +56,21 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
 
   const { data: statusUpdates } = await getReferralStatusUpdates(params.id);
 
+  // Loaded here rather than in the browser: the branch <select> used to fetch
+  // its options after mount and rendered empty until then — or for good, if
+  // that request failed — so staff saw neither נתיבות nor אשקלון.
+  // Non-CEO users only get their own branches; moving a referral elsewhere
+  // would put it out of their own reach.
+  const { data: branchesData } =
+    profile?.role === 'CEO' || !profile
+      ? await supabase.from('branches').select('id, name').order('name')
+      : await supabase.from('branches').select('id, name').in('id', profile.branch_ids).order('name');
+
   return (
     <ReferralDetailClient
       referral={row}
       branchName={branch?.name ?? '—'}
+      branches={(branchesData ?? []) as { id: string; name: string }[]}
       documents={(docsData ?? []) as ReferralDocument[]}
       initialStatusUpdates={statusUpdates}
     />

@@ -66,7 +66,7 @@ export default async function ReferralsPage() {
               {referrals.length} הפניות פעילות
             </span>
           )}
-          <NewReferralButton branchIds={profile?.branch_ids ?? []} isCeo={profile?.role === 'CEO'} />
+          <NewReferralButton branchIds={profile?.branch_ids ?? []} isCeo={profile?.role === 'CEO'} branches={branches} />
         </div>
       </div>
 

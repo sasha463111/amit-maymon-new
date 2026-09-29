@@ -67,11 +67,13 @@ function Field({
 export function ReferralDetailClient({
   referral,
   branchName,
+  branches: branchOptions,
   documents: initialDocuments,
   initialStatusUpdates,
 }: {
   referral: Referral;
   branchName: string;
+  branches: { id: string; name: string }[];
   documents: ReferralDocument[];
   initialStatusUpdates: ReferralStatusUpdateRow[];
 }) {
@@ -101,7 +103,11 @@ export function ReferralDetailClient({
   const [signedDocUrls, setSignedDocUrls] = useState<Record<string, string>>({});
   // Branch is editable because choosing the wrong one when opening a referral
   // is easy to do and previously needed a database edit to undo.
-  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  // The referral's current branch is always an option, even if the list came
+  // back short, so the select can never render blank.
+  const branches = branchOptions.some((b) => b.id === referral.branch_id)
+    ? branchOptions
+    : [{ id: referral.branch_id, name: branchName }, ...branchOptions];
   const [branchId, setBranchId] = useState(referral.branch_id);
   const [branchSaving, setBranchSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -125,14 +131,6 @@ export function ReferralDetailClient({
       setSignedDocUrls(urls);
     })();
   }, [documents]);
-
-  useEffect(() => {
-    (async () => {
-      const { createClient } = await import('@/lib/supabase/client');
-      const { data } = await createClient().from('branches').select('id, name').order('name');
-      if (data) setBranches(data as { id: string; name: string }[]);
-    })();
-  }, []);
 
   async function saveBranch(newBranchId: string) {
     if (!newBranchId || newBranchId === branchId) return;
@@ -379,7 +377,7 @@ export function ReferralDetailClient({
             <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">סניף:</span>
             <select
               value={branchId}
-              disabled={branchSaving || branches.length === 0}
+              disabled={branchSaving || branches.length < 2}
               onChange={(e) => void saveBranch(e.target.value)}
               className="flex-1 border border-gray-200 bg-white hover:border-gray-300 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors disabled:opacity-60"
             >

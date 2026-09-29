@@ -18,12 +18,24 @@ const INSURANCE_COMPANIES = [
   'מגדל ביטוח', 'שלמה רשת מוסכים', 'ביטוח ישיר', 'AIG', 'אנקור', 'הכשרה ביטוח', 'אחר',
 ];
 
-export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds?: string[]; isCeo?: boolean }) {
+export function NewReferralButton({
+  branchIds = [],
+  isCeo = false,
+  branches: allowedBranches = [],
+}: {
+  branchIds?: string[];
+  isCeo?: boolean;
+  /** The branches this user may open referrals in, loaded by the page on the server. */
+  branches?: Branch[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  // Seeded from the server so the picker is filled the moment the dialog
+  // opens. It used to start empty and fetch from the browser, showing
+  // "טוען סניפים..." — indefinitely if that request failed.
+  const [branches, setBranches] = useState<Branch[]>(allowedBranches);
   // Creating a referral used to just close the dialog. Nothing said it had
   // worked, and router.refresh() takes a moment, so the row wasn't on screen
   // yet either — staff were re-entering referrals they had already created.
@@ -64,12 +76,22 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
     // Reload branches when insurance company changes
     if (field === 'insurance_company') {
       void (async () => {
-        const filtered = await getFilteredBranches(value);
-        setBranches(filtered);
-        // If current branch is no longer in filtered list, reset to first available
-        if (filtered.length > 0 && !filtered.find(b => b.id === form.branch_id)) {
-          setForm((f) => ({ ...f, branch_id: filtered[0].id }));
+        let filtered: Branch[] = [];
+        try {
+          filtered = await getFilteredBranches(value);
+        } catch {
+          return; // keep the current list rather than blanking the picker
         }
+        // Never offer a branch outside the user's own, and never replace a
+        // working list with an empty one.
+        const allowedIds = new Set(allowedBranches.map((b) => b.id));
+        const usable = allowedBranches.length > 0 ? filtered.filter((b) => allowedIds.has(b.id)) : filtered;
+        if (usable.length === 0) return;
+        setBranches(usable);
+        // Only move the selection if the chosen branch is really gone. This
+        // reads the latest form state; the old version read a stale copy and
+        // could silently switch the branch the user had picked.
+        setForm((f) => (usable.some((b) => b.id === f.branch_id) ? f : { ...f, branch_id: usable[0].id }));
       })();
     }
   }
@@ -110,12 +132,18 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
 
   async function handleOpen() {
     setOpen(true);
-    if (needsBranchPicker && branches.length === 0) {
-      const supabase = createClient();
-      const { data } = await supabase.from('branches').select('id, name');
+    if (branches.length === 0 && allowedBranches.length > 0) setBranches(allowedBranches);
+    if (!form.branch_id && allowedBranches.length > 0) {
+      setForm((f) => ({ ...f, branch_id: allowedBranches[0].id }));
+    }
+    // Last resort only — the page normally supplies the list.
+    if (needsBranchPicker && branches.length === 0 && allowedBranches.length === 0) {
+      const { data } = await createClient().from('branches').select('id, name').order('name');
       const loaded = (data ?? []) as Branch[];
-      setBranches(loaded);
-      if (loaded.length > 0 && !form.branch_id) setForm((f) => ({ ...f, branch_id: loaded[0].id }));
+      if (loaded.length > 0) {
+        setBranches(loaded);
+        setForm((f) => (f.branch_id ? f : { ...f, branch_id: loaded[0].id }));
+      }
     }
   }
 
@@ -172,9 +200,10 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
     setCreated({ id: referralId ?? '', name: form.customer_name.trim() || 'ההפנייה' });
     setForm({
       customer_name: '', insurance_company: '', claim_type: '', vehicle_type: '', vehicle_year: '',
-      plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchIds?.[0] ?? '',
+      plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchIds?.[0] ?? allowedBranches[0]?.id ?? '',
     });
     setFiles([]);
+    setBranches(allowedBranches);
     router.refresh();
   }
 
