@@ -41,8 +41,7 @@ function Field({
     if (local === value) return;
     onSave(local);
     setJustSaved(true);
-    const t = setTimeout(() => setJustSaved(false), 2000);
-    return () => clearTimeout(t);
+    window.setTimeout(() => setJustSaved(false), 2000);
   }
 
   return (
@@ -357,7 +356,7 @@ export function ReferralDetailClient({
         <h2 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
           <span className="text-2xl">📋</span>
           פרטי הפנייה
-          <span className="text-xs font-normal text-gray-400 mr-1">(לחץ על ערך לעריכה)</span>
+          <span className="text-xs font-normal text-gray-400 mr-1">(ניתן לערוך כל שדה — השינוי נשמר ביציאה ממנו)</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
           <Field label="שם לקוח" value={fields.customer_name} onSave={(v) => void saveField('customer_name', v)} />
@@ -382,7 +381,7 @@ export function ReferralDetailClient({
               value={branchId}
               disabled={branchSaving || branches.length === 0}
               onChange={(e) => void saveBranch(e.target.value)}
-              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors bg-transparent disabled:opacity-60"
+              className="flex-1 border border-gray-200 bg-white hover:border-gray-300 focus:border-blue-400 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-400 transition-colors disabled:opacity-60"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
@@ -396,7 +395,7 @@ export function ReferralDetailClient({
               value={fields.follow_up_date}
               onChange={(v) => setFields((f) => ({ ...f, follow_up_date: v }))}
               onBlur={() => { if (fields.follow_up_date !== (referral.follow_up_date ?? '')) void saveFollowUpDate(fields.follow_up_date); }}
-              className="flex-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded px-2 py-1 text-sm focus-within:ring-1 focus-within:ring-blue-400 transition-colors"
+              className="flex-1 border border-gray-200 bg-white hover:border-gray-300 focus-within:border-blue-400 rounded px-2 py-1 text-sm focus-within:ring-1 focus-within:ring-blue-400 transition-colors"
             />
           </div>
         </div>

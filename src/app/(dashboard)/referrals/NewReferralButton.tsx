@@ -1,12 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createReferral, uploadReferralDocument } from '@/app/actions/referrals';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
-import { Plus, X, Loader2 } from 'lucide-react';
+import { Plus, X, Loader2, Check } from 'lucide-react';
 
 interface Branch {
   id: string;
@@ -24,6 +24,10 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
+  // Creating a referral used to just close the dialog. Nothing said it had
+  // worked, and router.refresh() takes a moment, so the row wasn't on screen
+  // yet either — staff were re-entering referrals they had already created.
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [form, setForm] = useState({
     customer_name: '',
@@ -46,6 +50,13 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found' | 'error'>('idle');
   const vehicleTypeRef = useRef<HTMLInputElement>(null);
   const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
+
+  // Long enough to read and act on, short enough not to sit there.
+  useEffect(() => {
+    if (!created) return;
+    const t = setTimeout(() => setCreated(null), 8000);
+    return () => clearTimeout(t);
+  }, [created]);
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -158,6 +169,7 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
 
     setOpen(false);
     setError(null);
+    setCreated({ id: referralId ?? '', name: form.customer_name.trim() || 'ההפנייה' });
     setForm({
       customer_name: '', insurance_company: '', claim_type: '', vehicle_type: '', vehicle_year: '',
       plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchIds?.[0] ?? '',
@@ -185,6 +197,36 @@ export function NewReferralButton({ branchIds = [], isCeo = false }: { branchIds
 
   return (
     <>
+      {created && (
+        <div
+          dir="rtl"
+          role="status"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-green-600 text-white px-5 py-3 rounded-xl shadow-2xl max-w-[92vw]"
+        >
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/20 shrink-0">
+            <Check size={16} strokeWidth={3} />
+          </span>
+          <span className="text-sm font-medium">{created.name} — ההפנייה נוצרה ונשמרה</span>
+          {created.id && (
+            <button
+              type="button"
+              onClick={() => router.push(`/referrals/${created.id}`)}
+              className="text-sm font-semibold underline underline-offset-2 hover:opacity-80 shrink-0"
+            >
+              פתח
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCreated(null)}
+            className="text-white/70 hover:text-white shrink-0"
+            aria-label="סגור"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={handleOpen}
