@@ -64,6 +64,50 @@ function Field({
   );
 }
 
+/**
+ * Pinned notes that must not be missed ("customer comes only on Tuesdays").
+ * Deliberately loud — amber, top of the card — and separate from the dated
+ * status log below, which is a history rather than a standing warning.
+ */
+function ImportantNotes({ value, onSave }: { value: string; onSave: (v: string) => Promise<boolean> }) {
+  const [local, setLocal] = useState(value);
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  useEffect(() => setLocal(value), [value]);
+
+  async function handleBlur() {
+    if (local.trim() === value.trim()) return;
+    setState('saving');
+    const ok = await onSave(local.trim());
+    setState(ok ? 'saved' : 'error');
+    if (ok) window.setTimeout(() => setState('idle'), 2000);
+  }
+
+  const hasNote = local.trim().length > 0;
+  return (
+    <div className={`mb-4 rounded-lg border-2 p-3 transition-colors ${hasNote ? 'border-amber-400 bg-amber-50' : 'border-dashed border-amber-200 bg-amber-50/40'}`}>
+      <div className="flex items-center justify-between mb-1.5">
+        <label htmlFor="important-notes" className="text-sm font-bold text-amber-900 flex items-center gap-1.5">
+          ⚠️ הערות חשובות
+        </label>
+        <span className="text-xs">
+          {state === 'saving' && <span className="text-gray-500">שומר…</span>}
+          {state === 'saved' && <span className="text-green-600">נשמר ✓</span>}
+          {state === 'error' && <span className="text-red-600">השמירה נכשלה</span>}
+        </span>
+      </div>
+      <textarea
+        id="important-notes"
+        value={local}
+        onChange={(e) => { setLocal(e.target.value); if (state !== 'saving') setState('idle'); }}
+        onBlur={() => void handleBlur()}
+        rows={hasNote ? 3 : 2}
+        placeholder="דברים שאסור לפספס — לדוגמה: הלקוח מגיע רק בימי שלישי, צריך רכב חלופי, לתאם מול סוכן…"
+        className="w-full resize-y rounded border border-amber-200 bg-white px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+      />
+    </div>
+  );
+}
+
 export function ReferralDetailClient({
   referral,
   branchName,
@@ -88,6 +132,7 @@ export function ReferralDetailClient({
     appraiser_name: referral.appraiser_name ?? '',
     phone: referral.phone ?? '',
     follow_up_date: referral.follow_up_date ?? '',
+    important_notes: referral.important_notes ?? '',
   });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -356,6 +401,17 @@ export function ReferralDetailClient({
           פרטי הפנייה
           <span className="text-xs font-normal text-gray-400 mr-1">(ניתן לערוך כל שדה — השינוי נשמר ביציאה ממנו)</span>
         </h2>
+        <ImportantNotes
+          value={fields.important_notes}
+          onSave={async (v) => {
+            const res = await updateReferral(referral.id, { important_notes: v || null });
+            if (res?.error) { setSaveError(res.error); return false; }
+            setFields((f) => ({ ...f, important_notes: v }));
+            setSaveError(null);
+            router.refresh();
+            return true;
+          }}
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
           <Field label="שם לקוח" value={fields.customer_name} onSave={(v) => void saveField('customer_name', v)} />
           <Field label="טלפון" value={fields.phone} onSave={(v) => void saveField('phone', v)} dir="ltr" />

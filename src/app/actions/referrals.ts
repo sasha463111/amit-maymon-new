@@ -43,6 +43,7 @@ export async function createReferral(input: CreateReferralInput) {
       appraiser_name: input.appraiser_name ?? null,
       phone: input.phone ?? null,
       status_note: input.status_note ?? null,
+      important_notes: input.important_notes ?? null,
       status: 'ACTIVE',
       created_by: auth.user.id,
     } as never)
@@ -78,6 +79,7 @@ export async function updateReferral(referralId: string, updates: UpdateReferral
   const ALLOWED = new Set([
     'customer_name', 'insurance_company', 'claim_type', 'vehicle_type',
     'vehicle_year', 'plate_number', 'appraiser_name', 'phone', 'status_note',
+    'important_notes',
     // branch_id is editable because picking the wrong branch when opening a
     // referral is an easy mistake and was previously uncorrectable from the
     // UI — it needed a manual database edit. RLS still decides whether this

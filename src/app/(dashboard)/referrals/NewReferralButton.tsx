@@ -51,6 +51,7 @@ export function NewReferralButton({
     appraiser_name: '',
     phone: '',
     status_note: '',
+    important_notes: '',
     branch_id: branchIds?.[0] ?? '',
   });
 
@@ -168,6 +169,7 @@ export function NewReferralButton({
       appraiser_name: form.appraiser_name.trim() || null,
       phone: form.phone.trim() || null,
       status_note: form.status_note.trim() || null,
+      important_notes: form.important_notes.trim() || null,
     });
 
     if (res?.error) {
@@ -200,7 +202,7 @@ export function NewReferralButton({
     setCreated({ id: referralId ?? '', name: form.customer_name.trim() || 'ההפנייה' });
     setForm({
       customer_name: '', insurance_company: '', claim_type: '', vehicle_type: '', vehicle_year: '',
-      plate_number: '', appraiser_name: '', phone: '', status_note: '', branch_id: branchIds?.[0] ?? allowedBranches[0]?.id ?? '',
+      plate_number: '', appraiser_name: '', phone: '', status_note: '', important_notes: '', branch_id: branchIds?.[0] ?? allowedBranches[0]?.id ?? '',
     });
     setFiles([]);
     setBranches(allowedBranches);
@@ -381,6 +383,17 @@ export function NewReferralButton({
                   )}
                 </div>
               )}
+
+              <div>
+                <label className={`${labelCls} text-amber-900`}>⚠️ הערות חשובות (אופציונלי)</label>
+                <textarea
+                  value={form.important_notes}
+                  onChange={(e) => set('important_notes', e.target.value)}
+                  className={`${inputCls} border-amber-200 bg-amber-50/50`}
+                  rows={2}
+                  placeholder="דברים שאסור לפספס — יוצג בראש ההפנייה"
+                />
+              </div>
 
               <div>
                 <label className={labelCls}>סטטוס הפנייה (טקסט חופשי)</label>

@@ -42,7 +42,7 @@ export default async function ReferralsPage() {
 
   let referralsQuery = supabase
     .from('referrals')
-    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, current_status_tag, follow_up_date, created_at')
+    .select('id, branch_id, customer_name, insurance_company, plate_number, status_note, important_notes, current_status_tag, follow_up_date, created_at')
     .eq('status', 'ACTIVE')
     .order('created_at', { ascending: true }); // oldest-waiting first — the ones most overdue for follow-up surface first
 

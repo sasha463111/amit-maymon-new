@@ -440,6 +440,8 @@ export interface Referral {
   appraiser_name: string | null;
   phone: string | null;
   status_note: string | null;
+  /** Pinned, always-visible notes — separate from the dated status log. */
+  important_notes: string | null;
   status: ReferralStatus;
   current_status_tag: string | null;
   follow_up_date: string | null;
@@ -472,6 +474,7 @@ export interface CreateReferralInput {
   appraiser_name?: string | null;
   phone?: string | null;
   status_note?: string | null;
+  important_notes?: string | null;
 }
 
 export type UpdateReferralInput = Partial<CreateReferralInput>;

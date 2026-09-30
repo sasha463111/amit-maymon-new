@@ -13,6 +13,7 @@ export interface ReferralRow {
   insurance_company: string | null;
   plate_number: string | null;
   status_note: string | null;
+  important_notes: string | null;
   current_status_tag: string | null;
   follow_up_date: string | null;
   created_at: string;
@@ -89,6 +90,9 @@ export function ReferralsGrid({
 
                   {r.plate_number && <LicensePlate plate={r.plate_number} size="sm" />}
 
+                  {r.important_notes && (
+                    <p className="text-[12.5px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 line-clamp-2">⚠️ {r.important_notes}</p>
+                  )}
                   {r.status_note && (
                     <p className="text-[12.5px] text-stone-500 line-clamp-2">📝 {r.status_note}</p>
                   )}
