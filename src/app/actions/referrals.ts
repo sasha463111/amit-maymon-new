@@ -156,8 +156,53 @@ export async function convertReferral(referralId: string, caseId: string) {
     .eq('id', referralId);
   if (error) return { error: error.message };
 
+  // Carry the referral's pinned notes into the case, so a warning like "the
+  // car arrives on a tow truck" reaches the people who work the case and is
+  // not left behind on a referral nobody opens again. Done here, on the
+  // server, so it happens however the case was created.
+  await carryImportantNotesToCase(supabase, referralId, caseId);
+
   revalidatePath('/referrals');
+  revalidatePath(`/cases/${caseId}`);
   return { ok: true, error: null };
+}
+
+// Not exported: a 'use server' module may only export async functions.
+const IMPORTANT_NOTES_HEADER = '⚠️ הערות חשובות מההפנייה:';
+
+async function carryImportantNotesToCase(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  referralId: string,
+  caseId: string,
+) {
+  const { data: ref, error: refErr } = await supabase
+    .from('referrals')
+    .select('important_notes')
+    .eq('id', referralId)
+    .single();
+  const note = (ref as { important_notes: string | null } | null)?.important_notes?.trim();
+  if (refErr || !note) return;
+
+  const { data: c, error: caseErr } = await supabase
+    .from('cases')
+    .select('notes')
+    .eq('id', caseId)
+    .single();
+  if (caseErr) {
+    console.error('[convertReferral] could not read case notes', { caseId, error: caseErr.message });
+    return;
+  }
+  const existing = ((c as { notes: string | null } | null)?.notes ?? '').trim();
+  if (existing.includes(note)) return; // already carried — never duplicate
+
+  const block = `${IMPORTANT_NOTES_HEADER}\n${note}`;
+  const { error: updErr } = await supabase
+    .from('cases')
+    .update({ notes: existing ? `${block}\n\n${existing}` : block } as never)
+    .eq('id', caseId);
+  // The conversion itself already succeeded; a failure here must be visible
+  // in the logs, not silently lost and not undo the conversion.
+  if (updErr) console.error('[convertReferral] could not copy important notes', { caseId, error: updErr.message });
 }
 
 export type ReferralStatusTag = 'AWAITING_REPLACEMENT_CAR' | 'AWAITING_PAPERWORK' | 'AWAITING_SCHEDULING' | 'OTHER';

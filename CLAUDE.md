@@ -251,7 +251,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 ### `referrals` (039) — הפניות טרום-תיק
 - `branch_id`, `customer_name`, `insurance_company`, `claim_type`, `vehicle_type`, `vehicle_year`, `plate_number`, `appraiser_name`, `phone`
 - `status_note`, `status` (ACTIVE/CONVERTED/CANCELLED), `case_id`, `current_status_tag`, `follow_up_date`, `follow_up_reminder_sent_at`
-- `important_notes` (2026-09-30) — הערות חשובות נעוצות: תיבה צהובה בראש עמוד ההפנייה + שורת ⚠️ בכרטיס ברשימה. נפרד מיומן המעקב (`referral_status_updates`), שהוא היסטוריה ולא אזהרה קבועה
+- `important_notes` (2026-09-30) — הערות חשובות נעוצות: תיבה צהובה בראש עמוד ההפנייה + שורת ⚠️ בכרטיס ברשימה. נפרד מיומן המעקב (`referral_status_updates`), שהוא היסטוריה ולא אזהרה קבועה. **עוברת לתיק בהמרה:** `convertReferral()` מוסיפה אותה בראש `cases.notes` תחת הכותרת "⚠️ הערות חשובות מההפנייה:" (בלי כפילות; כשל בהעתקה נרשם ללוג ולא מבטל את ההמרה)
 
 ### `referral_status_updates` (042) — יומן מעקב הפניה
 - `referral_id`, `status_tag` (AWAITING_REPLACEMENT_CAR/AWAITING_PAPERWORK/AWAITING_SCHEDULING/OTHER), `note`, `created_by`, `created_at`
