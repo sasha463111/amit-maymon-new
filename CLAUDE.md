@@ -119,7 +119,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | 0 | `OPEN_CASE` | פתיחת תיק | אוטומטי DONE בפתיחה |
 | 1 | `FIXCAR_PHOTOS` | צילום FixCar | **חובה:** fixcar_link |
 | 2 | `WHEELS_CHECK` | טפסי גלגלים | SKIPPED אוטומטית אם גיל רכב ≤ 2 שנים |
-| 3 | `PREP_ESTIMATE` | אומדן | אופציה להעלות קובץ אומדן |
+| 3 | `PREP_ESTIMATE` | אומדן | אופציה להעלות קובץ אומדן. **אחרי השלמה:** כפתור "החלף / הוסף קובץ אומדן" (מי שיכול לערוך workflow) — מעלה כ-ESTIMATE ומציע למחוק את הקודם, בלי להחזיר את ה-workflow אחורה. "החזר לאומדן" (מחזיר את ה-workflow) מוצג ל-SERVICE_MANAGER/CEO בלבד, כמו בשרת |
 | 4 | `SEND_TO_APPRAISER` | שליחה לשמאי | — |
 | 5 | `WAIT_APPRAISER_APPROVAL` | המתנה לאישור שמאי | `requires_ceo_approval = true` |
 | 6 | `ENTER_WORK` | כניסה לעבודה | אזהרה אם `parts_status ≠ AVAILABLE` |

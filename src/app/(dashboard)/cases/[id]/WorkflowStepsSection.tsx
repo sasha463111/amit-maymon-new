@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import { useRouter, useSearchParams } from 'next/navigation';
 import { completeActiveStep, returnToEstimate } from '@/app/actions/workflow';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
-import { uploadCaseDocument } from '@/app/actions/documents';
+import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
 import { PARTS_STATUS_LABELS } from '@/types/database';
@@ -560,6 +560,70 @@ export function WorkflowStepsSection({
     setEstimateFile(null);
     setEstimateUploadError(null);
     await performComplete(step);
+  }
+
+  // Replacing the estimate after the step is done. Before this, the upload
+  // panel vanished once the step was marked done, so a wrong estimate could
+  // not be swapped, and a step closed by mistake with no file could not get
+  // one — uploads from the documents area are saved untyped, not as אומדן.
+  // This does NOT reopen the workflow: rewinding later steps is a manager's
+  // call, while fixing the attached file is not.
+  const [replaceEstimateBusy, setReplaceEstimateBusy] = useState(false);
+  const [replaceEstimateMsg, setReplaceEstimateMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function replaceEstimateFile(file: File) {
+    setReplaceEstimateMsg(null);
+    setReplaceEstimateBusy(true);
+    try {
+      const supabase = createClient();
+      // Read what is attached now, before uploading, so the new file is never
+      // mistaken for an old one.
+      const { data: prevData } = await supabase
+        .from('case_documents')
+        .select('id, file_name')
+        .eq('case_id', caseId)
+        .eq('document_type', 'ESTIMATE');
+      const previous = (prevData ?? []) as { id: string; file_name: string }[];
+
+      const formData = new FormData();
+      formData.append('case_id', caseId);
+      formData.append('file', file);
+      formData.append('document_type', 'ESTIMATE');
+      const uploadRes = await uploadCaseDocument(formData);
+      if (uploadRes?.error) {
+        setReplaceEstimateMsg({ ok: false, text: uploadRes.error });
+        return;
+      }
+
+      // Only now — with the new file safely stored — offer to remove the old.
+      const failed: string[] = [];
+      if (
+        previous.length > 0 &&
+        window.confirm(`האומדן החדש נשמר.\nלמחוק את קובץ האומדן הקודם?\n\n${previous.map((d) => d.file_name).join('\n')}`)
+      ) {
+        for (const d of previous) {
+          const res = await deleteCaseDocument(d.id);
+          if (res?.error) failed.push(d.file_name);
+        }
+      }
+
+      const { data: docsData } = await supabase
+        .from('case_documents')
+        .select('id, file_name, file_path, file_size, mime_type, document_type, created_at')
+        .eq('case_id', caseId)
+        .order('created_at', { ascending: false });
+      if (docsData) onDocumentsChange(docsData as CaseDocument[]);
+
+      setReplaceEstimateMsg(
+        failed.length > 0
+          ? { ok: false, text: `האומדן החדש נשמר, אך הקובץ הקודם לא נמחק (הועלה על ידי משתמש אחר). מנהל שירות יכול למחוק אותו באזור המסמכים.` }
+          : { ok: true, text: previous.length > 0 ? 'קובץ האומדן הוחלף ✓' : 'קובץ האומדן נוסף ✓' },
+      );
+    } catch (e) {
+      setReplaceEstimateMsg({ ok: false, text: e instanceof Error ? e.message : 'שגיאה לא ידועה בהעלאה' });
+    } finally {
+      setReplaceEstimateBusy(false);
+    }
   }
 
   // Capture pasted screenshots (Ctrl+V) inside the PREP_ESTIMATE panel.
@@ -1149,6 +1213,38 @@ export function WorkflowStepsSection({
                   </div>
                 )}
 
+                {/* Replace / add the estimate file after the step is done */}
+                {canEdit && s.step_key === 'PREP_ESTIMATE' && isDone && (
+                  <div className="mr-11 mt-1 flex flex-wrap items-center gap-2">
+                    <label className={`inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-orange-300 text-orange-700 rounded-md text-xs font-medium hover:bg-orange-50 ${replaceEstimateBusy ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                      📎 {replaceEstimateBusy ? 'מעלה...' : 'החלף / הוסף קובץ אומדן'}
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        disabled={replaceEstimateBusy}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) void replaceEstimateFile(f); e.target.value = ''; }}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className={`inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-700 rounded-md text-xs font-medium hover:bg-orange-100 ${replaceEstimateBusy ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                      📷 צלם
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        disabled={replaceEstimateBusy}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) void replaceEstimateFile(f); e.target.value = ''; }}
+                        className="hidden"
+                      />
+                    </label>
+                    {replaceEstimateMsg && (
+                      <span className={`text-xs ${replaceEstimateMsg.ok ? 'text-green-700' : 'text-red-600'}`}>
+                        {replaceEstimateMsg.ok ? '' : '⚠️ '}{replaceEstimateMsg.text}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* PREP_ESTIMATE file upload panel */}
                 {canEdit && estimatePanelStepId === s.id && s.step_key === 'PREP_ESTIMATE' && !isDone && !isSkipped && (
                   <div
@@ -1345,7 +1441,11 @@ export function WorkflowStepsSection({
         </div>
       )}
 
-      {canEdit && (() => {
+      {/* returnToEstimate() is SERVICE_MANAGER / CEO only. It used to be shown
+          to advisors too and then refused by the server — a button that
+          cannot work. Advisors fix the estimate file with "החלף קובץ אומדן"
+          instead, which does not rewind the workflow. */}
+      {(role === 'SERVICE_MANAGER' || role === 'CEO') && (() => {
         // Hide "return to estimate" once the professional workflow is finished.
         // Treatment is over once there's no ACTIVE professional step left
         // (SEND_COMPLETION_PHOTOS auto-completes READY_FOR_OFFICE and ends the run).
