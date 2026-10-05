@@ -3,6 +3,7 @@
 import { MapPin, ChevronLeft, Lock, X, Clock } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatusBadge, type CaseStatus } from './StatusBadge';
+import { formatDate } from '@/lib/dates';
 
 /** One repair case in the list rail. The ACTIVE STEP is the most prominent
  *  element (what a manager scans for). Composes LicensePlate + StatusBadge. */
@@ -13,6 +14,7 @@ export function CaseRow({
   branch,
   activeStep,
   status,
+  openedAt,
   selected = false,
   onClick,
   unreadNotificationCount = 0,
@@ -23,6 +25,7 @@ export function CaseRow({
   branch: string;
   activeStep: string;
   status: CaseStatus;
+  openedAt?: string | null;
   selected?: boolean;
   onClick?: () => void;
   unreadNotificationCount?: number;
@@ -70,6 +73,7 @@ export function CaseRow({
         <div className="min-w-0 flex-1">
           <div className="font-bold text-[17px] leading-tight text-stone-900 truncate">{customer || '—'}</div>
           {insurer && <div className="text-[13px] text-stone-500 mt-0.5 truncate">{insurer}</div>}
+          {openedAt && <div className="text-[12px] text-stone-400 mt-0.5">נפתח {formatDate(openedAt)}</div>}
         </div>
         <StatusBadge status={status} size="sm" />
       </div>

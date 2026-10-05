@@ -2,6 +2,7 @@
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatusBadge, type CaseStatus } from './StatusBadge';
+import { formatDate } from '@/lib/dates';
 
 export interface TableCase {
   id: string;
@@ -11,12 +12,13 @@ export interface TableCase {
   branch: string;
   activeStep: string;
   status: CaseStatus;
+  openedAt?: string | null;
 }
 
 /** Full-width, one-line-per-case view for browsing many open cases at once —
  *  the dense alternative to the card rail, for branches routinely running
  *  30–40 open cases where a card list means constant scrolling. Rows are
- *  pre-sorted by urgency by the caller; this just renders them. */
+ *  pre-sorted by the caller (opening date, oldest first); this just renders them. */
 export function CasesTable({ rows, onRowClick }: { rows: TableCase[]; onRowClick: (id: string) => void }) {
   if (rows.length === 0) {
     return <div className="py-16 text-center text-stone-500 text-sm">לא נמצאו תיקים תואמים</div>;
@@ -33,6 +35,7 @@ export function CasesTable({ rows, onRowClick }: { rows: TableCase[]; onRowClick
             <th className="text-right font-semibold text-[11px] text-stone-500 px-3 py-2.5 whitespace-nowrap">מבטח</th>
             <th className="text-right font-semibold text-[11px] text-stone-500 px-3 py-2.5 whitespace-nowrap">סניף</th>
             <th className="text-right font-semibold text-[11px] text-stone-500 px-3 py-2.5 whitespace-nowrap">השלב הבא</th>
+            <th className="text-right font-semibold text-[11px] text-stone-500 px-3 py-2.5 whitespace-nowrap">נפתח</th>
           </tr>
         </thead>
         <tbody>
@@ -62,6 +65,7 @@ export function CasesTable({ rows, onRowClick }: { rows: TableCase[]; onRowClick
                 <td className="px-3 py-2 whitespace-nowrap text-stone-500">{r.insurer || '—'}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-stone-500">{r.branch || '—'}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-stone-700">{done ? 'הושלם' : r.activeStep || '—'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-stone-500 tabular-nums">{formatDate(r.openedAt)}</td>
               </tr>
             );
           })}

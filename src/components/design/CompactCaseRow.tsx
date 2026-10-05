@@ -2,6 +2,7 @@
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatusBadge, type CaseStatus } from './StatusBadge';
+import { formatDate } from '@/lib/dates';
 
 // Full-row tint per status — solid soft tokens (not diluted with opacity),
 // plus a colored trailing border as a stronger "flag" than a small dot can
@@ -28,12 +29,14 @@ export function CompactCaseRow({
   customer,
   activeStep,
   status,
+  openedAt,
   onClick,
 }: {
   plate: string;
   customer: string;
   activeStep: string;
   status: CaseStatus;
+  openedAt?: string | null;
   onClick?: () => void;
 }) {
   const done = status === 'done';
@@ -47,6 +50,9 @@ export function CompactCaseRow({
       <span className="flex-1 min-w-0 flex flex-col">
         <span className="font-bold text-[13px] text-stone-900 truncate leading-tight">{customer || '—'}</span>
         <span className="text-[11px] text-stone-500 truncate leading-tight">{done ? 'הושלם' : activeStep || '—'}</span>
+        {openedAt && (
+          <span className="text-[11px] text-stone-400 leading-tight">נפתח {formatDate(openedAt)}</span>
+        )}
       </span>
       <StatusBadge status={status} size="sm" />
     </button>

@@ -30,9 +30,10 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   let casesQuery = supabase
     .from('cases')
-    .select('id, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, cars!inner(license_plate)')
+    .select('id, opened_at, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, cars!inner(license_plate)')
     .is('deleted_at', null)
-    .order('opened_at', { ascending: false });
+    // Oldest first — the case waiting longest is the one at the top.
+    .order('opened_at', { ascending: true });
   if (role !== 'CEO' && branchIds.length > 0) casesQuery = casesQuery.in('branch_id', branchIds);
 
   const [{ data: casesRows }, { data: branchesData }] = await Promise.all([
@@ -106,13 +107,14 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   const railCases: RailCase[] = openCases.map((c) => {
     const row = c as {
-      id: string; customer_name: string | null; insurance_company: string | null; branch_id: string;
+      id: string; opened_at: string | null; customer_name: string | null; insurance_company: string | null; branch_id: string;
       cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
     };
     const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
     return {
       id: row.id,
       plate: car?.license_plate ?? '—',
+      opened_at: row.opened_at,
       customer_name: row.customer_name,
       insurer: row.insurance_company,
       branch_id: row.branch_id,

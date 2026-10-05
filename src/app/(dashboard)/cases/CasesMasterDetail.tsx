@@ -10,21 +10,19 @@ import { SearchField } from '@/components/design/SearchField';
 import { CreateCaseButton } from './CreateCaseButton';
 import type { CaseStatus } from '@/components/design/StatusBadge';
 
-// Urgency order for sorting the browse table: whatever needs a look first
-// floats to the top instead of requiring a scroll through 30-40 cases to
-// find it. Matches caseStatus()'s own priority.
-const STATUS_PRIORITY: Record<CaseStatus, number> = {
-  rejected: 0,
-  blocked: 1,
-  waiting: 2,
-  active: 3,
-  skipped: 4,
-  done: 5,
-};
+// Sort order: by opening date, oldest first (requested 2026-10-05). This
+// replaced an urgency sort (rejected → blocked → waiting → active); urgency
+// is still visible through each row's color and badge, it just no longer
+// decides the position.
+function openedTime(c: RailCase): number {
+  const t = c.opened_at ? new Date(c.opened_at).getTime() : NaN;
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t; // undated cases last
+}
 
 export interface RailCase {
   id: string;
   plate: string;
+  opened_at: string | null;
   customer_name: string | null;
   insurer: string | null;
   branch_id: string;
@@ -90,9 +88,7 @@ export function CasesMasterDetail({
           [c.plate, c.customer_name ?? '', c.insurer ?? ''].some((f) => f.includes(q));
         return okBranch && okQuery;
       })
-      // Stable sort: cases arrive already ordered by opened_at desc from the
-      // layout query, so within the same urgency tier that order is kept.
-      .sort((a, b) => STATUS_PRIORITY[caseStatus(a)] - STATUS_PRIORITY[caseStatus(b)]);
+      .sort((a, b) => openedTime(a) - openedTime(b));
   }, [cases, branchFilter, query]);
 
   const showBranchFilter = branches.length > 1;
@@ -145,6 +141,7 @@ export function CasesMasterDetail({
               customer={c.customer_name ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
+              openedAt={c.opened_at}
               onClick={() => router.push(`/cases/${c.id}`)}
             />
           ))}
@@ -160,6 +157,7 @@ export function CasesMasterDetail({
               branch: branchNameById[c.branch_id] ?? '',
               activeStep: c.nextStep ?? '',
               status: caseStatus(c),
+              openedAt: c.opened_at,
             }))}
             onRowClick={(id) => router.push(`/cases/${id}`)}
           />
@@ -209,6 +207,7 @@ export function CasesMasterDetail({
               branch={branchNameById[c.branch_id] ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
+              openedAt={c.opened_at}
               selected={c.id === selectedId}
               onClick={() => router.push(`/cases/${c.id}`)}
               unreadNotificationCount={c.unreadNotificationCount}
