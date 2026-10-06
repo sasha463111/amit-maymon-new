@@ -213,6 +213,12 @@ export function CaseDetailsSection({
   // SERVICE_ADVISOR is read-only (view-only access)
   const canEdit = role === 'SERVICE_MANAGER' || role === 'CEO';
   const canEditDetails = role === 'SERVICE_MANAGER' || role === 'CEO';
+  // Notes alone are also open to OFFICE (2026-10-06): once a referral becomes
+  // a case the office still needs to leave reminders on it, and the notes
+  // field is where the referral's important notes land. Everything else in
+  // the case details stays locked for them. SERVICE_ADVISOR stays read-only
+  // here by decision — do not add it without asking.
+  const canEditNotes = canEditDetails || role === 'OFFICE';
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -297,13 +303,20 @@ export function CaseDetailsSection({
   const [notes, setNotes] = useState(initialNotes ?? '');
   const [notesDirty, setNotesDirty] = useState(false);
   const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
 
   async function saveNotes() {
-    if (!notesDirty) return;
+    if (!notesDirty || !canEditNotes) return;
     setNotesSaving(true);
-    setNotesDirty(false);
-    await updateCaseDetails(caseId, { notes: notes || null });
+    setNotesError(null);
+    const res = await updateCaseDetails(caseId, { notes: notes || null });
     setNotesSaving(false);
+    // Previously the result was ignored, so a failed save still showed ✓.
+    if (res?.error) {
+      setNotesError(res.error);
+      return; // stays dirty — the next blur retries
+    }
+    setNotesDirty(false);
   }
 
   const [painterStatus, setPainterStatus] = useState<PainterStatus | ''>(
@@ -479,19 +492,20 @@ export function CaseDetailsSection({
         <label className="block text-sm font-medium text-gray-700 mb-1.5">
           הערות
           {notesSaving && <span className="mr-2 text-xs font-normal text-gray-400">שומר...</span>}
-          {notes && !notesDirty && !notesSaving && (
+          {notes && !notesDirty && !notesSaving && !notesError && (
             <span className="mr-2 text-xs font-normal text-gray-400">✓</span>
           )}
+          {notesError && <span className="mr-2 text-xs font-normal text-red-600">⚠️ השמירה נכשלה: {notesError}</span>}
         </label>
         <textarea
           value={notes}
           onChange={(e) => { setNotes(e.target.value); setNotesDirty(true); }}
           onBlur={() => void saveNotes()}
           rows={3}
-          placeholder={canEditDetails ? 'הוסף הערה...' : 'אין הערות'}
-          readOnly={!canEditDetails}
+          placeholder={canEditNotes ? 'הוסף הערה...' : 'אין הערות'}
+          readOnly={!canEditNotes}
           className={`w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none outline-none transition-all ${
-            canEditDetails
+            canEditNotes
               ? 'focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 bg-gray-50 focus:bg-white'
               : 'bg-gray-50 text-gray-600 cursor-default'
           }`}
