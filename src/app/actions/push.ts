@@ -226,7 +226,14 @@ export async function sendTestPushToSelf(): Promise<{ ok?: boolean; error?: stri
  * Best-effort: failures are logged but don't throw, since this is called
  * inline from notification-creating server actions.
  */
-export async function sendPushToUser(userId: string, payload: { title: string; body?: string; url?: string; tag?: string }) {
+export async function sendPushToUser(
+  userId: string,
+  payload: { title: string; body?: string; url?: string; tag?: string },
+  // Set only by /api/push/dispatch, the database-driven path that pushes
+  // every CEO notification. Reserved for the next step, where direct CEO
+  // pushes from app code are switched off so nothing arrives twice.
+  _opts?: { viaDispatcher?: boolean },
+) {
   configureVapid();
   if (!vapidConfigured) return { sent: 0, failed: 0 };
 
