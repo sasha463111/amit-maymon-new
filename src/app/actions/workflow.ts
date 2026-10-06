@@ -75,7 +75,7 @@ async function notifyCeosPendingApproval(
   const c = caseData as { case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
   const plate = (Array.isArray(c?.cars) ? c?.cars[0]?.license_plate : c?.cars?.license_plate) ?? c?.case_key ?? 'תיק';
 
-  const { data: ceos } = await supabase.from('profiles').select('id').eq('role', 'CEO');
+  const { data: ceos } = await supabase.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true).limit(1);
   const label = APPROVAL_TYPE_LABELS[approvalType] ?? approvalType;
   const title = `אישור ${label} ממתין`;
   const body = `רכב ${plate} ממתין לאישורך`;
@@ -88,9 +88,17 @@ async function notifyCeosPendingApproval(
   // live run of a similar loop in the escalation cron (added later) sent
   // some overseers 3-4 copies of the same notification. These lists are
   // small (a handful of staff), so serializing costs nothing that matters.
-  for (const ceo of (ceos ?? []) as { id: string }[]) {
+  //
+  // ONE insert, addressed to one active CEO. The DB fan-out trigger copies it
+  // to every other CEO (and cross-branch advisors). This used to insert once
+  // per CEO, so each CEO got the fan-out copy of the first insert AND their
+  // own direct row — every approval arrived twice (20 pairs for Amit in one
+  // week). Push and email for CEOs come from trg_dispatch_ceo_push, one per
+  // row, so nothing is pushed from here.
+  const firstCeo = ((ceos ?? []) as { id: string }[])[0];
+  if (firstCeo) {
     const { error: notifErr } = await supabase.from('notifications').insert({
-      user_id: ceo.id,
+      user_id: firstCeo.id,
       case_id: caseId,
       type: 'PENDING_APPROVAL',
       title,
@@ -99,10 +107,7 @@ async function notifyCeosPendingApproval(
       triggered_by: triggeredBy,
     } as never);
     if (notifErr) console.error('[notifications] insert failed', notifErr);
-    await sendPushToUser(ceo.id, { title, body, url, tag: `approval-${caseId}` });
   }
-  // CEO-only notification for approvals pending (audit trail)
-  await notifyRelevantParties('PENDING_APPROVAL', null, { title, body, url, tag: `approval-${caseId}` }, triggeredBy);
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -723,14 +728,16 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       .single();
     const wc = wheelsCaseData as { case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
     const wcPlate = (Array.isArray(wc?.cars) ? wc?.cars[0]?.license_plate : wc?.cars?.license_plate) ?? wc?.case_key ?? 'תיק';
-    const { data: ceoRows } = await supabase.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true);
+    const { data: ceoRows } = await supabase.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true).limit(1);
     const wheelsTitle = 'טפסי גלגלים הושלמו';
     const wheelsBody = `רכב ${wcPlate} — טפסי גלגלים סומנו כהושלמו`;
     const wheelsUrl = `/go/${caseId}?highlight=WHEELS_CHECK`;
-    // Sequential — see the comment on notifyCeosPendingApproval above.
-    for (const ceo of ((ceoRows ?? []) as { id: string }[]).filter((r) => r.id !== user.id)) {
+    // ONE insert; the DB fan-out copies it to every CEO — see the comment in
+    // notifyCeosPendingApproval above (this loop caused 14 duplicate pairs).
+    const firstCeo = ((ceoRows ?? []) as { id: string }[])[0];
+    if (firstCeo) {
       const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: ceo.id,
+        user_id: firstCeo.id,
         case_id: caseId,
         type: 'OTHER',
         title: wheelsTitle,
@@ -739,7 +746,6 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(ceo.id, { title: wheelsTitle, body: wheelsBody, url: wheelsUrl, tag: `wheels-${caseId}` });
     }
   }
 

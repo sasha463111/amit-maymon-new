@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   const result = await sendPushToUser(
     row.user_id,
     { title: row.title, body: row.body ?? '', url, tag: `n-${id}` },
-    { viaDispatcher: true },
+    { direct: true },
   );
   console.log('[push/dispatch]', { id, user: row.user_id, ...result });
 
