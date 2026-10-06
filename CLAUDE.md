@@ -375,6 +375,17 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | WHEELS_CHECK הושלם | התראת FYI לעמית (CEO) בלבד |
 | כל התראה נוצרת | fanout ל-CEO + יועצים חוצי-סניף |
 
+### פוש על כל התראה למנכ"ל — `trg_dispatch_ceo_push` (2026-10-06)
+רוב ההתראות של המנכ"ל נוצרות בתוך ה-DB (fan-out, cron) ואפליקציה לא רואה אותן — לכן הפוש יוצא מה-DB:
+- טריגר `AFTER INSERT` על `notifications`: לכל שורה של CEO פעיל → `pg_net` קורא ל-`POST /api/push/dispatch` עם `{id}`
+- אימות: header `x-dispatch-secret` מול סוד ב-**Supabase Vault** (`push_dispatch_secret`), נבדק ב-`check_push_dispatch_secret()` (service_role בלבד). הסוד לא בקוד ולא ב-env
+- `notifications.pushed_at` = סימון "נשלח" — ה-route תופס את השורה אטומית, אין כפילויות
+- תקלה בטריגר **לעולם** לא חוסמת שמירת התראה (`EXCEPTION WHEN OTHERS` → WARNING)
+- ה-URL קבוע בטריגר (`amit-maymon-new-psi.vercel.app`) — לעדכן אם הדומיין משתנה
+- ביטול מיידי: `DROP TRIGGER trg_dispatch_ceo_push ON public.notifications;`
+- בדיקת תקינות: `net._http_response` (סטטוס הקריאות) + `pushed_at` על התראות המנכ"ל
+- הוחל ידנית ב-SQL Editor (לא דרך CLI) — הקובץ אידמפוטנטי, הרצה חוזרת בטוחה
+
 ### תזכורות מתוזמנות — `/api/cron/enter-work-reminders` (038, 043)
 Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 דקות (GitHub Actions).
 
