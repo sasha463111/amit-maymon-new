@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser } from '@/app/actions/push';
+import { DAILY_EMAIL_LIMIT, sendNotificationEmail } from '@/lib/notificationEmail';
 
-// Push for EVERY notification a CEO receives (requested by Amit, 2026-10-06).
+// Push — and an email copy, up to 50 a day — for EVERY notification a CEO
+// receives (requested by Amit, 2026-10-06).
 //
 // Why this is driven from the database and not from app code: most CEO
 // notifications are copies made by the DB fan-out trigger (migration 031),
@@ -62,5 +64,38 @@ export async function POST(req: Request) {
     { viaDispatcher: true },
   );
   console.log('[push/dispatch]', { id, user: row.user_id, ...result });
-  return NextResponse.json({ ok: true, ...result });
+
+  // Email copy, capped per day. claim_notification_email() decides: it
+  // returns nothing when the recipient has email off, the cap is used up, or
+  // this row was already emailed.
+  let email: string = 'skipped';
+  const { data: slotRows, error: slotErr } = await db.rpc(
+    'claim_notification_email' as never,
+    { p_notification_id: id, p_daily_limit: DAILY_EMAIL_LIMIT } as never,
+  );
+  if (slotErr) {
+    console.error('[push/dispatch] email claim failed', { id, error: slotErr.message });
+    email = 'claim-error';
+  } else {
+    const claim = (slotRows as { slot: number; email: string }[] | null)?.[0];
+    if (claim) {
+      const sent = await sendNotificationEmail({
+        to: claim.email,
+        title: row.title,
+        body: row.body ?? '',
+        link: new URL(url, new URL(req.url).origin).toString(),
+        slot: claim.slot,
+      });
+      if (sent.ok) {
+        email = `sent ${claim.slot}/${DAILY_EMAIL_LIMIT}`;
+      } else {
+        // Give the slot back so a failed send doesn't eat the daily quota.
+        await db.rpc('release_notification_email' as never, { p_notification_id: id } as never);
+        console.error('[push/dispatch] email send failed', { id, error: sent.error });
+        email = 'send-failed';
+      }
+    }
+  }
+
+  return NextResponse.json({ ok: true, ...result, email });
 }

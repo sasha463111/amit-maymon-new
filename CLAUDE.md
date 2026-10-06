@@ -385,6 +385,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - ביטול מיידי: `DROP TRIGGER trg_dispatch_ceo_push ON public.notifications;`
 - בדיקת תקינות: `net._http_response` (סטטוס הקריאות) + `pushed_at` על התראות המנכ"ל
 - הוחל ידנית ב-SQL Editor (לא דרך CLI) — הקובץ אידמפוטנטי, הרצה חוזרת בטוחה
+- **מייל לכל התראה (2026-10-06):** אותו route שולח גם מייל דרך Resend (`src/lib/notificationEmail.ts`), **רק** למי שמסומן `profiles.email_notifications = true` (כרגע עמית בלבד — לא להפעיל לחשבונות בדיקה). מכסה: **50 ביום לפי שעון ישראל**, נאכפת ב-`claim_notification_email()` עם נעילה; המייל ה-50 כולל הודעה שהמכסה נוצלה. שליחה שנכשלה מחזירה את המקום (`release_notification_email`). `notifications.emailed_at` = סימון וספירה. המייל עם `<meta charset="utf-8">` מפורש — בלעדיו תוכנות דואר הציגו עברית משובשת
 
 ### תזכורות מתוזמנות — `/api/cron/enter-work-reminders` (038, 043)
 Route יחיד עם ארבעה סבבים, מופעל חיצונית כל 30 דקות (GitHub Actions).
