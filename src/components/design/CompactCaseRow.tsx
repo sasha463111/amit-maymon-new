@@ -30,6 +30,7 @@ export function CompactCaseRow({
   activeStep,
   status,
   openedAt,
+  unreadNotificationCount = 0,
   onClick,
 }: {
   plate: string;
@@ -37,6 +38,7 @@ export function CompactCaseRow({
   activeStep: string;
   status: CaseStatus;
   openedAt?: string | null;
+  unreadNotificationCount?: number;
   onClick?: () => void;
 }) {
   const done = status === 'done';
@@ -44,7 +46,13 @@ export function CompactCaseRow({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 text-right px-3 py-2.5 rounded-lg border-[1.5px] transition-colors ${ROW_TONE[status]}`}
+      className={`w-full flex items-center gap-2.5 text-right px-3 py-2.5 rounded-lg border-[1.5px] transition-colors ${
+        // Same single signal as the cards (Amit, 2026-10-07): yellow when it
+        // needs me, white otherwise. Status lives in the badge only.
+        unreadNotificationCount > 0
+          ? 'bg-yellow-200 border-yellow-400'
+          : status === 'done' ? ROW_TONE.done : 'bg-white border-stone-200'
+      }`}
     >
       <LicensePlate plate={plate} size="sm" />
       <span className="flex-1 min-w-0 flex flex-col">

@@ -49,25 +49,29 @@ export function CaseRow({
         ? 'bg-status-blocked'
         : 'bg-accent';
 
-  // Add yellow highlight ring if there are unread notifications
-  const hasUnreadNotifs = unreadNotificationCount > 0;
+  // Amit (2026-10-07): ONE signal for "this needs me" — the whole card in
+  // highlighter yellow while I have an unread notification on the case,
+  // plain white otherwise. "Not lots of colors": the status badge still says
+  // rejected/blocked/waiting, but the card background no longer does.
+  const needsMe = unreadNotificationCount > 0;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-right flex flex-col gap-3 p-4 rounded-lg border-[1.5px] transition-all ${
-        hasUnreadNotifs ? 'ring-2 ring-yellow-300 ring-offset-0' : ''
-      } ${
+      className={`w-full h-full text-right flex flex-col gap-3 p-4 rounded-lg border-[1.5px] transition-all ${
         selected
           ? 'bg-accent-soft border-accent shadow-md'
-          : rejected
-            ? 'bg-status-rejected-soft/40 border-status-rejected/50 hover:border-status-rejected shadow-xs hover:shadow-sm'
-            : waiting
-              ? 'bg-status-waiting-soft/40 border-status-waiting/50 hover:border-status-waiting shadow-xs hover:shadow-sm'
-              : 'bg-white border-stone-200 hover:border-stone-300 shadow-xs hover:shadow-sm'
+          : needsMe
+            ? 'bg-yellow-200 border-yellow-400 hover:bg-yellow-300 shadow-sm'
+            : 'bg-white border-stone-200 hover:border-stone-300 shadow-xs hover:shadow-sm'
       }`}
     >
+      {needsMe && !selected && (
+        <span className="self-start -mb-1 inline-flex items-center gap-1 rounded-full bg-yellow-500 text-white text-[11px] font-bold px-2 py-0.5">
+          ❗ {unreadNotificationCount} {unreadNotificationCount === 1 ? 'התראה' : 'התראות'} לטיפול
+        </span>
+      )}
       {/* identity + status */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

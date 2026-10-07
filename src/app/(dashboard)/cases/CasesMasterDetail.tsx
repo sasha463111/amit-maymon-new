@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { CaseRow } from '@/components/design/CaseRow';
 import { CompactCaseRow } from '@/components/design/CompactCaseRow';
-import { CasesTable } from '@/components/design/CasesTable';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { SearchField } from '@/components/design/SearchField';
 import { CreateCaseButton } from './CreateCaseButton';
@@ -143,25 +142,36 @@ export function CasesMasterDetail({
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
               openedAt={c.opened_at}
+              unreadNotificationCount={c.unreadNotificationCount}
               onClick={() => router.push(`/cases/${c.id}`)}
             />
           ))}
         </div>
 
+        {/* Desktop: a grid of case cards ("cubes, CRM style" — Amit,
+            2026-10-07) instead of the dense table. Yellow card = has an
+            unread notification for me; white = nothing waiting. */}
         <div className="hidden md:block">
-          <CasesTable
-            rows={filtered.map((c) => ({
-              id: c.id,
-              plate: c.plate,
-              customer: c.customer_name ?? '',
-              insurer: c.insurer ?? '',
-              branch: branchNameById[c.branch_id] ?? '',
-              activeStep: c.nextStep ?? '',
-              status: caseStatus(c),
-              openedAt: c.opened_at,
-            }))}
-            onRowClick={(id) => router.push(`/cases/${id}`)}
-          />
+          {filtered.length === 0 ? (
+            <div className="py-16 text-center text-stone-500 text-sm">לא נמצאו תיקים תואמים</div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3">
+              {filtered.map((c) => (
+                <CaseRow
+                  key={c.id}
+                  plate={c.plate}
+                  customer={c.customer_name ?? ''}
+                  insurer={c.insurer ?? ''}
+                  branch={branchNameById[c.branch_id] ?? ''}
+                  activeStep={c.nextStep ?? ''}
+                  status={caseStatus(c)}
+                  openedAt={c.opened_at}
+                  onClick={() => router.push(`/cases/${c.id}`)}
+                  unreadNotificationCount={c.unreadNotificationCount}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
