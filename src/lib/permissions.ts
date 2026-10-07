@@ -19,7 +19,8 @@ export type PermissionAction =
   | 'upload_documents'
   | 'delete_documents'
   | 'manage_extras_status'
-  | 'manage_settings';
+  | 'manage_settings'
+  | 'delete_cases';
 
 /**
  * Ask the database whether the CURRENT user's role may perform `action`,

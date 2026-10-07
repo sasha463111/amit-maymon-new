@@ -5,6 +5,7 @@ import type { PartsStatus, GeneralStatus } from '@/types/database';
 import { PROFESSIONAL_WORKFLOW_STEPS } from '@/types/database';
 import { CaseDetailClientV2 } from './CaseDetailClientV2';
 import { SkeletonPanel } from '@/components/ui/Skeleton';
+import { hasPermission } from '@/lib/permissions';
 
 type StepTemplate = {
   step_key: string;
@@ -75,14 +76,33 @@ type CaseRowMinimal = {
 
 async function CaseDetailData({
   id,
+  userId,
   profile,
   caseRow,
 }: {
   id: string;
+  userId: string;
   profile: { role: string; branch_ids: string[] } | null;
   caseRow: CaseRowMinimal;
 }) {
   const supabase = await createClient();
+
+  // This user's open (unread) notifications about this case, shown on the
+  // case page itself with a "טופל" button — the reason for a rejection used
+  // to live only in the bell, away from the case it was about. Filtered to
+  // the current user explicitly: CEOs can read everyone's notifications.
+  const [{ data: caseNotifData }, canDeleteCase] = await Promise.all([
+    supabase
+      .from('notifications')
+      .select('id, title, body, created_at, type')
+      .eq('user_id', userId)
+      .eq('case_id', id)
+      .eq('read', false)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    hasPermission(supabase, 'delete_cases'),
+  ]);
+  const caseNotifications = (caseNotifData ?? []) as { id: string; title: string; body: string | null; created_at: string; type: string }[];
 
   // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes.
   // Load templates in parallel — used only if we need to seed steps, but cheap enough to fetch
@@ -356,6 +376,8 @@ async function CaseDetailData({
       treatmentFinishedAt={caseRow.treatment_finished_at ?? null}
       closedAt={caseRow.closed_at ?? null}
       painterRequests={painterRequests}
+      caseNotifications={caseNotifications}
+      canDeleteCase={canDeleteCase}
     />
   );
 }
@@ -418,7 +440,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <Suspense fallback={<CaseDetailSkeleton />}>
-      <CaseDetailData id={id} profile={profile} caseRow={caseRow} />
+      <CaseDetailData id={id} userId={user.id} profile={profile} caseRow={caseRow} />
     </Suspense>
   );
 }

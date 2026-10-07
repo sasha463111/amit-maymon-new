@@ -922,7 +922,12 @@ export async function deleteCase(caseId: string) {
 
   const { data: profileData } = await supabase.from('profiles').select('id, role').eq('id', user.id).single();
   const profile = profileData as { id: string; role: string } | null;
-  if (profile?.role !== 'CEO') return { error: 'רק CEO יכול למחוק תיקים' };
+  if (!profile) return { error: 'פרופיל לא נמצא' };
+  // Governed by Settings > Permissions (delete_cases), off for every role but
+  // CEO until the CEO turns it on (requested 2026-10-07, "באישור עמית").
+  // Deletion is soft and only the CEO can restore (restoreCase), so a
+  // mistaken delete is always recoverable. Branch reach is enforced by RLS.
+  if (!(await hasPermission(supabase, 'delete_cases'))) return { error: 'אין הרשאה למחוק תיקים' };
 
   // Soft delete — mark deleted_at and deleted_by
   await supabase

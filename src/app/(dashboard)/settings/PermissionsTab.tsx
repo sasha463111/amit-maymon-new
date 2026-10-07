@@ -14,6 +14,7 @@ const ACTION_LABELS: Record<string, string> = {
   manage_extras_status: 'ניהול תוספות',
   upload_documents: 'העלאת מסמכים',
   delete_documents: 'מחיקת מסמכים',
+  delete_cases: 'מחיקת תיקים',
 };
 
 const ROLE_LABELS: Record<string, string> = {

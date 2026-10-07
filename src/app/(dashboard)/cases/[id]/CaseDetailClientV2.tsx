@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
 import { PROFESSIONAL_STEP_LABELS as DEFAULT_STEP_LABELS } from '@/types/database';
 import { CaseStatusBanner } from './CaseStatusBanner';
+import { CaseNotificationsPanel } from './CaseNotificationsPanel';
 import { DocumentsSection } from './DocumentsSection';
 import { TimelineSection } from './TimelineSection';
 import { CaseDetailsSection } from './CaseDetailsSection';
@@ -87,6 +88,10 @@ interface CaseDetailClientProps {
   treatmentFinishedAt?: string | null;
   closedAt?: string | null;
   painterRequests: PainterRequestRow[];
+  /** This user's unread notifications about this case. */
+  caseNotifications?: { id: string; title: string; body: string | null; created_at: string; type: string }[];
+  /** From the permission matrix (delete_cases). CEO is always true. */
+  canDeleteCase?: boolean;
 }
 
 export function CaseDetailClientV2(props: CaseDetailClientProps) {
@@ -403,6 +408,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
 
   return (
     <div className="space-y-6" dir="rtl">
+      <CaseNotificationsPanel initial={props.caseNotifications ?? []} />
+
       {/* Case status banner — top-of-page, color-coded so the user sees state at a glance */}
       <CaseStatusBanner
         isClosed={isClosed}
@@ -420,10 +427,11 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           <span>←</span>
           <span>חזרה לתיקים</span>
         </Link>
-        {role === 'CEO' && (
+        {(role === 'CEO' || props.canDeleteCase) && (
           deleteConfirm ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-red-700 font-medium">למחוק תיק זה לצמיתות?</span>
+              {/* Not "לצמיתות": deletion is soft — the CEO can restore it from the archive. */}
+              <span className="text-sm text-red-700 font-medium">למחוק את התיק? (המנכ״ל יכול לשחזר מהארכיון)</span>
               <button
                 type="button"
                 onClick={() => void handleDeleteCase()}

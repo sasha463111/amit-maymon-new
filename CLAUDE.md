@@ -385,6 +385,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - ביטול מיידי: `DROP TRIGGER trg_dispatch_ceo_push ON public.notifications;`
 - בדיקת תקינות: `net._http_response` (סטטוס הקריאות) + `pushed_at` על התראות המנכ"ל
 - הוחל ידנית ב-SQL Editor (לא דרך CLI) — הקובץ אידמפוטנטי, הרצה חוזרת בטוחה
+- **התראות פתוחות בעמוד התיק (2026-10-07):** `CaseNotificationsPanel` מציג בראש התיק את ההתראות שלא נקראו של המשתמש הנוכחי על התיק, עם "✓ טופל" (= `markRead`, אישי לכל משתמש)
 - **פוש למנכ"ל יוצא רק מכאן:** `sendPushToUser()` מדלג על כל נמען CEO אלא אם נקרא עם `{ direct: true }` (רק ה-dispatcher ובדיקת-הפוש העצמית). כך אף נתיב קוד לא יכול לשלוח למנכ"ל פוש כפול
 - **התראה למנכ"לים = INSERT אחד** לאחד מהם; ה-fan-out מעתיק לשאר. לולאה שמכניסה שורה לכל CEO יוצרת כפילות (קרה: 34 זוגות בשבוע)
 - **רשת ביטחון:** `trg_skip_duplicate_notification` (BEFORE INSERT) — התראה זהה (נמען+תיק+סוג+כותרת+תוכן) תוך 60 שניות לא נשמרת
@@ -961,7 +962,7 @@ Separately, opening a referral was hard-coded to OFFICE/CEO and absent from the
 matrix entirely, so the reported "נסיה and ערן cannot open referrals" had no fix
 short of a code change.
 
-**The nine governed actions:**
+**The ten governed actions:**
 
 | action | Hebrew label | Default roles |
 |---|---|---|
@@ -974,6 +975,7 @@ short of a code change.
 | `delete_documents` | מחיקת מסמכים | SERVICE_MANAGER, OFFICE, CEO |
 | `manage_extras_status` | ניהול תוספות | SERVICE_MANAGER, CEO |
 | `manage_settings` | ניהול הגדרות | CEO |
+| `delete_cases` | מחיקת תיקים | CEO (שאר התפקידים כבויים — עמית מדליק בהגדרות; נוסף 2026-10-07) |
 
 **How to check a permission:**
 
