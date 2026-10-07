@@ -20,7 +20,12 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function buildHtml(opts: { title: string; body: string; link: string; slot: number }): string {
+/** "רכב 12345678 · ישראל ישראלי" — whichever parts are known. */
+function carLine(plate?: string | null, customer?: string | null): string {
+  return [plate ? `רכב ${plate}` : null, customer || null].filter(Boolean).join(' · ');
+}
+
+function buildHtml(opts: { title: string; body: string; link: string; slot: number; plate?: string | null; customer?: string | null }): string {
   const isLast = opts.slot >= DAILY_EMAIL_LIMIT;
   const limitNotice = isLast
     ? `<div style="margin-top:20px;padding:12px 14px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;color:#9a3412;font-size:14px;">
@@ -44,6 +49,7 @@ function buildHtml(opts: { title: string; body: string; link: string; slot: numb
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;border:1px solid #e7e5e4;direction:rtl;text-align:right;">
     <div style="font-size:13px;color:#b91c1c;font-weight:bold;margin-bottom:8px;">תהילה — התראה חדשה</div>
     <h1 style="margin:0;font-size:20px;color:#1c1917;">${escapeHtml(opts.title)}</h1>
+    ${carLine(opts.plate, opts.customer) ? `<p style="margin:6px 0 0;font-size:16px;font-weight:bold;color:#1c1917;">${escapeHtml(carLine(opts.plate, opts.customer))}</p>` : ''}
     ${body}
     <a href="${escapeHtml(opts.link)}" style="display:inline-block;margin-top:20px;padding:10px 18px;background:#b91c1c;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:bold;">פתח במערכת</a>
     ${limitNotice}
@@ -59,6 +65,8 @@ export async function sendNotificationEmail(opts: {
   body: string;
   link: string;
   slot: number;
+  plate?: string | null;
+  customer?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { ok: false, error: 'RESEND_API_KEY missing' };
@@ -70,7 +78,8 @@ export async function sendNotificationEmail(opts: {
     body: JSON.stringify({
       from: FROM,
       to: [opts.to],
-      subject: isLast ? `${opts.title} (מייל אחרון להיום)` : opts.title,
+      // e.g. "תיק חדש נפתח — רכב 12345678 · ישראל ישראלי"
+      subject: [opts.title, carLine(opts.plate, opts.customer)].filter(Boolean).join(' — ') + (isLast ? ' (מייל אחרון להיום)' : ''),
       html: buildHtml(opts),
     }),
   });

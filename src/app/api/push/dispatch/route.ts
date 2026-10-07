@@ -89,9 +89,27 @@ export async function POST(req: Request) {
   } else {
     const claim = (slotRows as { slot: number; email: string }[] | null)?.[0];
     if (claim) {
+      // Car number and customer for the subject line, so the inbox alone
+      // says which car it is about without opening the email (Amit,
+      // 2026-10-07). Best-effort: a failed lookup just sends without them.
+      let plate: string | null = null;
+      let customer: string | null = null;
+      if (row.case_id) {
+        const { data: caseInfo } = await db
+          .from('cases')
+          .select('customer_name, cars(license_plate)')
+          .eq('id', row.case_id)
+          .maybeSingle();
+        const ci = caseInfo as { customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+        const car = Array.isArray(ci?.cars) ? ci?.cars[0] : ci?.cars;
+        plate = car?.license_plate ?? null;
+        customer = ci?.customer_name ?? null;
+      }
       const sent = await sendNotificationEmail({
         to: claim.email,
         title: row.title,
+        plate,
+        customer,
         body: row.body ?? '',
         link: new URL(url, new URL(req.url).origin).toString(),
         slot: claim.slot,
