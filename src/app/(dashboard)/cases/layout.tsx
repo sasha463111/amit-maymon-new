@@ -32,8 +32,8 @@ export default async function CasesLayout({ children }: { children: React.ReactN
     .from('cases')
     .select('id, opened_at, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, cars!inner(license_plate)')
     .is('deleted_at', null)
-    // Oldest first — the case waiting longest is the one at the top.
-    .order('opened_at', { ascending: true });
+    // Newest first — a case opened now appears at the top.
+    .order('opened_at', { ascending: false });
   if (role !== 'CEO' && branchIds.length > 0) casesQuery = casesQuery.in('branch_id', branchIds);
 
   const [{ data: casesRows }, { data: branchesData }] = await Promise.all([

@@ -18,7 +18,7 @@ export interface TableCase {
 /** Full-width, one-line-per-case view for browsing many open cases at once —
  *  the dense alternative to the card rail, for branches routinely running
  *  30–40 open cases where a card list means constant scrolling. Rows are
- *  pre-sorted by the caller (opening date, oldest first); this just renders them. */
+ *  pre-sorted by the caller (opening date, newest first); this just renders them. */
 export function CasesTable({ rows, onRowClick }: { rows: TableCase[]; onRowClick: (id: string) => void }) {
   if (rows.length === 0) {
     return <div className="py-16 text-center text-stone-500 text-sm">לא נמצאו תיקים תואמים</div>;

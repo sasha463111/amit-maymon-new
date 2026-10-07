@@ -10,13 +10,14 @@ import { SearchField } from '@/components/design/SearchField';
 import { CreateCaseButton } from './CreateCaseButton';
 import type { CaseStatus } from '@/components/design/StatusBadge';
 
-// Sort order: by opening date, oldest first (requested 2026-10-05). This
-// replaced an urgency sort (rejected → blocked → waiting → active); urgency
-// is still visible through each row's color and badge, it just no longer
-// decides the position.
+// Sort order: by opening date, NEWEST first (Amit, 2026-10-07). History:
+// urgency sort → oldest-first (2026-10-05) → newest-first, because with
+// oldest-first a case opened this morning sat at the bottom of ~47 rows and
+// staff read that as "the app isn't updating". Urgency is still shown by each
+// row's color and badge; it does not decide the position.
 function openedTime(c: RailCase): number {
   const t = c.opened_at ? new Date(c.opened_at).getTime() : NaN;
-  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t; // undated cases last
+  return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t; // undated cases last
 }
 
 export interface RailCase {
@@ -88,7 +89,7 @@ export function CasesMasterDetail({
           [c.plate, c.customer_name ?? '', c.insurer ?? ''].some((f) => f.includes(q));
         return okBranch && okQuery;
       })
-      .sort((a, b) => openedTime(a) - openedTime(b));
+      .sort((a, b) => openedTime(b) - openedTime(a));
   }, [cases, branchFilter, query]);
 
   const showBranchFilter = branches.length > 1;
