@@ -98,12 +98,23 @@ function NotificationItem({
       onClick={() => onNavigate(n)}
       className={`rounded-xl border shadow-sm p-4 flex gap-3 transition-all hover:shadow-md ${
         isClickable ? 'cursor-pointer hover:border-brand-red/30' : ''
-      } ${!n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'}`}
+      } ${
+        // Approval waiting for me: orange + tag, so it can't be mistaken for
+        // a plain update (Amit, 2026-10-07).
+        n.type === 'PENDING_APPROVAL' && !n.read
+          ? 'border-orange-400 border-r-4 bg-orange-100'
+          : !n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'
+      }`}
     >
       <div className={`w-10 h-10 mt-0.5 shrink-0 rounded-full flex items-center justify-center text-lg leading-none ${getTypeColor(n.type)}`}>
         {getTypeIcon(n.type)}
       </div>
       <div className="flex-1 min-w-0">
+        {n.type === 'PENDING_APPROVAL' && !n.read && (
+          <span className="inline-block mb-1 px-2 py-0.5 rounded-full bg-orange-500 text-white text-[11px] font-bold">
+            ⏳ ממתין לאישורך
+          </span>
+        )}
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <LicensePlate plate={n.license_plate} size="sm" />
           <p

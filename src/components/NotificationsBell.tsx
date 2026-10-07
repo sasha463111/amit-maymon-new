@@ -42,6 +42,12 @@ const TYPE_ICON: Record<string, string> = {
   OTHER: '🔔',
 };
 
+/** An unread approval request — the one kind of notification that needs the
+ *  reader to act, not just know. */
+function needsMyApproval(n: { type: string | null; read: boolean }): boolean {
+  return n.type === 'PENDING_APPROVAL' && !n.read;
+}
+
 function getIcon(type: string | null): string {
   return (type && TYPE_ICON[type]) ?? '🔔';
 }
@@ -301,8 +307,14 @@ export function NotificationsBell({ userId }: { userId: string }) {
               </div>
             ) : (
               <ul className="divide-y divide-gray-100">
-                {rows.map((n) => {
+                {/* Amit (2026-10-07): approvals waiting for him must stand out
+                    from plain updates at a glance — unread ones are pinned to
+                    the top and drawn orange with a "ממתין לאישורך" tag. */}
+                {[...rows]
+                  .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)))
+                  .map((n) => {
                   const clickable = !!(n.action_url || n.case_id);
+                  const approval = needsMyApproval(n);
                   return (
                     <li key={n.id}>
                       <button
@@ -311,10 +323,15 @@ export function NotificationsBell({ userId }: { userId: string }) {
                         disabled={!clickable}
                         className={`w-full text-right p-3 transition-colors flex gap-2.5 ${
                           clickable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-default'
-                        } ${!n.read ? 'bg-red-50/30' : ''}`}
+                        } ${approval ? 'bg-orange-100 border-r-4 border-orange-500 hover:bg-orange-200' : !n.read ? 'bg-red-50/30' : ''}`}
                       >
                         <div className="text-xl shrink-0 leading-none mt-0.5">{getIcon(n.type)}</div>
                         <div className="flex-1 min-w-0">
+                          {approval && (
+                            <span className="inline-block mb-1 px-2 py-0.5 rounded-full bg-orange-500 text-white text-[11px] font-bold">
+                              ⏳ ממתין לאישורך
+                            </span>
+                          )}
                           {/* Plate badge + customer name + title */}
                           <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                             {n.license_plate && (
