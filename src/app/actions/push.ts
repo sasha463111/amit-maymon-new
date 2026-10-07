@@ -263,6 +263,10 @@ export async function sendPushToUser(
   let sent = 0;
   let failed = 0;
   const expired: string[] = [];
+  // Why sends failed, returned to the caller. /api/push/dispatch puts it in
+  // its response, which pg_net stores in net._http_response — the only place
+  // failures are visible without access to the Vercel logs.
+  const errors: { host: string; status: number | null; message: string }[] = [];
 
   await Promise.all(
     (subs as Array<{ id: string; endpoint: string; p256dh: string; auth: string }>).map(async (s) => {
@@ -298,6 +302,11 @@ export async function sendPushToUser(
           console.log('[push] sent ok on retry to', s.endpoint.slice(0, 60));
         } catch (err2: unknown) {
           failed++;
+          const status2 = (err2 as { statusCode?: number } | null)?.statusCode ?? status ?? null;
+          const resBody = (err2 as { body?: string } | null)?.body;
+          let host = 'unknown';
+          try { host = new URL(s.endpoint).host; } catch { /* keep 'unknown' */ }
+          errors.push({ host, status: status2, message: String(resBody || (err2 as Error)?.message || '').slice(0, 160) });
           console.warn('[push] send failed after retry', { endpoint: s.endpoint.slice(0, 60), status, err: (err2 as Error)?.message });
         }
       }
@@ -309,7 +318,7 @@ export async function sendPushToUser(
   }
 
   console.log('[push] sendPushToUser done for', userId, '— sent:', sent, 'failed:', failed);
-  return { sent, failed };
+  return { sent, failed, errors };
 }
 
 /**
