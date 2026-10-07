@@ -36,6 +36,7 @@ const TYPE_ICON: Record<string, string> = {
   EXTRA_STATUS_CHANGED: '🔄',
   APPROVAL_NEEDED: '📋',
   PENDING_APPROVAL: '⏳',
+  DIRECT_NOTE: '💬',
   PAINTER_REQUEST: '🎨',
   PAINTER_READY_FOR_RELEASE: '✅',
   READY_FOR_OFFICE: '🏁',

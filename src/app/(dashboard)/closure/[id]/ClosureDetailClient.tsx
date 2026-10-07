@@ -9,6 +9,7 @@ import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
+import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
 // professional-workflow STEP_LABELS (types/database.ts's
@@ -439,6 +440,9 @@ export function ClosureDetailClient({
         <span>←</span>
         <span>חזרה לסגירה</span>
       </Link>
+
+      {/* Free-text notes to chosen people (אילנה, 2026-10-07) */}
+      <CaseNotesComposer caseId={caseId} />
 
       {/* Case details card */}
       <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
