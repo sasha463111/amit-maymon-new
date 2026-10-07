@@ -22,13 +22,26 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
 // never arrives. Their PAGES now redirect to the official address. Kept out
 // of the redirect: /api/* (the reminders cron and the push dispatcher may
 // call these hosts) and any file path (service worker, manifest, icons).
-const OFFICIAL_ORIGIN = 'https://amit-maymon-new-psi.vercel.app';
-const LEGACY_HOSTS = new Set(['amit-maymon-new.vercel.app', 'amit-maymon-new-iyub.vercel.app']);
+const OFFICIAL_HOST = 'amit-maymon-new-psi.vercel.app';
+const OFFICIAL_ORIGIN = `https://${OFFICIAL_HOST}`;
+
+/** True for the two legacy deployments, whichever host header Vercel passes
+ *  (the public domain or a per-deployment URL in that account). */
+function isLegacyHost(host: string): boolean {
+  if (!host || host === OFFICIAL_HOST) return false;
+  return (
+    host === 'amit-maymon-new.vercel.app' ||
+    host.startsWith('amit-maymon-new-iyub') ||
+    host.includes('sasha463111')
+  );
+}
 
 export async function middleware(request: NextRequest) {
-  const host = (request.headers.get('host') ?? '').toLowerCase();
+  // x-forwarded-host first: on Vercel it carries the domain the user typed.
+  const host = (request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '')
+    .split(',')[0].trim().toLowerCase();
   const { pathname: reqPath, search } = request.nextUrl;
-  if (LEGACY_HOSTS.has(host) && !reqPath.startsWith('/api/') && !reqPath.includes('.')) {
+  if (isLegacyHost(host) && !reqPath.startsWith('/api/') && !reqPath.includes('.')) {
     // 307, not permanent: browsers must not cache it in case it has to change.
     return NextResponse.redirect(`${OFFICIAL_ORIGIN}${reqPath}${search}`, 307);
   }
@@ -36,6 +49,10 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next({
     request: { headers: request.headers },
   });
+  // Which build answered, and which host it saw — the only way to check the
+  // legacy deployments, whose Vercel settings and logs we cannot open.
+  response.headers.set('x-app-commit', (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7));
+  response.headers.set('x-app-host', host || 'none');
 
   if (isPreview) {
     return response;
