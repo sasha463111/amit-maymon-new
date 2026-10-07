@@ -375,6 +375,9 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | WHEELS_CHECK הושלם | התראת FYI לעמית (CEO) בלבד |
 | כל התראה נוצרת | fanout ל-CEO + יועצים חוצי-סניף |
 
+### כתובת אחת: `amit-maymon-new-psi.vercel.app` (2026-10-07)
+אותו קוד נפרס לשלושה פרויקטי Vercel. `amit-maymon-new.vercel.app` ו-`amit-maymon-new-iyub.vercel.app` (בחשבון של סשה) רצים עם מפתח service-role לא תקף ומפתח VAPID אחר — פוש מהם לא מגיע. `middleware.ts` מפנה (307) כל **עמוד** בהם לכתובת הרשמית; `/api/*` וקבצים לא מופנים. כל קישור/URL קבוע (טריגר הפוש, מיילים) — רק לכתובת הרשמית.
+
 ### פוש על כל התראה למנכ"ל — `trg_dispatch_ceo_push` (2026-10-06)
 רוב ההתראות של המנכ"ל נוצרות בתוך ה-DB (fan-out, cron) ואפליקציה לא רואה אותן — לכן הפוש יוצא מה-DB:
 - טריגר `AFTER INSERT` על `notifications`: לכל שורה של CEO פעיל → `pg_net` קורא ל-`POST /api/push/dispatch` עם `{id}`
