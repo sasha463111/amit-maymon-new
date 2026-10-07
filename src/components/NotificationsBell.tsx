@@ -243,7 +243,9 @@ export function NotificationsBell({ userId }: { userId: string }) {
     if (!n.read) {
       setRows((prev) => prev.map((r) => (r.id === n.id ? { ...r, read: true } : r)));
       setUnreadCount((c) => Math.max(0, c - 1));
-      markRead(n.id).catch((err) => {
+      // Refresh after the write so the case list's "N התראות לטיפול" and
+      // yellow highlight drop this notification straight away.
+      markRead(n.id).then(() => router.refresh()).catch((err) => {
         console.error('[NotificationsBell] markRead failed', err);
         setRows((prev) => prev.map((r) => (r.id === n.id ? { ...r, read: false } : r)));
         setUnreadCount((c) => c + 1);
@@ -275,6 +277,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
     setRows((prev) => prev.map((r) => ({ ...r, read: true })));
     setUnreadCount(0);
     await markAllRead();
+    router.refresh(); // clear every yellow case card at once
   }
 
   return (
