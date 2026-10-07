@@ -69,6 +69,47 @@ async function getPushRegistration(): Promise<ServiceWorkerRegistration | undefi
  * PushSubscriber control and the prominent top PushEnableBanner, so the enable
  * flow lives in exactly one place.
  */
+/**
+ * True unless we can positively tell the subscription was created with a
+ * different VAPID public key. Some browsers don't expose the key; then we
+ * can't tell, so we keep the subscription rather than churn it.
+ */
+function subscriptionMatchesKey(sub: PushSubscription, vapidKey: string): boolean {
+  const raw = sub.options?.applicationServerKey;
+  if (!raw) return true;
+  const have = new Uint8Array(raw);
+  const want = urlBase64ToUint8Array(vapidKey);
+  if (have.length !== want.length) return false;
+  for (let i = 0; i < have.length; i++) if (have[i] !== want[i]) return false;
+  return true;
+}
+
+/**
+ * The browser's existing subscription if it was made with the current VAPID
+ * key; otherwise a fresh one. Found 2026-10-07: every push to Amit failed
+ * (Apple 403 BadJwtToken, FCM "VAPID credentials do not correspond to the
+ * credentials used to create the subscriptions") on all ten devices. A
+ * subscription is bound to the public key it was created with; this code
+ * used to reuse whatever subscription the browser already had, so after a
+ * key change the device kept a subscription the server can never sign for.
+ */
+async function freshSubscription(reg: ServiceWorkerRegistration, vapidKey: string): Promise<PushSubscription> {
+  const existing = await reg.pushManager.getSubscription();
+  if (existing && subscriptionMatchesKey(existing, vapidKey)) return existing;
+  if (existing) {
+    await removePushSubscription(existing.endpoint).catch(() => {});
+    await existing.unsubscribe().catch(() => {});
+  }
+  return withTimeout(
+    reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+    }),
+    10000,
+    'יצירת הרשמת Push'
+  );
+}
+
 export function usePushSubscription() {
   const [status, setStatus] = useState<PushStatus>('unknown');
   const [busy, setBusy] = useState(false);
@@ -97,10 +138,20 @@ export function usePushSubscription() {
           setStatus('unsubscribed');
           return;
         }
-        const sub = await reg.pushManager.getSubscription();
+        let sub = await reg.pushManager.getSubscription();
         if (!sub) {
           setStatus('unsubscribed');
           return;
+        }
+        // A subscription made with an old VAPID key can never receive a push.
+        // Permission is already granted, so replace it silently.
+        if (vapidKey && Notification.permission === 'granted' && !subscriptionMatchesKey(sub, vapidKey)) {
+          try {
+            sub = await freshSubscription(reg, vapidKey);
+          } catch {
+            setStatus('unsubscribed');
+            return;
+          }
         }
         // Browser already has a subscription — refresh the DB row quietly in
         // case an earlier save failed.
@@ -142,17 +193,7 @@ export function usePushSubscription() {
       );
       await withTimeout(waitForServiceWorkerActive(reg), 10000, 'הפעלת ההתראות');
 
-      const existing = await reg.pushManager.getSubscription();
-      const sub =
-        existing ??
-        (await withTimeout(
-          reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
-          }),
-          10000,
-          'יצירת הרשמת Push'
-        ));
+      const sub = await freshSubscription(reg, vapidKey);
 
       const json = sub.toJSON();
       if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
