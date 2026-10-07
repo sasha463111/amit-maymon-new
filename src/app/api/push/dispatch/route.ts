@@ -36,7 +36,17 @@ export async function POST(req: Request) {
   const secret = req.headers.get('x-dispatch-secret') ?? '';
   const { data: valid, error: secretErr } = await db.rpc('check_push_dispatch_secret' as never, { p_secret: secret } as never);
   if (secretErr || valid !== true) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    // The reason and the database this server points at are returned on
+    // purpose: the same code runs on more than one Vercel project, with
+    // different env, and this response (stored by pg_net) is the only way to
+    // see which one is misconfigured. Neither reveals the secret: a wrong
+    // guess gets "mismatch", same as before.
+    let db = 'unknown';
+    try { db = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').hostname.split('.')[0]; } catch { /* keep 'unknown' */ }
+    return NextResponse.json(
+      { error: 'unauthorized', reason: secretErr ? `rpc-error: ${secretErr.message.slice(0, 120)}` : 'mismatch', db },
+      { status: 401 },
+    );
   }
 
   const body = (await req.json().catch(() => null)) as { id?: unknown } | null;
