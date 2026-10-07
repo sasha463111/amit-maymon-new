@@ -41,6 +41,10 @@ export default async function NotificationsPage() {
   }
   const plateMap = new Map<string, string>();
   const userNameMap = new Map<string, string>();
+  // Approvals still waiting — their notifications are drawn orange until the
+  // approval is decided, whether or not the notification was read.
+  const { data: pendingData } = await supabase.from('ceo_approvals').select('case_id').eq('status', 'PENDING');
+  const pendingCaseIds = new Set(((pendingData ?? []) as { case_id: string }[]).map((p) => p.case_id));
 
   await Promise.all([
     (async () => {
@@ -70,6 +74,7 @@ export default async function NotificationsPage() {
     ...n,
     license_plate: n.case_id ? (plateMap.get(n.case_id) ?? null) : null,
     triggered_by_name: n.triggered_by ? (userNameMap.get(n.triggered_by) ?? null) : null,
+    awaiting: n.type === 'PENDING_APPROVAL' && !!n.case_id && pendingCaseIds.has(n.case_id),
   }));
 
   const unreadCount = rows.filter((n) => !n.read).length;

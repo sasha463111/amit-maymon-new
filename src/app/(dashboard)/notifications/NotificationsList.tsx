@@ -16,6 +16,8 @@ interface NotificationRow {
   license_plate: string | null;
   action_url: string | null;
   triggered_by_name: string | null;
+  /** Approval request whose approval is still PENDING. */
+  awaiting?: boolean;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -101,7 +103,7 @@ function NotificationItem({
       } ${
         // Approval waiting for me: orange + tag, so it can't be mistaken for
         // a plain update (Amit, 2026-10-07).
-        n.type === 'PENDING_APPROVAL' && !n.read
+        n.awaiting
           ? 'border-orange-400 border-r-4 bg-orange-100'
           : !n.read ? 'border-brand-red/20 bg-red-50/20' : 'border-gray-200 bg-white'
       }`}
@@ -110,7 +112,7 @@ function NotificationItem({
         {getTypeIcon(n.type)}
       </div>
       <div className="flex-1 min-w-0">
-        {n.type === 'PENDING_APPROVAL' && !n.read && (
+        {n.awaiting && (
           <span className="inline-block mb-1 px-2 py-0.5 rounded-full bg-orange-500 text-white text-[11px] font-bold">
             ⏳ ממתין לאישורך
           </span>

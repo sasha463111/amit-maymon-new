@@ -24,6 +24,8 @@ interface Row {
   case_key: string | null;
   customer_name: string | null;
   triggered_by_name: string | null;
+  /** An approval request whose approval is still PENDING. */
+  awaiting: boolean;
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -42,10 +44,12 @@ const TYPE_ICON: Record<string, string> = {
   OTHER: '🔔',
 };
 
-/** An unread approval request — the one kind of notification that needs the
- *  reader to act, not just know. */
-function needsMyApproval(n: { type: string | null; read: boolean }): boolean {
-  return n.type === 'PENDING_APPROVAL' && !n.read;
+/** An approval request that is still waiting for a decision — the one kind
+ *  of notification that needs the reader to act, not just know. Based on the
+ *  approval itself, not on read state: Amit had 12 approvals waiting while
+ *  every one of their notifications was already marked read. */
+function needsMyApproval(n: { awaiting: boolean }): boolean {
+  return n.awaiting;
 }
 
 function getIcon(type: string | null): string {
@@ -81,7 +85,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       .order('created_at', { ascending: false })
       .limit(15);
 
-    const list = (notifData ?? []) as Array<{
+    type BaseRow = {
       id: string;
       type: string | null;
       title: string;
@@ -91,7 +95,31 @@ export function NotificationsBell({ userId }: { userId: string }) {
       case_id: string | null;
       action_url: string | null;
       triggered_by: string | null;
-    }>;
+    };
+    const list = (notifData ?? []) as BaseRow[];
+
+    // Approvals still waiting (visible to CEO; empty for everyone else). Their
+    // latest notification is always shown — even if older than the 15 above —
+    // so nothing waiting for a decision can fall off the bottom of the list.
+    const { data: pendingData } = await supabase.from('ceo_approvals').select('case_id').eq('status', 'PENDING');
+    const pendingCaseIds = new Set(((pendingData ?? []) as { case_id: string }[]).map((p) => p.case_id));
+    if (pendingCaseIds.size > 0) {
+      const { data: approvalNotifs } = await supabase
+        .from('notifications')
+        .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
+        .eq('user_id', userId)
+        .eq('type', 'PENDING_APPROVAL')
+        .in('case_id', Array.from(pendingCaseIds))
+        .order('created_at', { ascending: false })
+        .limit(100);
+      const shownCases = new Set(list.filter((n) => n.type === 'PENDING_APPROVAL').map((n) => n.case_id));
+      for (const n of (approvalNotifs ?? []) as BaseRow[]) {
+        if (n.case_id && !shownCases.has(n.case_id)) {
+          shownCases.add(n.case_id);
+          list.push(n);
+        }
+      }
+    }
 
     const caseIds = Array.from(new Set(list.map((n) => n.case_id).filter((x): x is string => !!x)));
     const userIds = Array.from(new Set(list.map((n) => n.triggered_by).filter((x): x is string => !!x)));
@@ -133,6 +161,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       case_key: n.case_id ? caseKeyMap.get(n.case_id) ?? null : null,
       customer_name: n.case_id ? customerNameMap.get(n.case_id) ?? null : null,
       triggered_by_name: n.triggered_by ? userNameMap.get(n.triggered_by) ?? null : null,
+      awaiting: n.type === 'PENDING_APPROVAL' && !!n.case_id && pendingCaseIds.has(n.case_id),
     }));
 
     setRows(enriched);
