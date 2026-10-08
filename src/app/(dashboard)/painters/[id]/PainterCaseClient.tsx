@@ -7,6 +7,7 @@ import { uploadCaseDocument } from '@/app/actions/documents';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
+import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 
 type PainterRequest = {
   id: string;
@@ -342,6 +343,9 @@ export function PainterCaseClient({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto" dir="rtl">
+      {/* Question / note to chosen people (Amit, 2026-10-08) */}
+      <CaseNotesComposer caseId={caseId} collapsible />
+
       {/* Back navigation */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <a href="/painters" className="text-sm text-blue-600 hover:underline">← חזרה ללוח פחחים</a>

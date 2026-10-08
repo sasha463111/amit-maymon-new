@@ -9,7 +9,10 @@ import { formatDateTime } from '@/lib/dates';
  * recipient gets it as a notification (and push; Amit also by email). Below
  * the form: what was already sent in this case, by whom, to whom.
  */
-export function CaseNotesComposer({ caseId }: { caseId: string }) {
+export function CaseNotesComposer({ caseId, collapsible = false }: { caseId: string; collapsible?: boolean }) {
+  // On the case pages it starts folded to a single button so it doesn't push
+  // the case content down; the closure page shows it open.
+  const [open, setOpen] = useState(!collapsible);
   const [recipients, setRecipients] = useState<NoteRecipient[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [text, setText] = useState('');
@@ -53,9 +56,30 @@ export function CaseNotesComposer({ caseId }: { caseId: string }) {
     await loadNotes();
   }
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between gap-3 bg-white rounded-xl border-2 border-indigo-200 shadow-sm px-4 py-3 text-right hover:bg-indigo-50 transition-colors"
+        dir="rtl"
+      >
+        <span className="font-bold text-gray-900">💬 שליחת הערה / שאלה</span>
+        <span className="text-sm text-indigo-700">
+          {notes.length > 0 ? `${notes.length} הערות בתיק · ` : ''}פתח ▾
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div className="bg-white rounded-xl border-2 border-indigo-200 shadow-md p-4 sm:p-6" dir="rtl">
-      <h3 className="text-lg font-bold text-gray-900 mb-3">💬 שליחת הערה</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-bold text-gray-900">💬 {collapsible ? 'שליחת הערה / שאלה' : 'שליחת הערה'}</h3>
+        {collapsible && (
+          <button type="button" onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700">סגור ▴</button>
+        )}
+      </div>
 
       <textarea
         value={text}

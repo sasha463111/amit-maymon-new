@@ -11,6 +11,7 @@ import type { PartsStatus } from '@/types/database';
 import { PROFESSIONAL_STEP_LABELS as DEFAULT_STEP_LABELS } from '@/types/database';
 import { CaseStatusBanner } from './CaseStatusBanner';
 import { CaseNotificationsPanel } from './CaseNotificationsPanel';
+import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { DocumentsSection } from './DocumentsSection';
 import { TimelineSection } from './TimelineSection';
 import { CaseDetailsSection } from './CaseDetailsSection';
@@ -409,6 +410,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
   return (
     <div className="space-y-6" dir="rtl">
       <CaseNotificationsPanel initial={props.caseNotifications ?? []} />
+
+      {/* Question / note to chosen people, on every case (Amit, 2026-10-08) */}
+      <CaseNotesComposer caseId={caseId} collapsible />
 
       {/* Case status banner — top-of-page, color-coded so the user sees state at a glance */}
       <CaseStatusBanner

@@ -292,6 +292,18 @@ export async function sendPushToUser(
           console.warn('[push] removing expired sub', s.endpoint.slice(0, 60));
           return;
         }
+        // 403 because the subscription was created with a different VAPID
+        // key (the legacy deployments, before 2026-10-07). It can never be
+        // delivered from here, so remove it instead of retrying it on every
+        // notification. Safe since the official deployment's key pair is
+        // verified good: the same user's fresh subscription receives (sent:1).
+        const firstBody = String((err as { body?: string } | null)?.body ?? '');
+        if (status === 403 && /BadJwtToken|do not correspond/i.test(firstBody)) {
+          failed++;
+          expired.push(s.id);
+          console.warn('[push] removing sub made with another VAPID key', s.endpoint.slice(0, 60));
+          return;
+        }
         // Anything else (5xx from the push service, network blip) is
         // transient — one retry after a short delay catches those instead
         // of just losing the notification silently.

@@ -91,9 +91,20 @@ export async function getCaseNotes(caseId: string): Promise<{ notes: SentNote[];
     : { data: [] };
   const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name || '—']));
 
+  // A note is private to its sender and recipients: each user sees only the
+  // notes they sent or received. The CEO sees all of them (his standing
+  // request to see everything that happens in the system).
+  const { data: meRow } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const isCeo = (meRow as { role: string } | null)?.role === 'CEO';
+  const visibleKeys = new Set(
+    rows.filter((r) => isCeo || r.user_id === user.id || r.triggered_by === user.id)
+      .map((r) => `${r.triggered_by}|${r.created_at}|${r.body}`),
+  );
+
   // One note = all rows written in the same insert (same sender, text, time).
   const grouped = new Map<string, SentNote>();
   for (const r of rows) {
+    if (!visibleKeys.has(`${r.triggered_by}|${r.created_at}|${r.body}`)) continue;
     const key = `${r.triggered_by}|${r.created_at}|${r.body}`;
     const g = grouped.get(key) ?? { at: r.created_at, from: nameById.get(r.triggered_by ?? '') ?? '—', to: [], text: r.body ?? '' };
     g.to.push(nameById.get(r.user_id) ?? '—');
