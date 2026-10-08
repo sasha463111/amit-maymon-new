@@ -433,6 +433,71 @@ export function WorkflowStepsSection({
     await performComplete(step);
   }
 
+  // Fixing a link after its step is done (2026-10-08): a wrong FixCar or
+  // wheels-forms link used to be permanent from the UI. Edits only the link
+  // stored on the case; the step stays done.
+  const [doneLinkEdit, setDoneLinkEdit] = useState<{ stepKey: string; value: string } | null>(null);
+  const [doneLinkSaving, setDoneLinkSaving] = useState(false);
+  const [doneLinkError, setDoneLinkError] = useState<string | null>(null);
+
+  async function saveDoneLink() {
+    if (!doneLinkEdit) return;
+    const raw = doneLinkEdit.value.trim();
+    if (!raw) { setDoneLinkError('נדרש קישור'); return; }
+    const link = normalizeUrl(raw);
+    setDoneLinkSaving(true);
+    setDoneLinkError(null);
+    const field = doneLinkEdit.stepKey === 'FIXCAR_PHOTOS' ? 'fixcar_link' : 'wheels_check_link';
+    const res = await updateCaseDetails(caseId, { [field]: link });
+    setDoneLinkSaving(false);
+    if (res?.error) { setDoneLinkError(res.error); return; }
+    if (doneLinkEdit.stepKey === 'FIXCAR_PHOTOS') {
+      setFixcarValue(link);
+      const fx = steps.find((st) => st.step_key === 'FIXCAR_PHOTOS');
+      if (fx) setStepLinks((prev) => ({ ...prev, [fx.id]: link }));
+    } else {
+      setWheelsCheckLinkValue(link);
+    }
+    setDoneLinkEdit(null);
+  }
+
+  function renderDoneLinkEditor(stepKey: string) {
+    if (!doneLinkEdit || doneLinkEdit.stepKey !== stepKey) return null;
+    return (
+      <div className="mt-2 flex flex-wrap gap-2">
+        <input
+          autoFocus
+          type="url"
+          value={doneLinkEdit.value}
+          onChange={(e) => setDoneLinkEdit({ stepKey, value: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void saveDoneLink();
+            if (e.key === 'Escape') setDoneLinkEdit(null);
+          }}
+          className="flex-1 min-w-[12rem] border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          dir="ltr"
+          placeholder="https://..."
+        />
+        <button
+          type="button"
+          disabled={doneLinkSaving}
+          onClick={() => void saveDoneLink()}
+          className="px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-semibold hover:bg-green-700 disabled:opacity-50"
+        >
+          {doneLinkSaving ? '⏳' : '✓ שמור'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setDoneLinkEdit(null); setDoneLinkError(null); }}
+          className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold hover:bg-gray-200"
+        >
+          ביטול
+        </button>
+        {doneLinkError && <p className="w-full text-xs text-red-600">⚠️ {doneLinkError}</p>}
+      </div>
+    );
+  }
+
   async function handleSaveLinkAndComplete(step: StepRow) {
     const raw = (stepLinks[step.id] ?? '').trim();
     if (!raw) { setStepError('נדרש קישור'); return; }
@@ -1143,7 +1208,18 @@ export function WorkflowStepsSection({
                 {/* FIXCAR link display */}
                 {isDone && hasLink && s.step_key === 'FIXCAR_PHOTOS' && (
                   <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-xs font-medium text-gray-600 mb-1">קישור FixCar:</p>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-xs font-medium text-gray-600">קישור FixCar:</p>
+                      {canEdit && doneLinkEdit?.stepKey !== 'FIXCAR_PHOTOS' && (
+                        <button
+                          type="button"
+                          onClick={() => { setDoneLinkError(null); setDoneLinkEdit({ stepKey: 'FIXCAR_PHOTOS', value: savedLink }); }}
+                          className="text-xs text-blue-700 hover:underline"
+                        >
+                          ✏️ ערוך קישור
+                        </button>
+                      )}
+                    </div>
                     <a
                       href={normalizeUrl(savedLink)}
                       target="_blank"
@@ -1153,13 +1229,25 @@ export function WorkflowStepsSection({
                     >
                       {savedLink}
                     </a>
+                    {renderDoneLinkEditor('FIXCAR_PHOTOS')}
                   </div>
                 )}
 
                 {/* WHEELS CHECK link/file display after done */}
                 {isDone && hasWheelsLink && s.step_key === 'WHEELS_CHECK' && (
                   <div className="mr-11 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-xs font-medium text-gray-600 mb-1">קישור טפסי גלגלים:</p>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-xs font-medium text-gray-600">קישור טפסי גלגלים:</p>
+                      {canEdit && doneLinkEdit?.stepKey !== 'WHEELS_CHECK' && (
+                        <button
+                          type="button"
+                          onClick={() => { setDoneLinkError(null); setDoneLinkEdit({ stepKey: 'WHEELS_CHECK', value: wheelsCheckLinkValue }); }}
+                          className="text-xs text-blue-700 hover:underline"
+                        >
+                          ✏️ ערוך קישור
+                        </button>
+                      )}
+                    </div>
                     <a
                       href={normalizeUrl(wheelsCheckLinkValue)}
                       target="_blank"
@@ -1169,6 +1257,7 @@ export function WorkflowStepsSection({
                     >
                       {wheelsCheckLinkValue}
                     </a>
+                    {renderDoneLinkEditor('WHEELS_CHECK')}
                   </div>
                 )}
 
