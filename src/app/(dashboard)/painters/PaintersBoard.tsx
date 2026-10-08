@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { formatDate } from '@/lib/dates';
+import { SegmentedControl } from '@/components/design/SegmentedControl';
 
 export interface PainterRow {
   id: string;
@@ -134,69 +135,109 @@ function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => vo
 }
 
 export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
+  // Layout redone 2026-10-08 (Tomer, viewing as CEO): four boxes, each with
+  // its own inner scroll, put 35 "בעבודה" cases in a small scrolling box and
+  // gave no overview and no way to switch branch. Same grouping by status,
+  // shown as: branch tabs → one strip of status counts (tap = show only that
+  // status) → full-height sections with one compact row per case.
   const [selected, setSelected] = useState<PainterRow | null>(null);
+  const [branch, setBranch] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  const branchNames = Array.from(new Set(rows.map((r) => r.branch_name).filter((b): b is string => !!b))).sort((a, b) => a.localeCompare(b, 'he'));
+  const inBranch = branch === 'all' ? rows : rows.filter((r) => r.branch_name === branch);
 
   const groups: Record<string, PainterRow[]> = {
     READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], OTHER: [], '': [],
   };
-  for (const row of rows) {
+  for (const row of inBranch) {
     const key = row.painter_status ?? '';
     (groups[key] ?? groups['']).push(row);
   }
+  for (const k of Object.keys(groups)) {
+    groups[k].sort((a, b) => (b.opened_at ?? '').localeCompare(a.opened_at ?? '')); // newest first
+  }
+
+  const statusKeys = STATUS_ORDER.filter((k) => k !== '' || groups[''].length > 0);
+  const shownKeys = (statusFilter !== null ? [statusFilter] : statusKeys).filter((k) => groups[k].length > 0);
+  const labelFor = (k: string) => (k ? PAINTER_STATUS_LABELS[k] : 'ללא סטטוס פחח');
+  const headFor = (k: string) => (k ? PAINTER_STATUS_COLUMN_HEAD[k] : 'bg-gray-100 border-gray-300 text-gray-600');
+  const iconFor = (k: string) => (k ? PAINTER_STATUS_ICON[k] : '⚪');
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {STATUS_ORDER.filter((k) => k !== '' || (groups['']?.length ?? 0) > 0).map((statusKey) => {
-        const groupRows = groups[statusKey] ?? [];
-        const label = statusKey ? PAINTER_STATUS_LABELS[statusKey] : 'ללא סטטוס פחח';
-        const headCls = statusKey ? PAINTER_STATUS_COLUMN_HEAD[statusKey] : 'bg-gray-100 border-gray-300 text-gray-600';
-        const icon = statusKey ? PAINTER_STATUS_ICON[statusKey] : '⚪';
+    <div className="space-y-4">
+      {/* Branch tabs */}
+      {branchNames.length > 1 && (
+        <SegmentedControl
+          options={[
+            { value: 'all', label: `הכל (${rows.length})` },
+            ...branchNames.map((b) => ({ value: b, label: `${b} (${rows.filter((r) => r.branch_name === b).length})` })),
+          ]}
+          value={branch}
+          onChange={(v) => setBranch(v)}
+        />
+      )}
 
-        return (
-          <div key={statusKey} className="rounded-xl border border-gray-200 bg-gray-50/40 flex flex-col min-h-[12rem]">
-            <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-xl border-b-2 ${headCls}`}>
-              <span className="text-sm font-bold flex items-center gap-1.5">
-                <span>{icon}</span>
-                {label}
+      {/* Status strip: the overview at a glance; tap to show only that status */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {statusKeys.map((k) => {
+          const active = statusFilter === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setStatusFilter(active ? null : k)}
+              aria-pressed={active}
+              className={`flex items-center justify-between gap-2 rounded-xl border-2 px-3 py-2.5 text-right transition-all ${headFor(k)} ${
+                active ? 'ring-2 ring-offset-2 ring-gray-800' : statusFilter !== null ? 'opacity-50 hover:opacity-80' : 'hover:shadow-sm'
+              }`}
+            >
+              <span className="text-sm font-bold flex items-center gap-1.5 min-w-0">
+                <span>{iconFor(k)}</span>
+                <span className="truncate">{labelFor(k)}</span>
               </span>
-              <span className="text-xs font-bold bg-black/10 px-2 py-0.5 rounded-full">{groupRows.length}</span>
-            </div>
+              <span className="text-lg font-extrabold tabular-nums">{groups[k].length}</span>
+            </button>
+          );
+        })}
+      </div>
+      {statusFilter !== null && (
+        <button type="button" onClick={() => setStatusFilter(null)} className="text-sm text-blue-600 hover:underline">
+          ← הצג את כל הסטטוסים
+        </button>
+      )}
 
-            <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-20rem)]">
-              {groupRows.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-6">אין תיקים</p>
-              ) : (
-                groupRows.map((row) => {
-                  const carLine = carLineFor(row);
-                  return (
-                    <button
-                      type="button"
-                      key={row.id}
-                      onClick={() => setSelected(row)}
-                      className="block w-full text-right bg-white rounded-lg border border-gray-200 shadow-sm p-3 hover:shadow-md hover:border-brand-red/30 transition-all"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <span className="font-bold text-gray-900 text-sm truncate" title={row.customer_name ?? ''}>
-                          {row.customer_name ?? '—'}
-                        </span>
-                        {row.license_plate && <LicensePlate plate={row.license_plate} size="sm" />}
-                      </div>
-                      {carLine && <p className="text-xs text-gray-500 mb-2">{carLine}</p>}
-                      <div className="flex items-center justify-between text-[11px] text-gray-400 border-t border-gray-100 pt-1.5">
-                        <span className="truncate max-w-[55%]">{row.appraiser_name ?? '—'}</span>
-                        <span>
-                          {row.branch_name && `${row.branch_name} · `}
-                          {row.opened_at ? formatDate(row.opened_at) : '—'}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+      {/* Sections — full height, no inner scroll */}
+      {shownKeys.length === 0 && <p className="text-sm text-gray-400 text-center py-10">אין תיקים</p>}
+      {shownKeys.map((k) => (
+        <section key={k} className="space-y-2">
+          <h2 className={`sticky top-[env(safe-area-inset-top,0px)] z-10 flex items-center justify-between rounded-lg border-b-2 px-3 py-2 text-sm font-bold ${headFor(k)}`}>
+            <span className="flex items-center gap-1.5"><span>{iconFor(k)}</span>{labelFor(k)}</span>
+            <span className="text-xs bg-black/10 px-2 py-0.5 rounded-full tabular-nums">{groups[k].length}</span>
+          </h2>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {groups[k].map((row) => {
+              const carLine = carLineFor(row);
+              return (
+                <button
+                  type="button"
+                  key={row.id}
+                  onClick={() => setSelected(row)}
+                  className="flex items-center gap-3 w-full text-right bg-white rounded-lg border border-gray-200 px-3 py-2 hover:border-brand-red/40 hover:shadow-sm transition-all"
+                >
+                  {row.license_plate && <LicensePlate plate={row.license_plate} size="sm" />}
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-bold text-gray-900 text-sm truncate">{row.customer_name ?? '—'}</span>
+                    <span className="block text-[11px] text-gray-500 truncate">
+                      {[carLine, branch === 'all' ? row.branch_name : null, row.opened_at ? formatDate(row.opened_at) : null].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        );
-      })}
+        </section>
+      ))}
 
       {selected && <PainterQuickView row={selected} onClose={() => setSelected(null)} />}
     </div>
