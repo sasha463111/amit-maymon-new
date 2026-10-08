@@ -192,7 +192,12 @@ export function CreateCaseButton({
     e.stopPropagation();
     setError(null);
     setLoading(true);
-    const res = await createCase({
+    // If the request itself fails (connection cut, server timed out), the
+    // case may still have been created - so say exactly that, and never leave
+    // the button spinning (it used to stay on "יוצר תיק..." for good).
+    let res: Awaited<ReturnType<typeof createCase>>;
+    try {
+      res = await createCase({
       plate_number: form.plate_number.trim(),
       claim_number: form.claim_number.trim() || null,
       claim_type: (form.claim_type as ClaimType) || null,
@@ -206,7 +211,13 @@ export function CreateCaseButton({
       event_date: form.event_date || null,
       vehicle_type: form.vehicle_type.trim() || null,
       vehicle_year: form.vehicle_year ? parseInt(form.vehicle_year) : null,
-    });
+      });
+    } catch {
+      setLoading(false);
+      setError('החיבור לשרת נקטע לפני שהתקבלה תשובה. ייתכן שהתיק כבר נוצר — בדקו ברשימת התיקים לפני שמנסים שוב.');
+      router.refresh();
+      return;
+    }
     setLoading(false);
     if (res?.error) {
       setError(res.error);

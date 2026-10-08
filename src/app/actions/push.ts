@@ -277,7 +277,11 @@ export async function sendPushToUser(
           // urgency:'high' → Apple's relay sets apns-priority 10 = "deliver
           // immediately and trigger a user-visible alert" (banner/lock screen).
           // The web-push default is 'normal', which can be delivered quietly.
-          { TTL: 60 * 60 * 24, urgency: 'high' }
+          // timeout: a push service that never answers must not hold the
+          // caller's server action open. Without it, creating a case waited
+          // on every push in turn and one stalled request left the creator
+          // on "יוצר תיק..." indefinitely (2026-10-08).
+          { TTL: 60 * 60 * 24, urgency: 'high', timeout: 8000 }
         );
       try {
         await trySend();

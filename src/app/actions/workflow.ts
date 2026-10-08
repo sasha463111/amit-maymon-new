@@ -324,7 +324,8 @@ export async function createCase(input: CreateCaseInput) {
       .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.role === 'OFFICE' || p.role === 'PAINTER');
     // Sequential — see the comment on the identical pattern in
     // notifyCeosPendingApproval above (race against the DB fan-out trigger).
-    for (const staff of branchStaff.filter((s) => s.id !== user.id)) {
+    const recipients = branchStaff.filter((s) => s.id !== user.id);
+    for (const staff of recipients) {
       const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: staff.id,
         case_id: caseId,
@@ -335,10 +336,16 @@ export async function createCase(input: CreateCaseInput) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(staff.id, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` });
     }
-    // Notify SERVICE_MANAGER in branch + CEO for audit trail
-    await notifyRelevantParties('NEW_CASE', branchId, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id, branchStaff);
+    // Pushes in parallel, after the inserts. They used to be awaited one by
+    // one inside the loop, so the case's creator waited for every push in
+    // turn before the dialog could close (2026-10-08: Avia stuck on
+    // "יוצר תיק..." although the case had been created).
+    await Promise.all([
+      ...recipients.map((staff) => sendPushToUser(staff.id, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` })),
+      // Notify SERVICE_MANAGER in branch + CEO for audit trail
+      notifyRelevantParties('NEW_CASE', branchId, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id, branchStaff),
+    ]);
   }
 
   return { caseId: String(caseId) };
