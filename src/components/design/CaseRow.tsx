@@ -88,9 +88,10 @@ export function CaseRow({
       {/* active step + branch */}
       <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-200">
         {!done ? (
-          <span className={`inline-flex items-center gap-2 min-w-0 rounded-full pr-1 pl-3 py-[5px] ${pillTone}`}>
+          <span className={`inline-flex items-center gap-2 min-w-0 rounded-full pr-1 pl-3 py-1.5 ${pillTone}`}>
             <span className="text-[11px] font-semibold opacity-70 tracking-wide shrink-0">השלב הבא</span>
-            <span className="font-bold text-sm truncate">{activeStep}</span>
+            {/* Larger, so a case's stage reads at a glance (2026-10-08). */}
+            <span className="font-extrabold text-[15px] truncate">{activeStep}</span>
             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-accent-on shrink-0 ${pillDot}`}>
               {rejected ? (
                 <X size={13} strokeWidth={2.5} />

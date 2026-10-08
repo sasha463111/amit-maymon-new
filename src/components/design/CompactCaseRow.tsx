@@ -57,7 +57,15 @@ export function CompactCaseRow({
       <LicensePlate plate={plate} size="sm" />
       <span className="flex-1 min-w-0 flex flex-col">
         <span className="font-bold text-[13px] text-stone-900 truncate leading-tight">{customer || '—'}</span>
-        <span className="text-[11px] text-stone-500 truncate leading-tight">{done ? 'הושלם' : activeStep || '—'}</span>
+        {/* The case's current stage as a bold tag, not small grey text, so the
+            state of every case can be read at a glance (2026-10-08). */}
+        <span
+          className={`self-start max-w-full truncate mt-0.5 rounded-md px-2 py-0.5 text-[12.5px] font-bold leading-tight ${
+            done ? 'bg-status-done-soft text-status-done-text' : 'bg-accent-soft text-accent-text'
+          }`}
+        >
+          {done ? 'הושלם' : activeStep || '—'}
+        </span>
         {openedAt && (
           <span className="text-[11px] text-stone-400 leading-tight">נפתח {formatDate(openedAt)}</span>
         )}
