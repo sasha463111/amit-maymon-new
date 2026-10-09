@@ -22,6 +22,8 @@ import { DAILY_EMAIL_LIMIT, sendNotificationEmail } from '@/lib/notificationEmai
 
 export const dynamic = 'force-dynamic';
 
+const EMAIL_TYPES = new Set(['PENDING_APPROVAL', 'CEO_REJECTED', 'DIRECT_NOTE']);
+
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,12 +61,12 @@ export async function POST(req: Request) {
     .update({ pushed_at: new Date().toISOString() } as never)
     .eq('id', id)
     .is('pushed_at' as never, null)
-    .select('user_id, title, body, action_url, case_id');
+    .select('user_id, title, body, action_url, case_id, type');
   if (claimErr) {
     console.error('[push/dispatch] claim failed', { id, error: claimErr.message });
     return NextResponse.json({ error: claimErr.message }, { status: 500 });
   }
-  const row = (claimed as { user_id: string; title: string; body: string | null; action_url: string | null; case_id: string | null }[] | null)?.[0];
+  const row = (claimed as { user_id: string; title: string; body: string | null; action_url: string | null; case_id: string | null; type: string | null }[] | null)?.[0];
   if (!row) return NextResponse.json({ ok: true, skipped: 'already pushed or not found' });
 
   const url = row.action_url || (row.case_id ? `/go/${row.case_id}` : '/notifications');
@@ -79,6 +81,13 @@ export async function POST(req: Request) {
   // returns nothing when the recipient has email off, the cap is used up, or
   // this row was already emailed.
   let email: string = 'skipped';
+  // Email only what needs the reader to act (Amit, 2026-10-09, "3ב"):
+  // approvals waiting, rejections, and notes/questions sent to him. Plain
+  // updates still come as push and in the app. He hit the 50-a-day cap on
+  // 07.10 with mostly "new case opened" / "entered work" updates.
+  if (!EMAIL_TYPES.has(row.type ?? '')) {
+    return NextResponse.json({ ok: true, ...result, email: 'not-actionable' });
+  }
   const { data: slotRows, error: slotErr } = await db.rpc(
     'claim_notification_email' as never,
     { p_notification_id: id, p_daily_limit: DAILY_EMAIL_LIMIT } as never,

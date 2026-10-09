@@ -409,6 +409,13 @@ async function runEnterWorkReminders(supabase: ServiceClient) {
     const title = 'תזכורת — רכב ממתין לעבודה';
     const body = `${customer} · ${plate} - עדיין לא סומן כנכנס לעבודה`;
 
+    // Only the newest reminder per car stays open (Amit, 2026-10-09, "1ב"):
+    // every two hours a fresh reminder arrived while the earlier ones stayed
+    // unread, so one car the painter never marked filled the bell (33 open
+    // for Amit). Close this car's earlier reminders, for everyone, first.
+    await supabase.from('notifications').update({ read: true } as never)
+      .eq('case_id', c.id).eq('title', title).eq('read', false);
+
     // Sequential, not Promise.all: concurrent inserts race the DB fan-out
     // trigger's (031/032) 10-second de-dup check against each other, so
     // several can all pass the "not already sent" check before any of their
