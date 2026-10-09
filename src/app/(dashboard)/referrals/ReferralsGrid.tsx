@@ -43,7 +43,12 @@ export function ReferralsGrid({
     <div className="space-y-4">
       {showBranchFilter && (
         <SegmentedControl
-          options={[{ value: 'all', label: 'הכל' }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+          // Count per tab, so each branch's open referrals are visible at a
+          // glance and "הכל" shows the total (2026-10-09).
+          options={[
+            { value: 'all', label: `הכל (${referrals.length})` },
+            ...branches.map((b) => ({ value: b.id, label: `${b.name} (${referrals.filter((r) => r.branch_id === b.id).length})` })),
+          ]}
           value={branchFilter}
           onChange={setBranchFilter}
         />
