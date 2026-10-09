@@ -114,6 +114,12 @@ export function CasesMasterDetail({
   }, [cases, branchFilter, query]);
 
   const showBranchFilter = branches.length > 1;
+  // Open cases per branch on each tab, total on "הכל" (2026-10-09) — same as
+  // the referrals page.
+  const branchOptions = [
+    { value: 'all', label: `הכל (${cases.length})` },
+    ...branches.map((b) => ({ value: b.id, label: `${b.name} (${cases.filter((c) => c.branch_id === b.id).length})` })),
+  ];
 
   // The archive is a standalone full-width view — no master-detail rail.
   if (isArchive) return <>{children}</>;
@@ -140,7 +146,7 @@ export function CasesMasterDetail({
           </div>
           {showBranchFilter && (
             <SegmentedControl
-              options={[{ value: 'all', label: 'הכל' }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+              options={branchOptions}
               value={branchFilter}
               onChange={setBranchFilter}
             />
@@ -219,7 +225,7 @@ export function CasesMasterDetail({
         {showBranchFilter && (
           <div className="mb-3">
             <SegmentedControl
-              options={[{ value: 'all', label: 'הכל' }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+              options={branchOptions}
               value={branchFilter}
               onChange={setBranchFilter}
             />
