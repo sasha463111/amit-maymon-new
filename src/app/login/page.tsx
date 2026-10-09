@@ -10,7 +10,6 @@ const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -46,7 +45,7 @@ export default function LoginPage() {
     }
 
     try {
-      const result = await loginAction({ email, rememberMe });
+      const result = await loginAction({ email });
       if (result?.error) {
         setError(result.error);
         setLoading(false);
@@ -101,17 +100,9 @@ export default function LoginPage() {
               הכניסה היא עם כתובת המייל בלבד, ללא סיסמה.
             </p>
 
-            {!isPreview && (
-              <label className="flex items-center gap-2.5 text-sm text-gray-600 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-gray-300 text-brand-red focus:ring-brand-red w-4 h-4"
-                />
-                זכור אותי (30 יום)
-              </label>
-            )}
+            {/* No "remember me" box: the session is always kept on this device (it
+                set a cookie nothing ever read, so it only confused people). */}
+            <p className="text-xs text-gray-500">תישארו מחוברים במכשיר הזה עד שתתנתקו.</p>
 
             {error && (
               <div className="text-sm text-red-700 bg-red-50 px-3 py-2.5 rounded-lg border border-red-100">

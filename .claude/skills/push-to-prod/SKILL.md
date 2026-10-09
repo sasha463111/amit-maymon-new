@@ -1,6 +1,6 @@
 ---
 name: push-to-prod
-description: Use when the user wants to push/ship/deploy local changes in the amit-maymon-new (tehila-bodyshop-crm) repo — commits and pushes directly to `main`, the live production branch. A push to `main` auto-deploys both production Vercel projects via Vercel's native Git integration. Triggers on "push my changes", "ship this", "deploy to prod", "push to main".
+description: Use when the user wants to push/ship/deploy local changes in the amit-maymon-new (tehila-bodyshop-crm) repo — commits and pushes directly to `main`, the live production branch. A push to `main` auto-deploys both production Vercel projects via Vercel's native Git integration. Runs the full pipeline — secret guard, build, DB backup, push, migrations, wait for Vercel READY, smoke check, docs, one-line report. Triggers on "push my changes", "ship this", "deploy to prod", "push to main", "דחוף לפרודקשן", "תעלה לפרודקשן", and on "דחפת לפרודקשן?" / "זה עלה?" (answer by checking, not from memory).
 ---
 
 # Push to prod (amit-maymon-new)
@@ -44,30 +44,62 @@ description: Use when the user wants to push/ship/deploy local changes in the am
   `supabase/migrations/`. See SYSTEM_OVERVIEW.md section 9.2.)
 - There's a `SUPABASE_MIGRATION_GUIDE.md` in the repo root describing a *possible future* move of the whole Supabase project to `eu-central-1` (Frankfurt). As of this writing that hasn't happened — production still runs on the original project (`yhanmyvolpeiuxspcxmk`). Don't assume it's in progress; if it's relevant to what you're doing, check with the user.
 
-## Steps
+## Steps — run the whole pipeline without stopping to ask
 
-1. **Check current state**
-   - `git status` — if there are no changes to commit and no local commits ahead of `origin/main`, stop and tell the user there's nothing to push.
-   - `git branch --show-current` — if not on `main`, either the user wants a feature-branch/PR flow (fine, ask which) or — for a routine fix they've already asked to ship — merge/rebase onto `main` and push there. Both patterns exist in this repo's history; a PR is not mandatory.
+Tomer: "תפסיק לשאול אותי כל הזמן, זה כבר נהיה מטרד, הכל אמור להיות אוטומטי". He asked
+"דחפת לפרודקשן?" 15+ times because pushes ended without a clear confirmation. So:
+when he asks to ship (or `triage-feedback` work is approved), run every step below to the end
+and finish with the one-line report. Don't ask "לדחוף?" for a change he already asked for.
+Stop and ask only for something large/risky that he hasn't approved, or a destructive DB change
+(DROP/DELETE/column removal) — migration 046 deleted data once.
 
-2. **Commit**
-   - Stage relevant files (avoid committing stray artifacts like `dev.log`, `.env.local`, `node_modules`, `tsconfig.tsbuildinfo` churn).
-   - Write a commit message describing the actual change, ending with:
-     ```
-     Co-Authored-By: Claude <noreply@anthropic.com>
-     ```
-   - Run `npx tsc --noEmit` (and ideally `npm run build`) before committing — this repo has no CI gate catching type errors before deploy.
+1. **Check state**
+   - `git status` / `git log tomer/main..main` — nothing to ship → say so and stop.
+   - Must be on `main` (see "Current state" above).
 
-3. **Push**
-   ```
-   git push origin main
-   ```
-   That's it — this alone triggers the production deploy on both Vercel projects. No separate deploy command needed unless you're additionally deploying to an unrelated personal/non-git-connected Vercel project.
+2. **Secret guard (blocking)** — never commit `.env*`, `.backups/`, `*.env`, SQL dumps, or any
+   file containing a password/key. The repos on GitHub are **PUBLIC**. Check
+   `git diff --cached --name-only` and grep the staged diff for `KEY=|PASSWORD|SECRET|service_role`.
+   Anything matching → unstage it and tell Tomer.
 
-4. **If the change includes a migration**
-   - Tell the user explicitly which file(s) under `src/db/migrations/` still need to be run manually in the Supabase SQL Editor. This step is easy to forget precisely because the git push "just works" for code — the DB doesn't follow along.
+3. **Build gate** — `npx tsc --noEmit` and `npm run build`. Fix failures before going further
+   (this is what the `deploy-validator` agent's auto-fix patterns are for).
 
-5. **Use judgment on confirming before pushing**, same as any production deploy: for a small, well-tested fix the user already asked to ship, push directly — that's the normal flow here. For something large, risky, or ambiguous, or if you're not confident the user meant "push it now" vs. "here's what I'd change," confirm first. This repo has no staging environment — `main` is production.
+4. **Backup** (standing rule: "לפני שעושים פוש לפרודקשן חייב ליצור גיבוי"; also before
+   replacing env vars/keys — back up the old values first).
+   - Primary: `npx supabase db dump --linked --data-only -f C:/Backups/CRM/pre-push_<YYYYMMDD_HHmm>.sql`
+     plus a schema dump to `..._schema.sql` (needs Docker running).
+   - Fallback: `gh workflow run daily-backup.yml -R tdavidyan85/amit-maymon-new`, then wait for the
+     run to succeed (`gh run watch`).
+   - Backups go to `C:/Backups/CRM`, **never inside the repo**.
+   - `SqlBackup/backup-before-push.ps1` is interactive (Read-Host) — don't use it from Claude.
+   - Backup failed both ways → do not push; tell Tomer why.
+
+5. **Commit + push** — message describes the change, with the session's Co-Authored-By line.
+   `git push origin main` (pushes to both remotes), then `./scripts/check-deploy-remote.sh` must
+   print "production is up to date".
+
+6. **Migrations** — if `supabase/migrations/` has new files: `npx supabase db push --linked`
+   after the backup, then verify with a read query that the change landed and no data was lost
+   (row counts before/after on touched tables). If the CLI can't apply it, give Tomer the exact
+   SQL for the SQL Editor and say clearly the push is waiting on it.
+
+7. **Wait for Vercel** — Vercel MCP `list_deployments` (project `amit-maymon-new`, team `davit7`):
+   find the deployment whose commit SHA = the pushed HEAD and poll until READY or ERROR.
+   - ERROR → `get_deployment` build logs → fix → back to step 3. Max 3 rounds, then report.
+   - No deployment for that SHA after ~3 min → the webhook didn't fire; check the remote, don't
+     tell Tomer "it's live".
+
+8. **Smoke check** — open `https://amit-maymon-new-psi.vercel.app` and confirm the changed
+   screen shows the change. For a user-facing bug fix, run the `repro-as-user` skill.
+
+9. **Docs** — standing rule: every prod push updates the affected .md files (CLAUDE.md,
+   AGENTS.md, BUSINESS_PROCESS.md, agent docs) in the same push.
+
+10. **Report — one line, always:**
+    `✅ בפרודקשן – קומיט <sha> – <מה עלה> – גיבוי: <file> – מיגרציות: <none/applied>`
+    or `🔴 לא עלה – <why> – <what's needed>`.
+    Then offer the `staff-whatsapp` message if staff need to know.
 
 ## Local dev server (not production)
 
