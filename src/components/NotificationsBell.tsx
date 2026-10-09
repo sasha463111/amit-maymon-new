@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { markRead, markAllRead } from '@/app/actions/notifications';
+import { markRead, markUpdatesRead } from '@/app/actions/notifications';
+import { ACTION_TYPES, ACTION_TYPE_SET } from '@/lib/notificationKinds';
 import { PushSubscriber } from '@/components/PushSubscriber';
 import { formatDate } from '@/lib/dates';
 
@@ -53,6 +54,16 @@ function needsMyApproval(n: { awaiting: boolean }): boolean {
   return n.awaiting;
 }
 
+/** Needs me: an approval still waiting, or an unread notification of an
+ *  action type. Everything else is a plain update ("עדכונים שוטפים"). */
+function isAction(n: Row): boolean {
+  return n.awaiting || (!n.read && ACTION_TYPE_SET.has(n.type ?? ''));
+}
+
+function newestFirst(a: Row, b: Row): number {
+  return b.created_at.localeCompare(a.created_at);
+}
+
 function getIcon(type: string | null): string {
   return (type && TYPE_ICON[type]) ?? '🔔';
 }
@@ -73,6 +84,12 @@ export function NotificationsBell({ userId }: { userId: string }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // null = pick automatically each time the bell opens: "לטיפול" when
+  // something is waiting for me, otherwise the updates.
+  const [tab, setTab] = useState<'action' | 'updates' | null>(null);
+  useEffect(() => {
+    if (!open) setTab(null);
+  }, [open]);
   const lastNotificationIdRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +101,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(15);
+      .limit(30);
 
     type BaseRow = {
       id: string;
@@ -98,6 +115,24 @@ export function NotificationsBell({ userId }: { userId: string }) {
       triggered_by: string | null;
     };
     const list = (notifData ?? []) as BaseRow[];
+
+    // Everything unread that needs me stays reachable even when it is older
+    // than the latest 30, so it cannot fall off the bottom of "לטיפול".
+    const { data: actionData } = await supabase
+      .from('notifications')
+      .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
+      .eq('user_id', userId)
+      .eq('read', false)
+      .in('type', [...ACTION_TYPES])
+      .order('created_at', { ascending: false })
+      .limit(100);
+    const haveIds = new Set(list.map((n) => n.id));
+    for (const n of (actionData ?? []) as BaseRow[]) {
+      if (!haveIds.has(n.id)) {
+        haveIds.add(n.id);
+        list.push(n);
+      }
+    }
 
     // Approvals still waiting (visible to CEO; empty for everyone else). Their
     // latest notification is always shown — even if older than the 15 above —
@@ -273,13 +308,23 @@ export function NotificationsBell({ userId }: { userId: string }) {
     } else if (n.action_url) router.push(n.action_url);
   }
 
-  async function handleMarkAll() {
-    if (unreadCount === 0) return;
-    setRows((prev) => prev.map((r) => ({ ...r, read: true })));
-    setUnreadCount(0);
-    await markAllRead();
-    router.refresh(); // clear every yellow case card at once
+  // Header button on the "עדכונים שוטפים" tab: marks plain updates read and
+  // leaves everything that needs action open.
+  async function handleMarkUpdates() {
+    if (updatesUnread === 0) return;
+    setRows((prev) => prev.map((r) => (isAction(r) ? r : { ...r, read: true })));
+    setUnreadCount((c) => Math.max(0, c - updatesUnread));
+    await markUpdatesRead();
+    router.refresh(); // clear the yellow case cards that only had updates
   }
+
+  const actionRows = rows
+    .filter(isAction)
+    .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)) || newestFirst(a, b));
+  const updateRows = rows.filter((n) => !isAction(n)).sort(newestFirst);
+  const updatesUnread = updateRows.filter((n) => !n.read).length;
+  const activeTab: 'action' | 'updates' = tab ?? (actionRows.length > 0 ? 'action' : 'updates');
+  const shown = activeTab === 'action' ? actionRows : updateRows;
 
   return (
     <div ref={containerRef} className="relative">
@@ -318,34 +363,60 @@ export function NotificationsBell({ userId }: { userId: string }) {
                 </span>
               )}
             </div>
-            {unreadCount > 0 && (
+            {activeTab === 'updates' && updatesUnread > 0 && (
               <button
                 type="button"
-                onClick={() => void handleMarkAll()}
+                onClick={() => void handleMarkUpdates()}
                 className="text-xs text-brand-red hover:text-brand-red-dark font-medium"
               >
-                ✓ סמן הכל כנקרא
+                ✓ סמן עדכונים כנקראו
               </button>
             )}
+          </div>
+
+          {/* Tabs: what needs me vs. what just happened */}
+          <div className="flex border-b border-gray-100 bg-white" role="tablist">
+            {([
+              ['action', 'לטיפול', actionRows.length, 'bg-orange-500 text-white'],
+              ['updates', 'עדכונים שוטפים', updatesUnread, 'bg-gray-200 text-gray-700'],
+            ] as const).map(([key, label, count, chip]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === key}
+                onClick={() => setTab(key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm border-b-2 transition-colors ${
+                  activeTab === key
+                    ? 'border-brand-red text-gray-900 font-bold'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {label}
+                {count > 0 && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${chip}`}>{count}</span>
+                )}
+              </button>
+            ))}
           </div>
 
           {/* List */}
           <div className="flex-1 overflow-y-auto">
             {!loaded ? (
               <div className="p-6 text-center text-sm text-gray-400">טוען...</div>
-            ) : rows.length === 0 ? (
+            ) : shown.length === 0 ? (
               <div className="p-6 text-center">
-                <div className="text-3xl mb-2">🔔</div>
-                <p className="text-sm text-gray-500">אין התראות</p>
+                <div className="text-3xl mb-2">{activeTab === 'action' ? '✅' : '🔔'}</div>
+                <p className="text-sm text-gray-500">
+                  {activeTab === 'action' ? 'אין התראות שממתינות לטיפולך' : 'אין עדכונים'}
+                </p>
               </div>
             ) : (
               <ul className="divide-y divide-gray-100">
                 {/* Amit (2026-10-07): approvals waiting for him must stand out
                     from plain updates at a glance — unread ones are pinned to
                     the top and drawn orange with a "ממתין לאישורך" tag. */}
-                {[...rows]
-                  .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)))
-                  .map((n) => {
+                {shown.map((n) => {
                   const clickable = !!(n.action_url || n.case_id);
                   const approval = needsMyApproval(n);
                   return (
