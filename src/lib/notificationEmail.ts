@@ -8,6 +8,13 @@
 
 export const DAILY_EMAIL_LIMIT = 50;
 
+/** Only notifications that need the reader to act are emailed (Amit, "3ב"). */
+export const EMAIL_TYPES = ['PENDING_APPROVAL', 'CEO_REJECTED', 'DIRECT_NOTE'];
+
+/** Email is a backup: sent only if still unread this long after arriving
+ *  (Amit, 2026-10-09: "שעה"). */
+export const EMAIL_BACKUP_DELAY_MS = 60 * 60 * 1000;
+
 const RESEND_API_URL = 'https://api.resend.com/emails';
 const FROM = 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>';
 

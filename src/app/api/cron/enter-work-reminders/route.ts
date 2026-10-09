@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser } from '@/app/actions/push';
 
@@ -658,6 +659,66 @@ async function runReferralFollowUpReminders(supabase: ServiceClient, todayIso: s
   return { notified, checked: candidates.length };
 }
 
+/**
+ * 5. Email backup (Amit, 2026-10-09). An actionable notification (approval
+ *    waiting, rejection, a note/question to him) that is still UNREAD an
+ *    hour after it arrived is emailed — if he saw it in the app, no email.
+ *    Only users with profiles.email_notifications; capped per day by
+ *    claim_notification_email(). This cron runs every 30 minutes, so the
+ *    email goes out 60-90 minutes after the notification. Older than a day
+ *    is skipped, so switching this on never emails a backlog.
+ */
+async function runBackupEmails(supabase: ReturnType<typeof getServiceClient> & object, origin: string) {
+  const { data: users } = await supabase.from('profiles').select('id').eq('email_notifications' as never, true as never).eq('is_active', true);
+  const userIds = ((users ?? []) as { id: string }[]).map((u) => u.id);
+  if (userIds.length === 0) return { emailed: 0, checked: 0 };
+
+  const now = Date.now();
+  const { data: due } = await supabase
+    .from('notifications')
+    .select('id, user_id, title, body, action_url, case_id')
+    .in('user_id', userIds)
+    .in('type', EMAIL_TYPES)
+    .eq('read', false)
+    .is('emailed_at' as never, null)
+    .lt('created_at', new Date(now - EMAIL_BACKUP_DELAY_MS).toISOString())
+    .gt('created_at', new Date(now - 24 * 60 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: true })
+    .limit(40);
+  const rows = (due ?? []) as { id: string; user_id: string; title: string; body: string | null; action_url: string | null; case_id: string | null }[];
+
+  let emailed = 0;
+  for (const n of rows) {
+    const { data: slotRows, error: slotErr } = await supabase.rpc(
+      'claim_notification_email' as never,
+      { p_notification_id: n.id, p_daily_limit: DAILY_EMAIL_LIMIT } as never,
+    );
+    const claim = (slotRows as { slot: number; email: string }[] | null)?.[0];
+    if (slotErr || !claim) continue;
+
+    let plate: string | null = null;
+    let customer: string | null = null;
+    if (n.case_id) {
+      const { data: caseInfo } = await supabase.from('cases').select('customer_name, cars(license_plate)').eq('id', n.case_id).maybeSingle();
+      const ci = caseInfo as { customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+      const car = Array.isArray(ci?.cars) ? ci?.cars[0] : ci?.cars;
+      plate = car?.license_plate ?? null;
+      customer = ci?.customer_name ?? null;
+    }
+    const path = n.action_url || (n.case_id ? `/go/${n.case_id}` : '/notifications');
+    const sent = await sendNotificationEmail({
+      to: claim.email, title: n.title, plate, customer, body: n.body ?? '',
+      link: new URL(path, origin).toString(), slot: claim.slot,
+    });
+    if (sent.ok) emailed++;
+    else {
+      await supabase.rpc('release_notification_email' as never, { p_notification_id: n.id } as never);
+      console.error('[backup-emails] send failed', { id: n.id, error: sent.error });
+    }
+  }
+  return { emailed, checked: rows.length };
+}
+
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get('authorization');
@@ -680,6 +741,7 @@ export async function GET(req: NextRequest) {
   const painterRequests = await runPainterRequestEscalation(supabase);
   const officeClosure = await runOfficeClosureEscalation(supabase);
   const referralFollowUps = await runReferralFollowUpReminders(supabase, isoDate);
+  const backupEmails = await runBackupEmails(supabase, new URL(req.url).origin);
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps });
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails });
 }
