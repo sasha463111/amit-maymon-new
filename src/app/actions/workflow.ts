@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
@@ -943,6 +944,19 @@ export async function deleteCase(caseId: string) {
     .eq('id', caseId);
 
   await writeAudit(supabase, 'CASE', caseId, 'CASE_DELETED', user.id);
+
+  // A deleted case has nothing left to act on: close every open notification
+  // about it, for everyone (RLS lets a user update only their own rows, hence
+  // the service client). Restoring the case does not reopen them.
+  {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (url && key) {
+      const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { error: closeErr } = await admin.from('notifications').update({ read: true } as never).eq('case_id', caseId).eq('read', false);
+      if (closeErr) console.error('[deleteCase] could not close notifications', closeErr.message);
+    }
+  }
   revalidatePath('/cases');
   revalidatePath('/cases/archive');
   return { ok: true, error: null };

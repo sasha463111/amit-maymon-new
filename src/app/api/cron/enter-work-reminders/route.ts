@@ -382,6 +382,10 @@ async function runEnterWorkReminders(supabase: ServiceClient) {
     .select('id, branch_id, customer_name, case_key, painter_reminder_sent_at, cars(license_plate)')
     .in('id', doneCaseIds)
     .is('closed_at', null)
+    // The cron reads with the service client, which bypasses the soft-delete
+    // filter in RLS — so deleted cases kept getting reminders (16 of Amit's
+    // 33 open reminders on 2026-10-09 were on deleted cases).
+    .is('deleted_at', null)
     .is('painter_entered_work_at', null);
 
   const cutoff = Date.now() - REMINDER_INTERVAL_MS;
@@ -473,7 +477,8 @@ async function runPainterRequestEscalation(supabase: ServiceClient) {
       .from('cases')
       .select('branch_id, case_key, cars(license_plate)')
       .eq('id', r.case_id)
-      .single();
+      .is('deleted_at', null)
+      .maybeSingle();
     const c = caseData as { branch_id: string; case_key: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
     if (!c) continue;
     const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
@@ -530,6 +535,7 @@ async function runOfficeClosureEscalation(supabase: ServiceClient) {
     .select('id, branch_id, case_key, customer_name, office_reminder_sent_at, cars(license_plate)')
     .not('treatment_finished_at', 'is', null)
     .is('closed_at', null)
+    .is('deleted_at', null)
     .is('office_reminder_sent_at', null) // one escalation per case, not a repeating nag — closure can legitimately take weeks, see file-level doc
     .lt('treatment_finished_at', cutoffIso)
     .gt('treatment_finished_at', maxAgeIso);
