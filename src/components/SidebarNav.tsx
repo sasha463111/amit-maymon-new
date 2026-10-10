@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus, Users, Archive, Link2 } from 'lucide-react';
+import { FolderOpen, Lock, CheckSquare, Paintbrush, Bell, Settings, Plus, Users, Archive, Link2, Mail } from 'lucide-react';
 
 const NAV_ICONS: Record<string, React.ElementType> = {
   '/cases': FolderOpen,
@@ -14,11 +14,18 @@ const NAV_ICONS: Record<string, React.ElementType> = {
   '/extras/new': Plus,
   '/extras/mine': Paintbrush,
   '/painters': Users,
+  '/messages': Mail,
   '/notifications': Bell,
   '/settings': Settings,
 };
 
-export function SidebarNav({ links }: { links: { label: string; href: string }[] }) {
+export function SidebarNav({
+  links,
+  badges = {},
+}: {
+  links: { label: string; href: string }[];
+  badges?: Record<string, number>;
+}) {
   const pathname = usePathname();
 
   return (
@@ -41,6 +48,15 @@ export function SidebarNav({ links }: { links: { label: string; href: string }[]
           >
             {Icon && <Icon size={16} className="flex-shrink-0" />}
             <span>{label}</span>
+            {(badges[href] ?? 0) > 0 && (
+              <span
+                className={`min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold flex items-center justify-center ${
+                  isActive ? 'bg-white text-red-600' : 'bg-red-600 text-white'
+                }`}
+              >
+                {badges[href]}
+              </span>
+            )}
           </Link>
         );
       })}

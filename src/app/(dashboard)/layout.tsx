@@ -14,18 +14,21 @@ import { StopViewAsButton } from './StopViewAsButton';
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
     { label: 'תיקים', href: '/cases' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'תוספות', href: '/extras' },
     { label: 'התראות', href: '/notifications' },
   ],
   OFFICE: [
     { label: 'סגירה', href: '/closure' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'הפניות', href: '/referrals' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'התראות', href: '/notifications' },
   ],
   CEO: [
     { label: 'תיקים', href: '/cases' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'אישורים', href: '/approvals' },
     { label: 'סגירה', href: '/closure' },
     { label: 'הפניות', href: '/referrals' },
@@ -36,12 +39,14 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   PAINTER: [
     { label: 'תיקים', href: '/painters' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'תוספת חדשה', href: '/extras/new' },
     { label: 'התוספות שלי', href: '/extras/mine' },
     { label: 'התראות', href: '/notifications' },
   ],
   SERVICE_ADVISOR: [
     { label: 'תיקים', href: '/cases' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'התראות', href: '/notifications' },
   ],
@@ -98,6 +103,16 @@ export default async function DashboardLayout({
       ]
     : ROLE_LINKS[role];
   const roleLabel = ROLE_LABEL[role];
+
+  // Unread notes/questions addressed to me — the badge on "הודעות".
+  const { count: unreadMessages } = isPreview
+    ? { count: 0 }
+    : await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('type', 'DIRECT_NOTE')
+        .eq('read', false);
 
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {
@@ -179,7 +194,7 @@ export default async function DashboardLayout({
         {/* Lower row: horizontal nav — scrolls on mobile */}
         <div className="px-3 sm:px-6 border-t border-gray-100 bg-gray-50">
           <div className="py-2">
-            <SidebarNav links={links} />
+            <SidebarNav links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
           </div>
         </div>
       </header>

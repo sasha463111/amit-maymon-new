@@ -113,15 +113,18 @@ export async function getCaseNotes(caseId: string): Promise<{ notes: SentNote[];
   return { notes: Array.from(grouped.values()).slice(0, 50) };
 }
 
-export async function sendCaseNote(caseId: string, recipientIds: string[], text: string) {
+/** Delivers one note/message: a DIRECT_NOTE row per recipient + push. With a
+ *  case it opens the case; without one (a general message from the inbox) it
+ *  opens the inbox. */
+async function deliverNote(caseId: string | null, recipientIds: string[], text: string, reply = false) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
   const body = text.trim();
-  if (!body) return { error: 'נא לכתוב הערה' };
-  if (body.length > 2000) return { error: 'ההערה ארוכה מדי' };
-  if (!(await userCanSeeCase(supabase, caseId))) return { error: 'אין גישה לתיק' };
+  if (!body) return { error: 'נא לכתוב הודעה' };
+  if (body.length > 2000) return { error: 'ההודעה ארוכה מדי' };
+  if (caseId && !(await userCanSeeCase(supabase, caseId))) return { error: 'אין גישה לתיק' };
 
   const allowed = new Map((await staffList()).map((r) => [r.id, r]));
   const targets = Array.from(new Set(recipientIds)).filter((id) => allowed.has(id) && id !== user.id);
@@ -129,7 +132,8 @@ export async function sendCaseNote(caseId: string, recipientIds: string[], text:
 
   const { data: me } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
   const senderName = (me as { full_name: string | null } | null)?.full_name || 'משתמש';
-  const title = `💬 הערה מ${senderName}`;
+  const title = reply ? `↩️ תשובה מ${senderName}` : `💬 הערה מ${senderName}`;
+  const url = caseId ? `/go/${caseId}` : '/messages';
 
   // One insert for all recipients, so every row shares the same created_at
   // and the history can group them back into a single note.
@@ -140,7 +144,7 @@ export async function sendCaseNote(caseId: string, recipientIds: string[], text:
       type: NOTE_TYPE,
       title,
       body,
-      action_url: `/go/${caseId}`,
+      action_url: url,
       triggered_by: user.id,
       read: false,
     })) as never,
@@ -149,9 +153,128 @@ export async function sendCaseNote(caseId: string, recipientIds: string[], text:
 
   // Push for non-CEO recipients; CEO pushes come from the DB dispatcher and
   // sendPushToUser skips them here, so nobody is pushed twice.
-  await Promise.all(targets.map((id) => sendPushToUser(id, { title, body, url: `/go/${caseId}`, tag: `note-${caseId}` })));
+  await Promise.all(targets.map((id) => sendPushToUser(id, { title, body, url, tag: `note-${caseId ?? 'general'}` })));
 
-  revalidatePath(`/closure/${caseId}`);
-  revalidatePath(`/cases/${caseId}`);
+  if (caseId) {
+    revalidatePath(`/closure/${caseId}`);
+    revalidatePath(`/cases/${caseId}`);
+  }
+  revalidatePath('/messages');
   return { ok: true, sent: targets.length };
+}
+
+export async function sendCaseNote(caseId: string, recipientIds: string[], text: string) {
+  return deliverNote(caseId, recipientIds, text);
+}
+
+// ---- Inbox ("הודעות"): Amit, 2026-10-10 — every person gets their notes and
+// questions in one inbox, not only inside the case, so work talk moves from
+// WhatsApp into the system. Same DIRECT_NOTE rows as the case notes above.
+
+export type InboxMessage = {
+  id: string;
+  at: string;
+  fromId: string | null;
+  from: string;
+  title: string;
+  text: string;
+  read: boolean;
+  caseId: string | null;
+  caseLabel: string | null;
+};
+export type OutboxMessage = {
+  at: string;
+  caseId: string | null;
+  caseLabel: string | null;
+  text: string;
+  to: { name: string; read: boolean }[];
+};
+
+type NoteRow = { id: string; user_id: string; triggered_by: string | null; title: string; body: string | null; read: boolean; created_at: string; case_id: string | null };
+
+export async function getMyMessages(): Promise<{ inbox: InboxMessage[]; sent: OutboxMessage[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { inbox: [], sent: [], error: 'לא מחובר' };
+  const db = serviceClient();
+  if (!db) return { inbox: [], sent: [], error: 'שרת לא מוגדר' };
+
+  // Strictly the caller's own messages: received (user_id = me) and sent
+  // (triggered_by = me). The service client is needed only to see the rows
+  // of the people I sent to (whether they read them).
+  const cols = 'id, user_id, triggered_by, title, body, read, created_at, case_id';
+  const [inRes, outRes] = await Promise.all([
+    db.from('notifications').select(cols).eq('type', NOTE_TYPE).eq('user_id', user.id).order('created_at', { ascending: false }).limit(200),
+    db.from('notifications').select(cols).eq('type', NOTE_TYPE).eq('triggered_by', user.id).neq('user_id', user.id).order('created_at', { ascending: false }).limit(300),
+  ]);
+  if (inRes.error) return { inbox: [], sent: [], error: inRes.error.message };
+  const inRows = (inRes.data ?? []) as NoteRow[];
+  const outRows = (outRes.data ?? []) as NoteRow[];
+
+  const all = [...inRows, ...outRows];
+  const personIds = Array.from(new Set(all.flatMap((r) => [r.user_id, r.triggered_by]).filter((x): x is string => !!x)));
+  const caseIds = Array.from(new Set(all.map((r) => r.case_id).filter((x): x is string => !!x)));
+  const [{ data: names }, { data: cases }] = await Promise.all([
+    personIds.length ? db.from('profiles').select('id, full_name').in('id', personIds) : Promise.resolve({ data: [] }),
+    caseIds.length ? db.from('cases').select('id, customer_name, cars(license_plate)').in('id', caseIds) : Promise.resolve({ data: [] }),
+  ]);
+  const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name || '—']));
+  type CaseRow = { id: string; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null };
+  const caseLabel = new Map(
+    ((cases ?? []) as CaseRow[]).map((c) => {
+      const plate = Array.isArray(c.cars) ? c.cars[0]?.license_plate : c.cars?.license_plate;
+      return [c.id, [plate, c.customer_name].filter(Boolean).join(' · ') || 'תיק'];
+    }),
+  );
+
+  const inbox: InboxMessage[] = inRows.map((r) => ({
+    id: r.id,
+    at: r.created_at,
+    fromId: r.triggered_by,
+    from: nameById.get(r.triggered_by ?? '') ?? '—',
+    title: r.title,
+    text: r.body ?? '',
+    read: r.read,
+    caseId: r.case_id,
+    caseLabel: r.case_id ? caseLabel.get(r.case_id) ?? 'תיק' : null,
+  }));
+
+  const grouped = new Map<string, OutboxMessage>();
+  for (const r of outRows) {
+    const key = `${r.created_at}|${r.case_id}|${r.body}`;
+    const g = grouped.get(key) ?? {
+      at: r.created_at,
+      caseId: r.case_id,
+      caseLabel: r.case_id ? caseLabel.get(r.case_id) ?? 'תיק' : null,
+      text: r.body ?? '',
+      to: [],
+    };
+    g.to.push({ name: nameById.get(r.user_id) ?? '—', read: r.read });
+    grouped.set(key, g);
+  }
+  return { inbox, sent: Array.from(grouped.values()).slice(0, 100) };
+}
+
+/** A new message from the inbox, not tied to a case. */
+export async function sendGeneralMessage(recipientIds: string[], text: string) {
+  return deliverNote(null, recipientIds, text);
+}
+
+/** Reply to a received message: goes back to its sender, on the same case
+ *  (if any), and marks the original as read. */
+export async function replyToMessage(messageId: string, text: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+  const { data } = await supabase
+    .from('notifications')
+    .select('id, triggered_by, case_id')
+    .eq('id', messageId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  const orig = data as { id: string; triggered_by: string | null; case_id: string | null } | null;
+  if (!orig?.triggered_by) return { error: 'ההודעה לא נמצאה' };
+  const res = await deliverNote(orig.case_id, [orig.triggered_by], text, true);
+  if ('ok' in res) await supabase.from('notifications').update({ read: true } as never).eq('id', orig.id).eq('user_id', user.id);
+  return res;
 }
