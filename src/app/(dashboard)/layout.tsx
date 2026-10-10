@@ -162,7 +162,7 @@ export default async function DashboardLayout({
                 </>
               )}
             </div>
-            <NotificationsBell userId={user.id} />
+            <NotificationsBell userId={user.id} role={actualRole} />
             <SendReportButton isCeo={actualRole === 'CEO'} />
             <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0" title="התנתק">
               <LogOut size={16} className="text-gray-500" />

@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { ACTION_TYPES } from '@/lib/notificationKinds';
+import { actionTypesForRole } from '@/lib/notificationKinds';
 
 export async function markRead(notificationId: string) {
   const supabase = await createClient();
@@ -40,12 +40,15 @@ export async function markUpdatesRead() {
   } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const actionTypes = actionTypesForRole((me as { role: string } | null)?.role);
+
   const { error } = await supabase
     .from('notifications')
     .update({ read: true } as never)
     .eq('user_id', user.id)
     .eq('read', false)
-    .or(`type.is.null,type.not.in.(${ACTION_TYPES.join(',')})`);
+    .or(`type.is.null,type.not.in.(${actionTypes.join(',')})`);
   if (error) return { error: error.message };
   return { ok: true };
 }

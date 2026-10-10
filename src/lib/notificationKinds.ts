@@ -1,20 +1,22 @@
-// Which notification types need the reader to ACT (as opposed to plain
-// updates). One list, used by the bell's "לטיפול" tab and by "mark updates
-// read". It is the same set the cases list already flags as urgent (red +
-// amber severity in cases/layout.tsx) plus personal notes/questions and
-// "ready for closure". Added 2026-10-09 at Amit's request: the bell mixed
-// both kinds, so he had to hunt for what was waiting for him.
-export const ACTION_TYPES = [
-  'PENDING_APPROVAL', // an approval waiting for a decision
-  'CEO_REJECTED', // a step was rejected, someone has to fix it
-  'BLOCKED_ACTION', // an attempted action was blocked
-  'BLOCKER',
-  'PAINTER_REQUEST', // a painter asked for something
-  'APPROVAL_NEEDED',
-  'APPROVAL_REQUIRED',
-  'EXTRA_CREATED', // an extra was added and needs handling
-  'DIRECT_NOTE', // a note/question sent to me personally
-  'READY_FOR_OFFICE', // a case is ready for closure
-] as const;
+// Which notification types need the reader to ACT, as opposed to plain
+// updates, depending on the reader's ROLE. Amit (2026-10-10): "לטיפולי" means
+// what is for me - an estimate approval, a question sent to me - and
+// everything else is a running feed he follows to see how the work goes and
+// who did what. The first version used one list for everybody, so painter
+// requests and blocked actions (not his) showed up as his.
+//
+// Follows the product's routing table (notifyRelevantParties in
+// actions/push.ts): the CEO is the primary recipient only of approvals; every
+// other CEO notification is an audit copy.
+const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
+  CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE'],
+  SERVICE_MANAGER: ['CEO_REJECTED', 'BLOCKED_ACTION', 'PAINTER_REQUEST', 'EXTRA_CREATED', 'DIRECT_NOTE'],
+  SERVICE_ADVISOR: ['PAINTER_REQUEST', 'CEO_REJECTED', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
+  OFFICE: ['READY_FOR_OFFICE', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
+  PAINTER: ['PAINTER_REQUEST', 'DIRECT_NOTE'],
+};
 
-export const ACTION_TYPE_SET: ReadonlySet<string> = new Set(ACTION_TYPES);
+/** Types that need this role to act. Unknown role: only personal notes. */
+export function actionTypesForRole(role: string | null | undefined): readonly string[] {
+  return ACTION_TYPES_BY_ROLE[role ?? ''] ?? ['DIRECT_NOTE'];
+}

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { markRead, markUpdatesRead } from '@/app/actions/notifications';
-import { ACTION_TYPES, ACTION_TYPE_SET } from '@/lib/notificationKinds';
+import { actionTypesForRole } from '@/lib/notificationKinds';
 import { PushSubscriber } from '@/components/PushSubscriber';
 import { formatDate } from '@/lib/dates';
 
@@ -56,8 +56,8 @@ function needsMyApproval(n: { awaiting: boolean }): boolean {
 
 /** Needs me: an approval still waiting, or an unread notification of an
  *  action type. Everything else is a plain update ("עדכונים שוטפים"). */
-function isAction(n: Row): boolean {
-  return n.awaiting || (!n.read && ACTION_TYPE_SET.has(n.type ?? ''));
+function isAction(n: Row, actionTypes: ReadonlySet<string>): boolean {
+  return n.awaiting || (!n.read && actionTypes.has(n.type ?? ''));
 }
 
 function newestFirst(a: Row, b: Row): number {
@@ -78,8 +78,11 @@ function formatRelativeTime(s: string): string {
   return formatDate(d);
 }
 
-export function NotificationsBell({ userId }: { userId: string }) {
+export function NotificationsBell({ userId, role }: { userId: string; role?: string | null }) {
   const router = useRouter();
+  // What counts as "for me" depends on my role (see notificationKinds.ts).
+  const actionTypeList = actionTypesForRole(role);
+  const actionTypes: ReadonlySet<string> = new Set(actionTypeList);
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -123,7 +126,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
       .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
       .eq('user_id', userId)
       .eq('read', false)
-      .in('type', [...ACTION_TYPES])
+      .in('type', [...actionTypeList])
       .order('created_at', { ascending: false })
       .limit(100);
     const haveIds = new Set(list.map((n) => n.id));
@@ -312,16 +315,16 @@ export function NotificationsBell({ userId }: { userId: string }) {
   // leaves everything that needs action open.
   async function handleMarkUpdates() {
     if (updatesUnread === 0) return;
-    setRows((prev) => prev.map((r) => (isAction(r) ? r : { ...r, read: true })));
+    setRows((prev) => prev.map((r) => (isAction(r, actionTypes) ? r : { ...r, read: true })));
     setUnreadCount((c) => Math.max(0, c - updatesUnread));
     await markUpdatesRead();
     router.refresh(); // clear the yellow case cards that only had updates
   }
 
   const actionRows = rows
-    .filter(isAction)
+    .filter((n) => isAction(n, actionTypes))
     .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)) || newestFirst(a, b));
-  const updateRows = rows.filter((n) => !isAction(n)).sort(newestFirst);
+  const updateRows = rows.filter((n) => !isAction(n, actionTypes)).sort(newestFirst);
   const updatesUnread = updateRows.filter((n) => !n.read).length;
   const activeTab: 'action' | 'updates' = tab ?? (actionRows.length > 0 ? 'action' : 'updates');
   const shown = activeTab === 'action' ? actionRows : updateRows;
@@ -377,7 +380,7 @@ export function NotificationsBell({ userId }: { userId: string }) {
           {/* Tabs: what needs me vs. what just happened */}
           <div className="flex border-b border-gray-100 bg-white" role="tablist">
             {([
-              ['action', 'לטיפול', actionRows.length, 'bg-orange-500 text-white'],
+              ['action', 'לטיפולי', actionRows.length, 'bg-orange-500 text-white'],
               ['updates', 'עדכונים שוטפים', updatesUnread, 'bg-gray-200 text-gray-700'],
             ] as const).map(([key, label, count, chip]) => (
               <button
