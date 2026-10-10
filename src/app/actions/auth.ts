@@ -3,14 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
-
-const ROLE_REDIRECT: Record<UserRole, string> = {
-  SERVICE_MANAGER: '/cases',
-  OFFICE: '/closure',
-  CEO: '/approvals',
-  PAINTER: '/extras/new',
-  SERVICE_ADVISOR: '/cases',
-};
+import { ROLE_HOME } from '@/lib/roleHome';
+import { getSignedInHome } from '@/lib/signedInHome';
 
 export async function loginAction(credentials: { email: string; rememberMe?: boolean }) {
   const supabase = await createClient();
@@ -64,11 +58,19 @@ export async function loginAction(credentials: { email: string; rememberMe?: boo
   }
 
   const role = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
-  redirect(ROLE_REDIRECT[role]);
+  redirect(ROLE_HOME[role]);
 }
 
 export async function logoutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect('/login');
+  // "?out=1" tells the login page this was a deliberate logout, so it does not
+  // try to send the person back into the app.
+  redirect('/login?out=1');
+}
+
+/** Where an already signed-in user belongs, or null if not signed in. Lets
+ *  the login page send a signed-in visitor straight into the app. */
+export async function signedInHomeAction(): Promise<string | null> {
+  return getSignedInHome();
 }

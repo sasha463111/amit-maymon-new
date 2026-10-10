@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginAction } from '@/app/actions/auth';
+import { loginAction, signedInHomeAction } from '@/app/actions/auth';
 import { Logo } from '@/components/Logo';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
@@ -12,6 +12,23 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Already signed in (for example the bookmark or the app's start page led
+  // here)? Go straight into the app instead of asking for the email again.
+  // Skipped right after a deliberate logout ("?out=1").
+  useEffect(() => {
+    if (isPreview) return;
+    if (new URLSearchParams(window.location.search).has('out')) return;
+    let cancelled = false;
+    void signedInHomeAction()
+      .then((home) => {
+        if (home && !cancelled) router.replace(home);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   // In PREVIEW mode, check if we should show login page
   useEffect(() => {
