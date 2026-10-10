@@ -31,8 +31,14 @@ he had to correct "בעברית!!!" more than ten times, plus wrong gender and t
    markdown links, no images (WhatsApp won't copy them — if a visual is needed, say so and offer a
    screenshot file Tomer can attach separately).
 5. **Short.** If it doesn't fit on one phone screen, cut it. Detail goes to Tomer, not to the staff.
-6. **Put the message in a single code block** so Tomer can copy it in one click. Anything for
-   Tomer himself (caveats, what to verify first) goes *outside* the block.
+6. **Put the message in its own fenced ` ```text ` block — never as plain reply text.** The reply's
+   own copy button copies the *whole* reply (explanations included); only a code block has a copy
+   button that copies just the message. Tomer hit this on 10/10 and asked for it explicitly.
+   - Nothing but the message inside the block (no "הודעה לעמית:" heading inside it).
+   - Several recipients → one block per message, each preceded by a one-line label outside it.
+   - Anything for Tomer himself (caveats, what to verify first) goes *outside* the block.
+   - The block may look left-to-right in the IDE; it pastes correctly into WhatsApp — no need to
+     "fix" it with markdown quotes (`>`), which break the copy button.
 
 ## Structure (use only the sections that apply)
 
