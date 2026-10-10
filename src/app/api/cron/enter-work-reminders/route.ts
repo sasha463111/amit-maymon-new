@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser } from '@/app/actions/push';
+import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
 
 /**
  * Reminder sweep — despite the file/route name (kept as-is so the existing
@@ -743,5 +744,12 @@ export async function GET(req: NextRequest) {
   const referralFollowUps = await runReferralFollowUpReminders(supabase, isoDate);
   const backupEmails = await runBackupEmails(supabase, new URL(req.url).origin);
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails });
+  // 6. End-of-day report to Amit — work days, from DAILY_REPORT_HOUR. Every
+  // run after that hour tries; Resend's idempotency key lets only the first
+  // one through, so a late or skipped GitHub run doesn't lose the report.
+  const dailyReport = (isWeekend || isHoliday || hour < DAILY_REPORT_HOUR)
+    ? { skipped: true as const }
+    : await sendDailyReport(supabase, isoDate, new URL(req.url).origin).catch((e: unknown) => ({ ok: false as const, error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport });
 }
