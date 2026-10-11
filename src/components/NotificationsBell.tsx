@@ -7,6 +7,7 @@ import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { markRead, markUpdatesRead } from '@/app/actions/notifications';
 import { actionTypesForRole } from '@/lib/notificationKinds';
+import { getAdvisorsForCases } from '@/app/actions/caseAdvisors';
 import { PushSubscriber } from '@/components/PushSubscriber';
 import { formatDate } from '@/lib/dates';
 
@@ -24,9 +25,25 @@ interface Row {
   license_plate: string | null;
   case_key: string | null;
   customer_name: string | null;
+  /** "יועץ מטפל" of the case (src/lib/caseAdvisors.ts). */
+  advisor: string | null;
   triggered_by_name: string | null;
   /** An approval request whose approval is still PENDING. */
   awaiting: boolean;
+}
+
+// Reminder bodies repeat what the row header already shows ("חנן ריידיס ·
+// 77974202 - עדיין לא סומן נכנס לעבודה"). Amit (2026-10-11): the name appears
+// twice — show who handles the case instead. Drop the customer and plate from
+// the body and the separators left behind.
+function bodyWithoutCaseInfo(body: string, customer: string | null, plate: string | null): string {
+  let s = body;
+  for (const token of [customer, plate]) if (token) s = s.split(token).join('');
+  return s
+    .replace(/^[\s·\-–—|,:]+/, '')
+    .replace(/[\s·\-–—|,:]+$/, '')
+    .replace(/\s*·\s*·\s*/g, ' · ')
+    .trim();
 }
 
 const TYPE_ICON: Record<string, string> = {
@@ -167,6 +184,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     const caseKeyMap = new Map<string, string>();
     const customerNameMap = new Map<string, string>();
     const userNameMap = new Map<string, string>();
+    let advisorByCase: Record<string, string> = {};
 
     await Promise.all([
       (async () => {
@@ -181,6 +199,9 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
           if (c.case_key) caseKeyMap.set(c.id, c.case_key);
           if (c.customer_name) customerNameMap.set(c.id, c.customer_name);
         }
+      })(),
+      (async () => {
+        advisorByCase = await getAdvisorsForCases(caseIds).catch(() => ({}));
       })(),
       (async () => {
         if (userIds.length === 0) return;
@@ -199,6 +220,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
       license_plate: n.case_id ? plateMap.get(n.case_id) ?? null : null,
       case_key: n.case_id ? caseKeyMap.get(n.case_id) ?? null : null,
       customer_name: n.case_id ? customerNameMap.get(n.case_id) ?? null : null,
+      advisor: n.case_id ? advisorByCase[n.case_id] ?? null : null,
       triggered_by_name: n.triggered_by ? userNameMap.get(n.triggered_by) ?? null : null,
       awaiting: n.type === 'PENDING_APPROVAL' && !!n.case_id && pendingCaseIds.has(n.case_id),
     }));
@@ -451,6 +473,11 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                                 {n.customer_name}
                               </span>
                             )}
+                            {n.advisor && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-semibold">
+                                👤 {n.advisor}
+                              </span>
+                            )}
                             {n.case_key && !n.license_plate && !n.customer_name && (
                               <span className="text-[10px] font-bold text-gray-600">{n.case_key}</span>
                             )}
@@ -458,8 +485,10 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                               {n.title}
                             </span>
                           </div>
-                          {n.body && (
-                            <p className="text-xs text-gray-600 leading-snug truncate">{n.body}</p>
+                          {n.body && bodyWithoutCaseInfo(n.body, n.customer_name, n.license_plate) && (
+                            <p className="text-xs text-gray-600 leading-snug truncate">
+                              {bodyWithoutCaseInfo(n.body, n.customer_name, n.license_plate)}
+                            </p>
                           )}
                           <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400">
                             <span>{formatRelativeTime(n.created_at)}</span>
