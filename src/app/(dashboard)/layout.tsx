@@ -23,6 +23,9 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'התראות', href: '/notifications' },
   ],
   OFFICE: [
+    // Cases too (2026-10-11): office staff complete paperwork / notes on cases
+    // they opened; their edits show in the case history.
+    { label: 'תיקים', href: '/cases' },
     { label: 'סגירה', href: '/closure' },
     { label: 'הודעות', href: '/messages' },
     { label: 'הפניות', href: '/referrals' },

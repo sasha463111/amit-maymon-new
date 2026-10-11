@@ -30,6 +30,8 @@ interface Row {
   triggered_by_name: string | null;
   /** An approval request whose approval is still PENDING. */
   awaiting: boolean;
+  /** PAINTER_REQUEST row: the case still has an open painter request. */
+  requestPending: boolean;
 }
 
 // Reminder bodies repeat what the row header already shows ("חנן ריידיס ·
@@ -74,6 +76,9 @@ function needsMyApproval(n: { awaiting: boolean }): boolean {
 /** Needs me: an approval still waiting, or an unread notification of an
  *  action type. Everything else is a plain update ("עדכונים שוטפים"). */
 function isAction(n: Row, actionTypes: ReadonlySet<string>): boolean {
+  // A painter request stays "לטיפולי" for every advisor until it is handled —
+  // opening the notification is not handling it (Amit, 2026-10-11).
+  if (n.requestPending && actionTypes.has('PAINTER_REQUEST')) return true;
   return n.awaiting || (!n.read && actionTypes.has(n.type ?? ''));
 }
 
@@ -177,6 +182,32 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
       }
     }
 
+    // Painter requests still open (advisors): their latest notification per
+    // case is always shown and stays "לטיפולי" until the request is handled.
+    let pendingRequestCases = new Set<string>();
+    if (actionTypeList.includes('PAINTER_REQUEST')) {
+      const { data: openReqs } = await supabase.from('painter_requests').select('case_id').eq('status', 'PENDING');
+      pendingRequestCases = new Set(((openReqs ?? []) as { case_id: string }[]).map((r) => r.case_id));
+      if (pendingRequestCases.size > 0) {
+        const { data: reqNotifs } = await supabase
+          .from('notifications')
+          .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
+          .eq('user_id', userId)
+          .eq('type', 'PAINTER_REQUEST')
+          .in('case_id', Array.from(pendingRequestCases))
+          .order('created_at', { ascending: false })
+          .limit(100);
+        const shown = new Set(list.filter((n) => n.type === 'PAINTER_REQUEST').map((n) => n.case_id));
+        for (const n of (reqNotifs ?? []) as BaseRow[]) {
+          if (n.case_id && !shown.has(n.case_id) && !haveIds.has(n.id)) {
+            shown.add(n.case_id);
+            haveIds.add(n.id);
+            list.push(n);
+          }
+        }
+      }
+    }
+
     const caseIds = Array.from(new Set(list.map((n) => n.case_id).filter((x): x is string => !!x)));
     const userIds = Array.from(new Set(list.map((n) => n.triggered_by).filter((x): x is string => !!x)));
 
@@ -223,6 +254,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
       advisor: n.case_id ? advisorByCase[n.case_id] ?? null : null,
       triggered_by_name: n.triggered_by ? userNameMap.get(n.triggered_by) ?? null : null,
       awaiting: n.type === 'PENDING_APPROVAL' && !!n.case_id && pendingCaseIds.has(n.case_id),
+      requestPending: n.type === 'PAINTER_REQUEST' && !!n.case_id && pendingRequestCases.has(n.case_id),
     }));
 
     setRows(enriched);
@@ -475,7 +507,12 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                             )}
                             {n.advisor && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700 text-[10px] font-semibold">
-                                👤 {n.advisor}
+                                {n.type === 'PAINTER_REQUEST' ? `מיועד ל: ${n.advisor}` : `👤 ${n.advisor}`}
+                              </span>
+                            )}
+                            {n.type === 'PAINTER_REQUEST' && !n.requestPending && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-green-700 text-[10px] font-semibold">
+                                ✓ טופל
                               </span>
                             )}
                             {n.case_key && !n.license_plate && !n.customer_name && (

@@ -30,7 +30,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   let casesQuery = supabase
     .from('cases')
-    .select('id, opened_at, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, cars!inner(license_plate)')
+    .select('id, opened_at, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, created_by, cars!inner(license_plate)')
     .is('deleted_at', null)
     // Newest first — a case opened now appears at the top.
     .order('opened_at', { ascending: false });
@@ -107,7 +107,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   const railCases: RailCase[] = openCases.map((c) => {
     const row = c as {
-      id: string; opened_at: string | null; customer_name: string | null; insurance_company: string | null; branch_id: string;
+      id: string; opened_at: string | null; customer_name: string | null; insurance_company: string | null; branch_id: string; created_by: string | null;
       cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
     };
     const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
@@ -118,6 +118,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       customer_name: row.customer_name,
       insurer: row.insurance_company,
       branch_id: row.branch_id,
+      created_by: row.created_by,
       nextStep: caseIdToNextStep.get(row.id) ?? null,
       approvalBlocked: approvalBlocked.has(row.id),
       hasExtrasInTreatment: extrasSet.has(row.id),
@@ -135,6 +136,8 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       canCreate={canCreate}
       branchIds={branchIds}
       isCeo={isCeo}
+      // Office staff start on "the cases I opened" (2026-10-11).
+      mineFirstFor={role === 'OFFICE' ? user.id : null}
     >
       {children}
     </CasesMasterDetail>

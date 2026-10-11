@@ -26,6 +26,7 @@ export interface RailCase {
   customer_name: string | null;
   insurer: string | null;
   branch_id: string;
+  created_by: string | null;
   nextStep: string | null;
   approvalBlocked: boolean;
   hasExtrasInTreatment: boolean;
@@ -57,6 +58,7 @@ export function CasesMasterDetail({
   canCreate,
   branchIds = [],
   isCeo,
+  mineFirstFor = null,
   children,
 }: {
   cases: RailCase[];
@@ -65,11 +67,14 @@ export function CasesMasterDetail({
   canCreate: boolean;
   branchIds?: string[];
   isCeo: boolean;
+  /** User id: show a "שפתחתי" filter, on by default (office staff). */
+  mineFirstFor?: string | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const [branchFilter, setBranchFilter] = useState('all');
+  const [mineOnly, setMineOnly] = useState(!!mineFirstFor);
 
   // Auto-refresh: <AutoRefresh /> in (dashboard)/layout.tsx covers every page.
   const [query, setQuery] = useState('');
@@ -85,13 +90,14 @@ export function CasesMasterDetail({
     return cases
       .filter((c) => {
         const okBranch = branchFilter === 'all' || c.branch_id === branchFilter;
+        if (mineOnly && mineFirstFor && c.created_by !== mineFirstFor) return false;
         const okQuery =
           !q ||
           [c.plate, c.customer_name ?? '', c.insurer ?? ''].some((f) => f.includes(q));
         return okBranch && okQuery;
       })
       .sort((a, b) => openedTime(b) - openedTime(a));
-  }, [cases, branchFilter, query]);
+  }, [cases, branchFilter, query, mineOnly, mineFirstFor]);
 
   const showBranchFilter = branches.length > 1;
   // Open cases per branch on each tab, total on "הכל" (2026-10-09) — same as
@@ -124,6 +130,17 @@ export function CasesMasterDetail({
           <div className="flex-1 min-w-0">
             <SearchField value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
+          {mineFirstFor && (
+            <button
+              type="button"
+              onClick={() => setMineOnly((v) => !v)}
+              className={`h-11 px-4 rounded-md border-[1.5px] text-sm font-semibold whitespace-nowrap ${
+                mineOnly ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-700 border-stone-300'
+              }`}
+            >
+              {mineOnly ? '✓ תיקים שפתחתי' : 'תיקים שפתחתי'}
+            </button>
+          )}
           {showBranchFilter && (
             <SegmentedControl
               options={branchOptions}

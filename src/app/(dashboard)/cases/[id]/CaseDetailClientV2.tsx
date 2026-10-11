@@ -334,6 +334,32 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         });
       });
 
+    // Edits and documents, with who did them (2026-10-11).
+    const FIELD_LABEL: Record<string, string> = {
+      notes: 'הערות', customer_name: 'שם לקוח', phone: 'טלפון', insurance_company: 'חברת ביטוח',
+      appraiser_name: 'שמאי', claim_number: 'מספר תביעה', event_date: 'תאריך אירוע', painter_status: 'סטטוס פחח',
+    };
+    auditEvents
+      .filter((e) => e.action === 'CASE_UPDATED' || e.action === 'DOCUMENT_UPLOADED' || e.action === 'DOCUMENT_DELETED')
+      .forEach((e) => {
+        const payload = (e.payload ?? {}) as { fields?: string[]; file_name?: string };
+        const label =
+          e.action === 'CASE_UPDATED'
+            ? `עודכן: ${(payload.fields ?? []).map((f) => FIELD_LABEL[f] ?? 'פרטי תיק').filter((v, i, a) => a.indexOf(v) === i).join(', ') || 'פרטי תיק'}`
+            : e.action === 'DOCUMENT_UPLOADED'
+              ? `הועלה מסמך${payload.file_name ? `: ${payload.file_name}` : ''}`
+              : 'נמחק מסמך';
+        items.push({
+          id: e.id,
+          action: e.action,
+          stepLabel: label,
+          timestamp: e.created_at,
+          type: 'case',
+          performedBy: e.user_id ? (userNames[e.user_id] ?? null) : null,
+          userId: e.user_id,
+        });
+      });
+
     effectiveSteps
       .filter((s) => s.state === 'DONE' && s.completed_at)
       .forEach((s) => {

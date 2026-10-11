@@ -93,6 +93,19 @@ export async function updateCaseDetails(
     }
   }
 
+  // Recorded in the case history ("מה נעשה בתיק"), so it shows who changed
+  // what — Amit (2026-10-11): office staff may edit, but it must be visible.
+  const changed = [...Object.keys(safeCaseUpdates), ...Object.keys(safeCarUpdates)];
+  if (changed.length > 0) {
+    await supabase.from('audit_events').insert({
+      entity_type: 'CASE',
+      entity_id: caseId,
+      action: 'CASE_UPDATED',
+      user_id: user.id,
+      payload: { fields: changed },
+    } as never);
+  }
+
   revalidatePath(`/cases/${caseId}`);
   return { success: true };
 }

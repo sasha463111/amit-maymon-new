@@ -85,7 +85,7 @@ supabase/
 | Role | שם | גישה | מה הם עושים |
 |------|----|------|-------------|
 | `SERVICE_MANAGER` | ערן | סניף שלו (array) | מנהל workflow מקצועי: FixCar, אומדן, שמאי, כניסה לעבודה, QC, שטיפה; עונה על בקשות פחח |
-| `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; עכשיו יכולות לעבוד עם 2+ סניפים עם טאבים. **בפרטי תיק: רק שדה "הערות" פתוח לעריכה** (2026-10-06), שאר הפרטים נעולים |
+| `OFFICE` | אילנה, אביה | **1+ סניפים** (multi-branch) | סגירה אדמיניסטרטיבית: מסמכים, פרופורמה, טפסי סגירה; ניהול הפניות; עכשיו יכולות לעבוד עם 2+ סניפים עם טאבים. **בפרטי תיק: רק שדה "הערות" פתוח לעריכה** (2026-10-06), שאר הפרטים נעולים. **(2026-10-11)** לשונית "תיקים" בתפריט עם מסנן "תיקים שפתחתי" (פעיל כברירת מחדל); עריכת הערות/פרטים ומסמכים נרשמים בהיסטוריית התיק עם שם המבצע (`CASE_UPDATED`/`DOCUMENT_*` ב-`audit_events`) |
 | `CEO` | עמית | **כל הסניפים** | אישורים + גישה לכל + מחיקת תיקים + הגדרות; מקבל **כל** התראה במערכת כולל פעולות שהוא עצמו ביצע |
 | `PAINTER` | ארז | סניף שלו | צ'קליסט פחח (נכנס לעבודה, חלקים), בקשות תוספות, תוספות פחחות |
 | `SERVICE_ADVISOR` | כנרת | סניף שלה, או כל הסניפים | יועצת פחח: מעריכה אך עורכת workflow steps (עלאות קבצים, התקדמות שלבים), אך לא פרטי תיק (read-only on case details) |
@@ -875,6 +875,7 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 | משרד סגירה | cases for closure (`READY_FOR_OFFICE` + its reminder), personal notes |
 | פחח | entered work, parts arrived, "רכב ממתין לעבודה" reminder, answers to their requests, personal notes |
 
+- **Painter requests in the bell:** stay in "לטיפולי" for every advisor while the request is PENDING (not by read state), tagged "מיועד ל: <יועץ מטפל>"; once handled they move to updates with "✓ טופל".
 - **Push = row.** `sendPushToUser()` without `{direct:true}` is a no-op; all pushes go through `trg_dispatch_ceo_push` → `/api/push/dispatch` for every active user with a device. Never push inline again — insert the notification and let the dispatcher push it.
 - **New notification?** Give it a distinct `type` (or a title the `notification_kind` CASE recognises) and add it to the rule. A title the CASE doesn't know falls into `CASE_FLOW` (advisors + CEO).
 - Kinds are partly recognised by **title text** (many rows are type `OTHER`) — renaming a title in code can move it to another kind. Prefer adding a real type.
