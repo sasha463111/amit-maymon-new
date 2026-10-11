@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
+import { CaseSearch } from '@/components/CaseSearch';
 import { SendReportButton } from '@/components/SendReportButton';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
@@ -177,6 +178,7 @@ export default async function DashboardLayout({
                 </>
               )}
             </div>
+            {!isPreview && <CaseSearch />}
             <NotificationsBell userId={user.id} role={actualRole} />
             <SendReportButton isCeo={actualRole === 'CEO'} />
             <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0" title="התנתק">
