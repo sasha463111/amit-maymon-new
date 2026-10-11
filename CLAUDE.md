@@ -860,6 +860,25 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 
 ---
 
+### 🔴 Standing Rule #3b: Who gets which notification is decided in ONE place — by job (2026-10-11)
+
+**Supersedes the routing table below wherever they differ.** Amit's spec: every person gets only what belongs to their job; what isn't theirs is **not created at all** (not merely hidden).
+
+- **Job = role + office function** (`src/lib/staffJobs.ts`): יועץ/ת שירות, מנהל שירות, **משרד הפניות** (OFFICE + `office_function='REFERRALS'`: אביה, אילנית), **משרד סגירה** (OFFICE + `'CLOSURE'`: אילנה), פחח, מנכ"ל. Chosen in Settings when creating/editing a user — that alone gives a new user the right notifications. Referrals office lands on `/referrals`.
+- **The rule** lives in the DB (migration `20261011140000_notifications_by_role.sql`): `notification_kind(type,title)` + `notification_is_relevant(role, office_function, kind)`, enforced by `trg_0_relevant_notifications_only` (BEFORE INSERT → row dropped). Covers every source: app code, cron, the CEO fan-out.
+
+| Job | Gets |
+|---|---|
+| מנכ"ל | everything |
+| יועץ/מנהל שירות | painter requests, personal notes, new case, all case-flow (approvals, rejections, blocked, wash, wheels, extras, closed), entered work, parts arrived |
+| משרד הפניות | referral follow-ups (`REFERRAL_FOLLOW_UP`), personal notes |
+| משרד סגירה | cases for closure (`READY_FOR_OFFICE` + its reminder), personal notes |
+| פחח | entered work, parts arrived, "רכב ממתין לעבודה" reminder, answers to their requests, personal notes |
+
+- **Push = row.** `sendPushToUser()` without `{direct:true}` is a no-op; all pushes go through `trg_dispatch_ceo_push` → `/api/push/dispatch` for every active user with a device. Never push inline again — insert the notification and let the dispatcher push it.
+- **New notification?** Give it a distinct `type` (or a title the `notification_kind` CASE recognises) and add it to the rule. A title the CASE doesn't know falls into `CASE_FLOW` (advisors + CEO).
+- Kinds are partly recognised by **title text** (many rows are type `OTHER`) — renaming a title in code can move it to another kind. Prefer adding a real type.
+
 ### 🔴 Standing Rule #3: Role-Based Notification Routing (2026-09-03)
 
 **Policy:** All notifications in the system MUST use `notifyRelevantParties()` router instead of `pushToOverseers()` or direct fan-out.

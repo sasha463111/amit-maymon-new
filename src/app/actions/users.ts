@@ -44,6 +44,8 @@ export interface SystemUser {
   branch_names: string[]; // Corresponding branch names for UI display
   is_active: boolean;
   is_bodywork_advisor: boolean;
+  /** OFFICE only: REFERRALS ("משרד הפניות") / CLOSURE ("משרד סגירה"). */
+  office_function: 'REFERRALS' | 'CLOSURE' | null;
   /** Login address — Amit (2026-10-11) needs it to manage people. */
   email: string | null;
   last_sign_in_at: string | null;
@@ -58,7 +60,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
   const { data, error: queryError } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor')
+    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor, office_function')
     .order('full_name');
 
   if (queryError) return { data: [], error: queryError.message };
@@ -70,6 +72,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     branch_ids: string[];
     is_active: boolean;
     is_bodywork_advisor: boolean;
+    office_function: 'REFERRALS' | 'CLOSURE' | null;
   }>;
 
   // Fetch all branches for display mapping
@@ -96,6 +99,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     branch_names: (r.branch_ids ?? []).map((bid) => branchNameMap.get(bid) ?? bid),
     is_active: r.is_active,
     is_bodywork_advisor: r.is_bodywork_advisor,
+    office_function: r.office_function ?? null,
     email: authById.get(r.id)?.email ?? null,
     last_sign_in_at: authById.get(r.id)?.last_sign_in_at ?? null,
     has_push: pushSet.has(r.id),
@@ -109,7 +113,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
 export async function updateSystemUser(
   userId: string,
-  updates: Partial<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string }>
+  updates: Partial<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string; office_function: 'REFERRALS' | 'CLOSURE' | null }>
 ) {
   const { error, supabase, userId: callerId } = await requireCeo();
   if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
@@ -127,6 +131,9 @@ export async function updateSystemUser(
       return { error: 'CEO לא משויך לסניף.' };
     }
   }
+
+  // The office function only means something for OFFICE.
+  if (updates.role !== undefined && updates.role !== 'OFFICE') updates = { ...updates, office_function: null };
 
   const { error: updateError } = await supabase
     .from('profiles')
@@ -190,6 +197,7 @@ export async function createNewSystemUser(params: {
   email: string;
   full_name: string;
   role: UserRole;
+  office_function?: 'REFERRALS' | 'CLOSURE' | null;
   branch_ids: string[];
 }) {
   const { error, supabase, userId: callerId } = await requireCeo();
@@ -250,6 +258,8 @@ export async function createNewSystemUser(params: {
         branch_ids,
         is_active: true,
         is_bodywork_advisor: false,
+        // Decides which notifications an office user gets (staffJobs.ts).
+        office_function: role === 'OFFICE' ? params.office_function ?? null : null,
       } as any
     );
 

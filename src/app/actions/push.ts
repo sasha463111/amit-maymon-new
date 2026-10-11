@@ -229,21 +229,19 @@ export async function sendTestPushToSelf(): Promise<{ ok?: boolean; error?: stri
 export async function sendPushToUser(
   userId: string,
   payload: { title: string; body?: string; url?: string; tag?: string },
-  // CEOs are pushed ONLY by /api/push/dispatch, which trg_dispatch_ceo_push
-  // calls once per notification row. Every other caller that reaches a CEO is
-  // skipped here, centrally, so no code path — present or future — can push
-  // a CEO twice for one event. `direct` is for the dispatcher and the
-  // self-test only.
+  // EVERYONE is pushed ONLY by /api/push/dispatch, which trg_dispatch_ceo_push
+  // calls once per notification row (migration 20261011140000; until then it
+  // was CEOs only). So a push exists exactly when a notification row exists —
+  // and a row exists only if it is relevant to the person's job
+  // (notification_is_relevant). Every other caller is a no-op here, centrally:
+  // the old inline pushes reached people who had no row at all (Amit,
+  // 2026-10-11: "everyone gets the same notifications"). `direct` is for the
+  // dispatcher and the self-test only.
   opts?: { direct?: boolean },
 ) {
+  if (!opts?.direct) return { sent: 0, failed: 0 };
   configureVapid();
   if (!vapidConfigured) return { sent: 0, failed: 0 };
-
-  if (!opts?.direct) {
-    const roleDb = getServiceClient() ?? (await createClient());
-    const { data: prof } = await roleDb.from('profiles').select('role').eq('id', userId).maybeSingle();
-    if ((prof as { role: string } | null)?.role === 'CEO') return { sent: 0, failed: 0 };
-  }
 
   // Read subscriptions with the service-role client so we can see the
   // RECIPIENT's subscriptions even when the acting user isn't them (and isn't a

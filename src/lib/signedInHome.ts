@@ -22,10 +22,10 @@ export async function getSignedInHome(): Promise<string | null> {
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data } = await supabase.from('profiles').select('role, is_active').eq('id', user.id).maybeSingle();
-    const profile = data as { role: string; is_active: boolean | null } | null;
+    const { data } = await supabase.from('profiles').select('role, is_active, office_function').eq('id', user.id).maybeSingle();
+    const profile = data as { role: string; is_active: boolean | null; office_function: string | null } | null;
     if (profile && profile.is_active === false) return null;
-    return homeForRole(profile?.role);
+    return homeForRole(profile?.role, profile?.office_function);
   } catch {
     return null;
   }

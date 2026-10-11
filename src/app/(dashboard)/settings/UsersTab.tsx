@@ -8,14 +8,7 @@ import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
 import { formatDateTime } from '@/lib/dates';
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  CEO: 'מנכ"ל',
-  SERVICE_MANAGER: 'מנהל שירות',
-  OFFICE: 'משרד',
-  PAINTER: 'פחח',
-  SERVICE_ADVISOR: 'יועצת שירות',
-};
+import { STAFF_JOBS, jobByKey, jobFor, jobLabel } from '@/lib/staffJobs';
 
 interface Branch {
   id: string;
@@ -34,7 +27,7 @@ export function UsersTab({
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
+  const [draft, setDraft] = useState<{ role: UserRole; office_function: 'REFERRALS' | 'CLOSURE' | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -55,7 +48,7 @@ export function UsersTab({
 
   function startEdit(u: SystemUser) {
     setEditingId(u.id);
-    setDraft({ role: u.role, branch_ids: u.branch_ids, is_active: u.is_active, full_name: u.full_name });
+    setDraft({ role: u.role, office_function: u.office_function, branch_ids: u.branch_ids, is_active: u.is_active, full_name: u.full_name });
     setError(null);
   }
 
@@ -75,6 +68,7 @@ export function UsersTab({
           ? {
               ...x,
               role: draft.role,
+              office_function: draft.role === 'OFFICE' ? draft.office_function : null,
               branch_ids: draft.branch_ids,
               branch_names: draft.branch_ids.map((bid) => branches.find((b) => b.id === bid)?.name ?? bid),
               is_active: draft.is_active,
@@ -172,12 +166,17 @@ export function UsersTab({
                     <div>
                       <label className="text-[10px] uppercase text-gray-400">תפקיד</label>
                       <select
-                        value={draft.role}
-                        onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
+                        value={jobFor(draft.role, draft.office_function)?.key ?? ''}
+                        onChange={(e) => {
+                          const j = jobByKey(e.target.value);
+                          if (j) setDraft({ ...draft, role: j.role, office_function: j.officeFunction });
+                        }}
                         className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
                       >
-                        {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
+                        {STAFF_JOBS.map((j) => (
+                          <option key={j.key} value={j.key}>
+                            {j.label}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -239,7 +238,7 @@ export function UsersTab({
                       <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
                       <UserMeta u={u} />
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {ROLE_LABELS[u.role] ?? u.role}
+                        {jobLabel(u.role, u.office_function)}
                         {u.branch_names.length > 0 && ` · ${u.branch_names.join(', ')}`}
                       </p>
                     </div>
@@ -313,16 +312,21 @@ export function UsersTab({
                   <td className="px-3 py-2">
                     {isEditing && draft ? (
                       <select
-                        value={draft.role}
-                        onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
+                        value={jobFor(draft.role, draft.office_function)?.key ?? ''}
+                        onChange={(e) => {
+                          const j = jobByKey(e.target.value);
+                          if (j) setDraft({ ...draft, role: j.role, office_function: j.officeFunction });
+                        }}
                         className="border border-gray-300 rounded px-2 py-1 text-sm"
                       >
-                        {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
+                        {STAFF_JOBS.map((j) => (
+                          <option key={j.key} value={j.key}>
+                            {j.label}
+                          </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="text-gray-700">{ROLE_LABELS[u.role] ?? u.role}</span>
+                      <span className="text-gray-700">{jobLabel(u.role, u.office_function)}</span>
                     )}
                   </td>
                   <td className="px-3 py-2">

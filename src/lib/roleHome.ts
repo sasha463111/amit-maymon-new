@@ -10,6 +10,8 @@ export const ROLE_HOME: Record<UserRole, string> = {
   SERVICE_ADVISOR: '/cases',
 };
 
-export function homeForRole(role: string | null | undefined): string {
+export function homeForRole(role: string | null | undefined, officeFunction?: string | null): string {
+  // "משרד הפניות" works on referrals, not on closure (staffJobs.ts).
+  if (role === 'OFFICE' && officeFunction === 'REFERRALS') return '/referrals';
   return ROLE_HOME[(role ?? 'SERVICE_ADVISOR') as UserRole] ?? '/cases';
 }

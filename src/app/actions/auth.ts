@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
-import { ROLE_HOME } from '@/lib/roleHome';
+import { homeForRole } from '@/lib/roleHome';
 import { getSignedInHome } from '@/lib/signedInHome';
 
 export async function loginAction(credentials: { email: string; rememberMe?: boolean }) {
@@ -43,11 +43,11 @@ export async function loginAction(credentials: { email: string; rememberMe?: boo
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('role, is_active')
+    .select('role, is_active, office_function')
     .eq('id', authData.user.id)
     .single();
 
-  const profile = profileData as { role: string; is_active: boolean } | null;
+  const profile = profileData as { role: string; is_active: boolean; office_function: string | null } | null;
 
   // Enforce account deactivation at the gate. A CEO disabling a user via
   // settings must actually lock them out — the Supabase session alone isn't
@@ -58,7 +58,7 @@ export async function loginAction(credentials: { email: string; rememberMe?: boo
   }
 
   const role = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
-  redirect(ROLE_HOME[role]);
+  redirect(homeForRole(role, profile?.office_function));
 }
 
 export async function logoutAction() {

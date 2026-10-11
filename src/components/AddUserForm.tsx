@@ -4,13 +4,11 @@ import { useState } from 'react';
 import { Plus, Mail, User, Shield } from 'lucide-react';
 import { createNewSystemUser, type SystemUser } from '@/app/actions/users';
 import type { UserRole } from '@/types/database';
+import { STAFF_JOBS, jobByKey } from '@/lib/staffJobs';
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'SERVICE_MANAGER', label: 'מנהל שירות' },
-  { value: 'OFFICE', label: 'משרד' },
-  { value: 'PAINTER', label: 'פחח' },
-  { value: 'SERVICE_ADVISOR', label: 'יועצת שירות' },
-];
+// A job = role (+ which office). It decides pages, permissions AND which
+// notifications the person gets — see src/lib/staffJobs.ts.
+const JOB_OPTIONS = STAFF_JOBS.filter((j) => j.role !== 'CEO');
 
 interface Branch {
   id: string;
@@ -27,8 +25,11 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
     email: '',
     full_name: '',
     role: 'OFFICE' as UserRole,
+    office_function: 'REFERRALS' as 'REFERRALS' | 'CLOSURE' | null,
     branch_ids: [] as string[],
   });
+  const jobKey = JOB_OPTIONS.find((j) => j.role === formData.role && j.officeFunction === formData.office_function)?.key ?? '';
+  const job = jobByKey(jobKey);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -48,6 +49,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
         email: '',
         full_name: '',
         role: 'OFFICE',
+        office_function: 'REFERRALS',
         branch_ids: [],
       });
       onUserCreated?.({ id: res.userId, email: res.email });
@@ -66,7 +68,6 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
     }));
   };
 
-  const selectedRole = ROLE_OPTIONS.find((r) => r.value === formData.role);
   const isCeo = formData.role === 'CEO';
 
   return (
@@ -135,18 +136,22 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
               <div className="relative">
                 <Shield size={16} className="absolute right-3 top-2.5 text-gray-400" />
                 <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole, branch_ids: [] })}
+                  value={jobKey}
+                  onChange={(e) => {
+                    const j = jobByKey(e.target.value);
+                    if (j) setFormData({ ...formData, role: j.role, office_function: j.officeFunction, branch_ids: [] });
+                  }}
                   className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm appearance-none bg-white"
                   disabled={loading}
                 >
-                  {ROLE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+                  {JOB_OPTIONS.map((opt) => (
+                    <option key={opt.key} value={opt.key}>
                       {opt.label}
                     </option>
                   ))}
                 </select>
               </div>
+              {job && <p className="text-xs text-gray-500 mt-1">🔔 יקבל/תקבל התראות על: {job.notifications}</p>}
             </div>
 
             {/* Branches (only if not CEO) */}

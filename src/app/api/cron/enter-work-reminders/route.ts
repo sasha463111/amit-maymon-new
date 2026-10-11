@@ -644,7 +644,8 @@ async function runReferralFollowUpReminders(supabase: ServiceClient, todayIso: s
     for (const userId of recipients) {
       const { error: notifErr } = await supabase.from('notifications').insert({
         user_id: userId,
-        type: 'OTHER',
+        // Own type so it lands in "לטיפולי" of the referrals office.
+        type: 'REFERRAL_FOLLOW_UP',
         title,
         body,
         action_url: url,

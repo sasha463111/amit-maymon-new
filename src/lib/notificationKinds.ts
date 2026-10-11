@@ -12,7 +12,9 @@ const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
   CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE'],
   SERVICE_MANAGER: ['CEO_REJECTED', 'BLOCKED_ACTION', 'PAINTER_REQUEST', 'EXTRA_CREATED', 'DIRECT_NOTE'],
   SERVICE_ADVISOR: ['PAINTER_REQUEST', 'CEO_REJECTED', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
-  OFFICE: ['READY_FOR_OFFICE', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
+  // Referrals office and closure office share the role; each only ever
+  // receives its own kind (notification_is_relevant in the DB).
+  OFFICE: ['READY_FOR_OFFICE', 'REFERRAL_FOLLOW_UP', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   PAINTER: ['PAINTER_REQUEST', 'DIRECT_NOTE'],
 };
 

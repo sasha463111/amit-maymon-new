@@ -9,6 +9,7 @@ import { SendReportButton } from '@/components/SendReportButton';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
 import { SidebarNav } from '@/components/SidebarNav';
+import { jobLabel } from '@/lib/staffJobs';
 import { LogOut, Eye } from 'lucide-react';
 import { getViewAsState } from '@/app/actions/users';
 import { StopViewAsButton } from './StopViewAsButton';
@@ -75,11 +76,11 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_ids, is_active')
+    .select('full_name, role, branch_ids, is_active, office_function')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
   // Mid-session deactivation: if a CEO disabled this account, kick them out
@@ -104,7 +105,8 @@ export default async function DashboardLayout({
         { label: 'התראות', href: '/notifications' },
       ]
     : ROLE_LINKS[role];
-  const roleLabel = ROLE_LABEL[role];
+  // "משרד הפניות" / "משרד סגירה" instead of a bare "משרד" (staffJobs.ts).
+  const roleLabel = viewAs ? ROLE_LABEL[role] : jobLabel(role, profile?.office_function);
 
   // Unread notes/questions addressed to me — the badge on "הודעות".
   const { count: unreadMessages } = isPreview
