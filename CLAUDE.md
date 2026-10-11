@@ -609,6 +609,7 @@ Agent(qa-master-tester)
 7. **הוספת עמוד** → לעדכן navigation ב-`layout.tsx` לפי role
 8. **התראות שמצביעות על משהו ספציפי** → להשתמש בדפוס `?highlight=<id>` הקיים
 9. **לפני פוש לפרודקשן** → `npx tsc --noEmit` + `npm run build` + בדיקה חיה
+10. **העלאת קובץ דרך Server Action** → תמיד `await shrinkImage(file)` (`src/lib/shrinkImage.ts`) לפני `formData.append`. בקשה לשרת מוגבלת ל-4.5MB ב-Vercel; תמונת מצלמה גדולה יותר פשוט נדחתה (נסיה, 2026-10-11: "מצלמים וקובץ לא עולה" — מתוך 152 מסמכים אף אחד לא מעל 4.45MB). כמה תמונות בבקשה אחת → `{ maxSide: 1600 }`
 
 </important>
 

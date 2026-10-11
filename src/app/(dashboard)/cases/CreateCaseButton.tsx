@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
 import { DateField } from '@/components/DateField';
 import type { ClaimType, SubClaimType } from '@/types/database';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 interface Branch {
   id: string;
@@ -231,7 +232,7 @@ export function CreateCaseButton({
       for (const file of files) {
         const formData = new FormData();
         formData.append('case_id', newCaseId);
-        formData.append('file', file);
+        formData.append('file', await shrinkImage(file));
         const uploadRes = await uploadCaseDocument(formData);
         if (uploadRes?.error) {
           failedUploads.push(`${file.name}: ${uploadRes.error}`);

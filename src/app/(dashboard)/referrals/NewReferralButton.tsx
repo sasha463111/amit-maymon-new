@@ -7,6 +7,7 @@ import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2, Check } from 'lucide-react';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 interface Branch {
   id: string;
@@ -184,7 +185,7 @@ export function NewReferralButton({
       for (const file of files) {
         const fd = new FormData();
         fd.append('referral_id', referralId);
-        fd.append('file', file);
+        fd.append('file', await shrinkImage(file));
         const up = await uploadReferralDocument(fd);
         if (up?.error) failedUploads.push(`${file.name}: ${up.error}`);
       }

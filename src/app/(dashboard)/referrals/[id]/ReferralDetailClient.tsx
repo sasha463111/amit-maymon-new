@@ -14,6 +14,7 @@ import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { DateField } from '@/components/DateField';
 import type { Referral, ReferralDocument } from '@/types/database';
 import { formatDateTime } from '@/lib/dates';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 const STATUS_TAG_LABELS: Record<ReferralStatusTag, string> = {
   AWAITING_REPLACEMENT_CAR: 'ממתין לרכב חלופי',
@@ -262,7 +263,7 @@ export function ReferralDetailClient({
     for (const file of files) {
       const fd = new FormData();
       fd.append('referral_id', referral.id);
-      fd.append('file', file);
+      fd.append('file', await shrinkImage(file));
       const res = await uploadReferralDocument(fd);
       if (res?.error) {
         setDocumentError(res.error);

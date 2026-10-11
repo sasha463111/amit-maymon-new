@@ -17,6 +17,7 @@ import { TimelineSection } from './TimelineSection';
 import { CaseDetailsSection } from './CaseDetailsSection';
 import { WorkflowStepsSection } from './WorkflowStepsSection';
 import { PainterRequestsSection, type PainterRequestRow } from './PainterRequestsSection';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 type StepRow = {
   id: string;
@@ -211,7 +212,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       files.map(async (file) => {
         const formData = new FormData();
         formData.append('case_id', caseId);
-        formData.append('file', file);
+        formData.append('file', await shrinkImage(file));
         return uploadCaseDocument(formData);
       })
     );

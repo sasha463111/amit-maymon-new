@@ -8,6 +8,7 @@ import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 type PainterRequest = {
   id: string;
@@ -229,7 +230,7 @@ export function PainterCaseClient({
       files.map(async (file) => {
         const formData = new FormData();
         formData.append('case_id', caseId);
-        formData.append('file', file);
+        formData.append('file', await shrinkImage(file));
         return uploadCaseDocument(formData);
       })
     );
@@ -310,7 +311,7 @@ export function PainterCaseClient({
       let formData: FormData | undefined;
       if (requestImages.length > 0) {
         formData = new FormData();
-        requestImages.forEach((f) => formData!.append('images', f));
+        for (const f of requestImages) formData.append('images', await shrinkImage(f, { maxSide: 1600 }));
       }
 
       const res = await createPainterRequest(caseId, requestDesc, requestType, formData);

@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
 import { PARTS_STATUS_LABELS } from '@/types/database';
 import type { CaseDocument } from './DocumentsSection';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 /**
  * Extracted from CaseDetailClientV2.tsx — the largest, highest-effort step
@@ -536,7 +537,7 @@ export function WorkflowStepsSection({
         if (!wheelsFile) { setStepError('נדרש קובץ'); setWheelsUploading(false); return; }
         const formData = new FormData();
         formData.append('case_id', caseId);
-        formData.append('file', wheelsFile);
+        formData.append('file', await shrinkImage(wheelsFile));
         formData.append('document_type', 'WHEELS_CHECK');
         const uploadRes = await uploadCaseDocument(formData);
         if (uploadRes?.error) {
@@ -593,7 +594,7 @@ export function WorkflowStepsSection({
     try {
       const formData = new FormData();
       formData.append('case_id', caseId);
-      formData.append('file', file);
+      formData.append('file', await shrinkImage(file));
       formData.append('document_type', 'ESTIMATE');
       const uploadRes = await uploadCaseDocument(formData);
       if (uploadRes?.error) {
@@ -652,7 +653,7 @@ export function WorkflowStepsSection({
 
       const formData = new FormData();
       formData.append('case_id', caseId);
-      formData.append('file', file);
+      formData.append('file', await shrinkImage(file));
       formData.append('document_type', 'ESTIMATE');
       const uploadRes = await uploadCaseDocument(formData);
       if (uploadRes?.error) {
@@ -768,7 +769,7 @@ export function WorkflowStepsSection({
     try {
       const formData = new FormData();
       formData.append('case_id', caseId);
-      formData.append('file', finalEstimateFile);
+      formData.append('file', await shrinkImage(finalEstimateFile));
       formData.append('document_type', 'FINAL_ESTIMATE');
       const uploadRes = await uploadCaseDocument(formData);
       if (uploadRes?.error) {

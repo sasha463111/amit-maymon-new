@@ -10,6 +10,7 @@ import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
 // professional-workflow STEP_LABELS (types/database.ts's
@@ -164,7 +165,7 @@ export function ClosureDetailClient({
       files.map(async (file) => {
         const formData = new FormData();
         formData.append('case_id', caseId);
-        formData.append('file', file);
+        formData.append('file', await shrinkImage(file));
         return uploadCaseDocument(formData);
       })
     );
