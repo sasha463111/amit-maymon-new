@@ -2,9 +2,10 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 
 // "יועץ מטפל" for the painters (Amit, 2026-10-11: painters should see which
 // service advisor handled the case, so they know whom to ask). There is no
-// assignment field — cases are opened by the office — so it is derived from
-// who completed the case's professional steps: the SERVICE_ADVISOR /
-// SERVICE_MANAGER with the most steps first. No steps yet → no advisor.
+// assignment field — cases are opened by the office, which doesn't know who is
+// free — so it is derived: the FIRST service advisor / manager to complete a
+// professional step owns the case (Amit: "מי שייגע בתיק ראשון שהוא ישוייך").
+// One name, and it never changes after that. No steps yet → no advisor.
 //
 // Read with the service client because painters can't read other users'
 // profiles. Callers must pass only case ids the user is allowed to see
@@ -29,12 +30,12 @@ export async function getCaseAdvisors(caseIds: string[]): Promise<Map<string, st
 
   const { data: steps } = await db
     .from('case_workflow_steps')
-    .select('run_id, completed_by')
+    .select('run_id, completed_by, completed_at')
     .eq('state', 'DONE')
     .neq('step_key', 'OPEN_CASE')
     .not('completed_by', 'is', null)
     .in('run_id', Array.from(caseByRun.keys()));
-  const stepRows = (steps ?? []) as { run_id: string; completed_by: string }[];
+  const stepRows = (steps ?? []) as { run_id: string; completed_by: string; completed_at: string | null }[];
   const people = Array.from(new Set(stepRows.map((s) => s.completed_by)));
   if (people.length === 0) return result;
 
@@ -45,17 +46,16 @@ export async function getCaseAdvisors(caseIds: string[]): Promise<Map<string, st
       .map((p) => [p.id, p.full_name || '—']),
   );
 
-  const counts = new Map<string, Map<string, number>>();
-  for (const s of stepRows) {
-    const caseId = caseByRun.get(s.run_id);
-    const name = advisorName.get(s.completed_by);
+  // Earliest advisor step per case wins.
+  const first = new Map<string, { at: string; name: string }>();
+  for (const st of stepRows) {
+    const caseId = caseByRun.get(st.run_id);
+    const name = advisorName.get(st.completed_by);
     if (!caseId || !name) continue;
-    const m = counts.get(caseId) ?? new Map<string, number>();
-    m.set(name, (m.get(name) ?? 0) + 1);
-    counts.set(caseId, m);
+    const at = st.completed_at ?? '9999';
+    const cur = first.get(caseId);
+    if (!cur || at < cur.at) first.set(caseId, { at, name });
   }
-  for (const [caseId, m] of Array.from(counts.entries())) {
-    result.set(caseId, Array.from(m.entries()).sort((a, b) => b[1] - a[1]).map(([n]) => n));
-  }
+  for (const [caseId, f] of Array.from(first.entries())) result.set(caseId, [f.name]);
   return result;
 }
