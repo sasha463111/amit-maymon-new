@@ -71,27 +71,7 @@ export function CasesMasterDetail({
   const pathname = usePathname();
   const [branchFilter, setBranchFilter] = useState('all');
 
-  // The case list is loaded by the cases LAYOUT, and a Next.js layout is not
-  // re-rendered when you move between pages inside it — so the list stayed
-  // exactly as it was when first opened. Two real reports came from that on
-  // 2026-10-07: Eran ("cases are opened and I see nothing" — new cases did
-  // not appear until a manual reload) and Amit (a card still showed
-  // "2 התראות לטיפול" for notifications he had already read, and opening the
-  // case showed none). Refresh when the tab comes back into view, and every
-  // 45 seconds while it is visible.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === 'visible') router.refresh();
-    };
-    const timer = window.setInterval(refresh, 45_000);
-    document.addEventListener('visibilitychange', refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('focus', refresh);
-    };
-  }, [router]);
+  // Auto-refresh: <AutoRefresh /> in (dashboard)/layout.tsx covers every page.
   const [query, setQuery] = useState('');
 
   // A case detail is open when the path is /cases/<id> (not the index, not archive).

@@ -4,6 +4,7 @@ import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { CaseSearch } from '@/components/CaseSearch';
+import { AutoRefresh } from '@/components/AutoRefresh';
 import { SendReportButton } from '@/components/SendReportButton';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
@@ -136,6 +137,7 @@ export default async function DashboardLayout({
     <div className="min-h-screen flex flex-col bg-surface">
       {/* Real-time sync for profile changes */}
       {!isPreview && <RealtimeProfileSync userId={user.id} />}
+      {!isPreview && <AutoRefresh />}
 
       {isPreview && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-sm text-amber-900">
