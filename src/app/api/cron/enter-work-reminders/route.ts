@@ -44,7 +44,12 @@ import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
  * wrong dates is worse than leaving it to be filled in.
  */
 
-const REMINDER_INTERVAL_MS = 110 * 60 * 1000; // ~110 min: under 2h so drift never skips a cycle
+// "רכב ממתין לעבודה": ONCE A DAY PER CAR, in the morning (2026-10-11). It
+// used to repeat every ~110 min to every painter; with the scheduler fixed
+// (pg_cron, every 30 min) that would have flooded the painters, who already
+// complained about the number of notifications. Sent on the first run of the
+// work day before PAINTER_REMINDER_LAST_HOUR, at most once per Israel date.
+const PAINTER_REMINDER_LAST_HOUR = 12;
 const ESCALATION_INTERVAL_MS = 60 * 60 * 1000; // 1h, as requested for items 2 and 3
 // Upper bound so a genuinely old, abandoned PENDING row (weeks-old — someone
 // never followed up, or the status just never got updated) doesn't escalate
@@ -55,7 +60,6 @@ const ESCALATION_INTERVAL_MS = 60 * 60 * 1000; // 1h, as requested for items 2 a
 // beyond that it's stale data, not an active thing to escalate about.
 const MAX_ESCALATION_AGE_MS = 48 * 60 * 60 * 1000;
 const WORKDAY_START_HOUR = 9;
-const WORKDAY_END_HOUR = 17;
 
 // Extra closed dates beyond Fri/Sat: major Jewish holidays (Israel
 // observance — Rosh Hashana is 2 days even in Israel, Shmini
@@ -355,7 +359,7 @@ function israelNow(): { hour: number; weekday: number; isoDate: string } {
 type ServiceClient = NonNullable<ReturnType<typeof getServiceClient>>;
 
 /** Item 1 — ENTER_WORK reminder. Gated by work-hours/weekend/holiday by the caller. */
-async function runEnterWorkReminders(supabase: ServiceClient) {
+async function runEnterWorkReminders(supabase: ServiceClient, todayIso: string) {
   // Candidates: ENTER_WORK is DONE (painters were already notified once) but
   // painter_entered_work_at is still null (nobody's acknowledged) — "until
   // the car changes status" per the request.
@@ -390,12 +394,14 @@ async function runEnterWorkReminders(supabase: ServiceClient) {
     .is('deleted_at', null)
     .is('painter_entered_work_at', null);
 
-  const cutoff = Date.now() - REMINDER_INTERVAL_MS;
+  // Israel date of the last reminder, so "once a day" follows the local day.
+  const israelDate = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
   const due = ((candidateCases ?? []) as Array<{
     id: string; branch_id: string; customer_name: string | null; case_key: string | null;
     painter_reminder_sent_at: string | null;
     cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
-  }>).filter((c) => !c.painter_reminder_sent_at || new Date(c.painter_reminder_sent_at).getTime() < cutoff);
+  }>).filter((c) => !c.painter_reminder_sent_at || israelDate(c.painter_reminder_sent_at) !== todayIso);
 
   let notified = 0;
   for (const c of due) {
@@ -722,23 +728,34 @@ async function runBackupEmails(supabase: ReturnType<typeof getServiceClient> & o
 }
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
+
+  // Two callers: the Supabase pg_cron job (every 30 min — the real
+  // scheduler since 2026-10-11, migration 20261011220000) sends the Vault
+  // secret it already uses for push; the old GitHub Actions workflow (kept as
+  // a fallback — GitHub ran it only 3–4 times a day) sends CRON_SECRET. Every
+  // round is idempotent, so both running is harmless.
+  const cronSecret = process.env.CRON_SECRET;
+  const bearerOk = !!cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`;
+  let vaultOk = false;
+  const dispatchSecret = req.headers.get('x-dispatch-secret');
+  if (!bearerOk && dispatchSecret) {
+    const { data } = await supabase.rpc('check_push_dispatch_secret' as never, { p_secret: dispatchSecret } as never);
+    vaultOk = data === true;
+  }
+  if (!bearerOk && !vaultOk) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 
   const { hour, weekday, isoDate } = israelNow();
   const isWeekend = weekday === 5 || weekday === 6; // Fri/Sat
   const isHoliday = EXTRA_CLOSED_DATES.includes(isoDate);
-  const inWorkHours = hour >= WORKDAY_START_HOUR && hour < WORKDAY_END_HOUR;
+  const inPainterReminderWindow = hour >= WORKDAY_START_HOUR && hour < PAINTER_REMINDER_LAST_HOUR;
 
-  const enterWork = (isWeekend || isHoliday || !inWorkHours)
-    ? { notified: 0, checked: 0, skipped: true as const, reason: isWeekend ? 'weekend' : isHoliday ? 'holiday' : 'outside-work-hours' }
-    : await runEnterWorkReminders(supabase);
+  const enterWork = (isWeekend || isHoliday || !inPainterReminderWindow)
+    ? { notified: 0, checked: 0, skipped: true as const, reason: isWeekend ? 'weekend' : isHoliday ? 'holiday' : 'outside-morning-window' }
+    : await runEnterWorkReminders(supabase, isoDate);
 
   const painterRequests = await runPainterRequestEscalation(supabase);
   const officeClosure = await runOfficeClosureEscalation(supabase);
