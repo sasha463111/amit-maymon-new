@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PaintersBoard, type PainterRow } from './PaintersBoard';
+import { getCaseAdvisors } from '@/lib/caseAdvisors';
 
 export default async function PaintersPage() {
   const supabase = await createClient();
@@ -58,6 +59,9 @@ export default async function PaintersPage() {
     branches: { name: string } | { name: string }[] | null;
   }[];
 
+  // Ids come from the RLS-filtered query above.
+  const advisorsByCase = await getCaseAdvisors(rawRows.map((r) => r.id));
+
   const rows: PainterRow[] = rawRows.map((row) => {
     const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
     const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
@@ -78,6 +82,7 @@ export default async function PaintersPage() {
       // are basically always empty in practice, so the card was showing nothing.
       car_vehicle_type: car?.vehicle_type ?? null,
       branch_name: branch?.name ?? null,
+      advisors: advisorsByCase.get(row.id) ?? [],
     };
   });
 

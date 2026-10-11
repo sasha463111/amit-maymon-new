@@ -58,6 +58,8 @@ interface Props {
   carModel: string | null;
   carYear: number | null;
   branchName: string | null;
+  /** "יועץ מטפל" — whom to ask (src/lib/caseAdvisors.ts). */
+  advisors: string[];
   role: string;
   initialRequests: PainterRequest[];
 }
@@ -191,6 +193,7 @@ export function PainterCaseClient({
   carModel,
   carYear,
   branchName,
+  advisors,
   role,
   initialRequests,
 }: Props) {
@@ -384,6 +387,10 @@ export function PainterCaseClient({
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div className="col-span-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+            <p className="text-xs text-indigo-500 mb-0.5">יועץ מטפל — למי לפנות</p>
+            <p className="font-bold text-indigo-800">{advisors.length ? advisors.join(', ') : 'טרם שויך'}</p>
+          </div>
           {customerName && (
             <div>
               <p className="text-xs text-gray-400 mb-0.5">שם לקוח</p>

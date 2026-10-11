@@ -21,6 +21,8 @@ export interface PainterRow {
   car_year: number | null;
   car_vehicle_type: string | null;
   branch_name: string | null;
+  /** "יועץ מטפל" — who did the professional steps (src/lib/caseAdvisors.ts). */
+  advisors: string[];
 }
 
 // Case creation only ever fills `vehicle_type` (Ministry-of-Transport lookup,
@@ -100,6 +102,10 @@ function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => vo
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-1">
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">יועץ מטפל</p>
+              <p className="text-sm font-semibold text-indigo-700">{row.advisors.length ? row.advisors.join(', ') : 'טרם שויך'}</p>
+            </div>
             {row.appraiser_name && (
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">שמאי</p>
@@ -228,6 +234,9 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
                   {row.license_plate && <LicensePlate plate={row.license_plate} size="sm" />}
                   <span className="flex-1 min-w-0">
                     <span className="block font-bold text-gray-900 text-sm truncate">{row.customer_name ?? '—'}</span>
+                    <span className="block text-[11px] font-semibold text-indigo-700 truncate">
+                      👤 {row.advisors.length ? row.advisors.join(', ') : 'יועץ: טרם שויך'}
+                    </span>
                     <span className="block text-[11px] text-gray-500 truncate">
                       {[carLine, branch === 'all' ? row.branch_name : null, row.opened_at ? formatDate(row.opened_at) : null].filter(Boolean).join(' · ')}
                     </span>

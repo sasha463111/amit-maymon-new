@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { PainterCaseClient } from './PainterCaseClient';
+import { getCaseAdvisors } from '@/lib/caseAdvisors';
 
 export default async function PainterCasePage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -142,6 +143,9 @@ export default async function PainterCasePage({ params }: { params: { id: string
     image_urls: imagesByRequest[r.id] ?? [],
   }));
 
+  // c came through RLS, so this user may see the case.
+  const advisors = (await getCaseAdvisors([c.id])).get(c.id) ?? [];
+
   return (
     <Suspense fallback={null}>
       <PainterCaseClient
@@ -162,6 +166,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
         carModel={car?.model ?? null}
         carYear={car?.year ?? null}
         branchName={branch?.name ?? null}
+        advisors={advisors}
         role={profile.role}
         initialRequests={enrichedRequests}
       />
