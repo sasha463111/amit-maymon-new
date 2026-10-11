@@ -202,12 +202,13 @@ export async function createCase(input: CreateCaseInput) {
     .single();
 
   if (caseErr || !newCase) {
-    // Unique violation on (branch_id, case_key): a case for this plate+claim
-    // already exists in this branch. Return a clear message so the user opens
-    // the existing case instead of retrying in another branch (which created
-    // duplicate cases across branches).
+    // Unique violation on (branch_id, case_key): an OPEN case for this
+    // plate+claim already exists in this branch (deleted and closed cases do
+    // not count — migration 20261011120000). Return a clear message so the
+    // user opens the existing case instead of retrying in another branch
+    // (which created duplicate cases across branches).
     if ((caseErr as { code?: string } | null)?.code === '23505') {
-      return { error: 'כבר קיים תיק פתוח לרכב הזה בסניף שבחרת. חפש אותו ברשימת התיקים במקום לפתוח חדש.' };
+      return { error: 'כבר קיים תיק פתוח לרכב הזה בסניף שבחרת. חפשו אותו בזכוכית המגדלת למעלה (לפי מספר רכב) במקום לפתוח חדש.' };
     }
     return { error: caseErr?.message ?? 'שגיאה ביצירת תיק' };
   }
@@ -973,10 +974,16 @@ export async function restoreCase(caseId: string) {
   const profile = profileData as { role: string } | null;
   if (profile?.role !== 'CEO') return { error: 'רק CEO יכול לשחזר תיקים' };
 
-  await supabase
+  const { error: restoreErr } = await supabase
     .from('cases')
     .update({ deleted_at: null, deleted_by: null } as never)
     .eq('id', caseId);
+  // Only one open case per car+claim per branch (idx_cases_case_key_branch):
+  // after a delete, a new case may already have been opened for this car.
+  if ((restoreErr as { code?: string } | null)?.code === '23505') {
+    return { error: 'לא ניתן לשחזר: כבר נפתח תיק חדש לרכב הזה באותו סניף.' };
+  }
+  if (restoreErr) return { error: restoreErr.message };
 
   await writeAudit(supabase, 'CASE', caseId, 'CASE_RESTORED', user.id);
   revalidatePath('/cases');

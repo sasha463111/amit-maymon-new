@@ -179,7 +179,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | `id` | uuid PK | |
 | `branch_id` | uuid FK→branches | |
 | `car_id` | uuid FK→cars | |
-| `case_key` | text | `{plate}-{claim\|\|PRIVATE}` |
+| `case_key` | text | `{plate}-{claim\|\|PRIVATE}`. ייחודי ל-(סניף, case_key) **רק בתיקים פתוחים ולא מחוקים** (`idx_cases_case_key_branch`, מיגרציה `20261011120000`, 2026-10-11) — קודם גם תיק מחוק/סגור חסם פתיחת תיק חדש לאותו רכב |
 | `general_status` | enum | NEW/IN_PROGRESS/COMPLETED |
 | `parts_status` | enum | NO_PARTS/ORDERED/AVAILABLE/AIRMAIL_PENDING |
 | `customer_name` | text | |
