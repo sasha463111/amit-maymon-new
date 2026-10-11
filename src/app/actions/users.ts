@@ -3,9 +3,22 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { UserRole } from '@/types/database';
 
 const VIEW_AS_COOKIE = 'tehila_view_as';
+// Real staff accounts; anything else (tehila.test, developer accounts) is a
+// test account and is listed separately.
+const STAFF_EMAIL_DOMAIN = '@toyota-tehila.co.il';
+
+/** Auth admin calls need the service-role key — the user session can't. Use
+ *  only after requireCeo(). */
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
 async function requireCeo() {
   const supabase = await createClient();
@@ -31,6 +44,12 @@ export interface SystemUser {
   branch_names: string[]; // Corresponding branch names for UI display
   is_active: boolean;
   is_bodywork_advisor: boolean;
+  /** Login address — Amit (2026-10-11) needs it to manage people. */
+  email: string | null;
+  last_sign_in_at: string | null;
+  /** Has at least one device registered for push. */
+  has_push: boolean;
+  is_staff: boolean;
 }
 
 export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: string | null }> {
@@ -57,6 +76,18 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
   const { data: branchesData } = await supabase.from('branches').select('id, name');
   const branchNameMap = new Map((branchesData ?? []).map((b: { id: string; name: string }) => [b.id, b.name]));
 
+  // Email, last sign-in and push live outside profiles (auth.users,
+  // push_subscriptions) — read with the service client, CEO already checked.
+  const admin = serviceClient();
+  const [usersPage, pushRows] = admin
+    ? await Promise.all([
+        admin.auth.admin.listUsers({ perPage: 1000 }).then((r) => r.data?.users ?? []),
+        admin.from('push_subscriptions').select('user_id').then((r) => (r.data ?? []) as { user_id: string }[]),
+      ])
+    : [[], []];
+  const authById = new Map(usersPage.map((u) => [u.id, u]));
+  const pushSet = new Set(pushRows.map((r) => r.user_id));
+
   const users: SystemUser[] = rows.map((r) => ({
     id: r.id,
     full_name: r.full_name,
@@ -65,7 +96,13 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     branch_names: (r.branch_ids ?? []).map((bid) => branchNameMap.get(bid) ?? bid),
     is_active: r.is_active,
     is_bodywork_advisor: r.is_bodywork_advisor,
+    email: authById.get(r.id)?.email ?? null,
+    last_sign_in_at: authById.get(r.id)?.last_sign_in_at ?? null,
+    has_push: pushSet.has(r.id),
+    is_staff: (authById.get(r.id)?.email ?? '').toLowerCase().endsWith(STAFF_EMAIL_DOMAIN),
   }));
+  // Real staff first, test accounts last.
+  users.sort((a, b) => Number(b.is_staff) - Number(a.is_staff));
 
   return { data: users, error: null };
 }
@@ -151,7 +188,6 @@ export async function stopViewAsUser() {
  */
 export async function createNewSystemUser(params: {
   email: string;
-  password: string;
   full_name: string;
   role: UserRole;
   branch_ids: string[];
@@ -159,11 +195,17 @@ export async function createNewSystemUser(params: {
   const { error, supabase, userId: callerId } = await requireCeo();
   if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
 
-  const { email, password, full_name, role, branch_ids } = params;
+  const { full_name, role, branch_ids } = params;
+  const email = params.email.trim().toLowerCase();
 
   // Validate inputs
   if (!email || !email.includes('@')) return { error: 'דוא"ל לא תקין' };
-  if (!password || password.length < 8) return { error: 'הסיסמה חייבת להיות לפחות 8 תווים' };
+  // Sign-in is by email only: every account uses the shared secret the login
+  // page signs in with. A password typed here would lock the person out.
+  const password = process.env.EMAIL_ONLY_LOGIN_PASSWORD;
+  if (!password) return { error: 'EMAIL_ONLY_LOGIN_PASSWORD לא מוגדר בשרת' };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
   if (!full_name || full_name.trim().length === 0) return { error: 'שם מלא נדרש' };
   if (!role) return { error: 'תפקיד נדרש' };
 
@@ -178,7 +220,7 @@ export async function createNewSystemUser(params: {
   }
 
   // Try to create auth user via admin API
-  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+  const { data: authUser, error: authError } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true, // Auto-confirm email
@@ -196,10 +238,11 @@ export async function createNewSystemUser(params: {
     return { error: 'שגיאה ביצירת משתמש - לא קיבלנו ID' };
   }
 
-  // Create profile record
-  const { error: profileError } = await supabase
+  // The on_auth_user_created trigger has already made a bare profile — fill
+  // it in (upsert), don't insert a second one.
+  const { error: profileError } = await admin
     .from('profiles')
-    .insert(
+    .upsert(
       {
         id: authUser.user.id,
         full_name,
@@ -212,7 +255,7 @@ export async function createNewSystemUser(params: {
 
   if (profileError) {
     // If profile creation fails, try to delete the auth user we just created
-    await supabase.auth.admin.deleteUser(authUser.user.id).catch(() => {
+    await admin.auth.admin.deleteUser(authUser.user.id).catch(() => {
       // Ignore delete errors
     });
     return { error: `שגיאה ביצירת פרופיל: ${profileError.message}` };

@@ -24,7 +24,7 @@ export function SendReportModal({ isOpen, onClose, userEmail, userName }: SendRe
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [bcc, setBcc] = useState('');
-  const [users, setUsers] = useState<Array<{ id: string; full_name: string; role: string; email?: string }>>([]);
+  const [users, setUsers] = useState<Array<{ id: string; full_name: string; role: string; email?: string | null }>>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 

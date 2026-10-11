@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Mail, Lock, User, Shield, MapPin } from 'lucide-react';
+import { Plus, Mail, User, Shield } from 'lucide-react';
 import { createNewSystemUser, type SystemUser } from '@/app/actions/users';
 import type { UserRole } from '@/types/database';
 
@@ -25,7 +25,6 @@ interface Props {
 export function AddUserForm({ branches, onUserCreated }: Props) {
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
     full_name: '',
     role: 'OFFICE' as UserRole,
     branch_ids: [] as string[],
@@ -47,7 +46,6 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
       setResult({ ok: true, msg: `✅ משתמש ${formData.email} נוצר בהצלחה` });
       setFormData({
         email: '',
-        password: '',
         full_name: '',
         role: 'OFFICE',
         branch_ids: [],
@@ -104,30 +102,15 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="user@example.com"
+                  placeholder="name@toyota-tehila.co.il"
+                  dir="ltr"
                   className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   disabled={loading}
                 />
               </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">סיסמה (לפחות 8 תווים)</label>
-              <div className="relative">
-                <Lock size={16} className="absolute right-3 top-2.5 text-gray-400" />
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="••••••••"
-                  className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  disabled={loading}
-                />
-              </div>
-            </div>
+            <p className="text-xs text-gray-500 -mt-2">הכניסה לאפליקציה היא עם כתובת המייל בלבד, בלי סיסמה.</p>
 
             {/* Full Name */}
             <div>
@@ -139,7 +122,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
                   required
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  placeholder="שם התיקיה"
+                  placeholder="שם שיופיע במערכת"
                   className="w-full pr-9 pl-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   disabled={loading}
                 />

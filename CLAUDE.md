@@ -685,6 +685,8 @@ npx supabase db push                 # הרצה לפרוד
 ## 23. Live Features
 
 ### User Creation Form ✅
+- **(2026-10-11)** הטופס **בלי סיסמה**: הכניסה היא במייל בלבד, והשרת יוצר את המשתמש עם `EMAIL_ONLY_LOGIN_PASSWORD` (סיסמה שהוקלדה בטופס הייתה נועלת את המשתמש בחוץ). `createNewSystemUser` עובד עם service client (ה-admin API לא עובד בסשן משתמש) ו-**upsert** לפרופיל (הטריגר `on_auth_user_created` כבר יוצר פרופיל ריק) — לפני כן יצירה מההגדרות כנראה לא עבדה מעולם
+- **רשימת המשתמשים** מציגה לכל אחד: מייל הכניסה (לחיצה מעתיקה), כניסה אחרונה, 🔔/🔕 אם הפעיל התראות, וחשבונות בדיקה בסוף (לא `@toyota-tehila.co.il`). נקרא עם service client אחרי `requireCeo()`
 - CEO can create new users directly from the web UI
 - Form collects: email, password, full name, role, branch assignment(s)
 - Creates both Auth user and profile record atomically

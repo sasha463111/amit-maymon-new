@@ -7,6 +7,7 @@ import { updateSystemUser, startViewAsUser, type SystemUser } from '@/app/action
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
+import { formatDateTime } from '@/lib/dates';
 
 const ROLE_LABELS: Record<UserRole, string> = {
   CEO: 'מנכ"ל',
@@ -236,6 +237,7 @@ export function UsersTab({
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
+                      <UserMeta u={u} />
                       <p className="text-xs text-gray-500 mt-0.5">
                         {ROLE_LABELS[u.role] ?? u.role}
                         {u.branch_names.length > 0 && ` · ${u.branch_names.join(', ')}`}
@@ -302,7 +304,10 @@ export function UsersTab({
                         className="border border-gray-300 rounded px-2 py-1 text-sm w-40"
                       />
                     ) : (
-                      <span className="font-semibold text-gray-800">{u.full_name}</span>
+                      <>
+                        <span className="font-semibold text-gray-800">{u.full_name}</span>
+                        <UserMeta u={u} />
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-2">
@@ -412,6 +417,37 @@ export function UsersTab({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** Login email + last sign-in + push status under a user's name. */
+function UserMeta({ u }: { u: SystemUser }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="mt-0.5 space-y-0.5">
+      {u.email && (
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard?.writeText(u.email ?? '').then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            });
+          }}
+          className="text-xs text-indigo-700 hover:underline"
+          dir="ltr"
+          title="העתק כתובת"
+        >
+          {u.email} {copied ? '✓' : '⧉'}
+        </button>
+      )}
+      <p className="text-[11px] text-gray-500">
+        {u.last_sign_in_at ? `כניסה אחרונה ${formatDateTime(u.last_sign_in_at)}` : 'עוד לא נכנס/ה'}
+        {' · '}
+        <span className={u.has_push ? 'text-green-600' : 'text-amber-600'}>{u.has_push ? '🔔 התראות פעילות' : '🔕 התראות לא הופעלו'}</span>
+        {!u.is_staff && <span className="text-gray-400"> · חשבון בדיקה</span>}
+      </p>
     </div>
   );
 }
