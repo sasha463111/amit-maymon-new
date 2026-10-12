@@ -52,8 +52,6 @@ export default async function ClosurePage() {
       insurance_type,
       insurance_company,
       claim_number,
-      closure_status_note,
-      closure_status_at,
       cars(license_plate, make, model, vehicle_type),
       branches(name)
     `
@@ -91,8 +89,6 @@ export default async function ClosurePage() {
         parts_status: string | null;
         insurance_type: string | null;
         insurance_company: string | null;
-        closure_status_note: string | null;
-        closure_status_at: string | null;
         cars: { license_plate: string | null; make: string | null; model: string | null; vehicle_type: string | null } | null;
         branches: { name: string } | null;
       };
@@ -107,8 +103,6 @@ export default async function ClosurePage() {
         parts_status: row.parts_status,
         insurance_type: row.insurance_type,
         insurance_company: row.insurance_company,
-        status_note: row.closure_status_note,
-        status_at: row.closure_status_at,
         license_plate: car?.license_plate ?? null,
         make: car?.make ?? null,
         model: car?.model ?? null,

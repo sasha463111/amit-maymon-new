@@ -22,9 +22,6 @@ export interface ClosureCaseRow {
   parts_status: string | null;
   insurance_type: string | null;
   insurance_company: string | null;
-  /** Latest manual "סטטוס" typed by the office (closure_status_updates). */
-  status_note: string | null;
-  status_at: string | null;
   license_plate: string | null;
   make: string | null;
   model: string | null;
@@ -97,17 +94,6 @@ export function ClosureCasesGrid({
                     {row.insurance_company && <span>🏢 {row.insurance_company}</span>}
                     {row.branch_name && <span>📍 {row.branch_name}</span>}
                   </div>
-
-                  {row.status_note && (
-                    <div className="rounded-lg bg-amber-50 border border-amber-300 px-2.5 py-1.5">
-                      <p className="text-[13px] font-semibold text-amber-900 line-clamp-2">📝 {row.status_note}</p>
-                      {row.status_at && (
-                        <p className="text-[10.5px] text-amber-700 mt-0.5">
-                          עודכן {new Date(row.status_at).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit' })}
-                        </p>
-                      )}
-                    </div>
-                  )}
 
                   <div className="flex-1" />
 
