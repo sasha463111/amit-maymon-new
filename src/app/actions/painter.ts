@@ -295,3 +295,63 @@ export async function updatePainterRequestStatus(
 
   return { ok: true, error: null };
 }
+
+/**
+ * "סיום עבודה" (Amit, 2026-10-12): the painter's work on the car is done.
+ * The case leaves the PAINTERS board only — it stays in "תיקים" and runs on
+ * until the office closes it (the office often finishes later than the
+ * workshop). `finished=false` puts it back on the board (pressed by mistake).
+ * The branch's service advisors are told the car is physically ready.
+ */
+export async function setPainterFinished(caseId: string, finished: boolean) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+  const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const role = (profileData as { role: string } | null)?.role;
+  if (role !== 'PAINTER' && role !== 'SERVICE_MANAGER' && role !== 'SERVICE_ADVISOR' && role !== 'CEO') {
+    return { error: 'אין הרשאה' };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('cases')
+    .update((finished
+      ? { painter_finished_at: now, painter_finished_by: user.id, painter_status: 'READY_FOR_RELEASE' }
+      : { painter_finished_at: null, painter_finished_by: null }) as never)
+    .eq('id', caseId);
+  if (error) return { error: error.message };
+
+  if (finished) {
+    const { data: caseData } = await supabase
+      .from('cases')
+      .select('branch_id, case_key, customer_name, cars(license_plate)')
+      .eq('id', caseId)
+      .single();
+    const c = caseData as { branch_id: string; case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+    const car = Array.isArray(c?.cars) ? c?.cars[0] : c?.cars;
+    const plate = car?.license_plate ?? c?.case_key ?? 'תיק';
+    const customer = c?.customer_name?.trim() || plate;
+    const advisors = (await branchRecipients(supabase, c?.branch_id))
+      .filter((p) => (p.role === 'SERVICE_ADVISOR' || p.role === 'SERVICE_MANAGER') && p.id !== user.id);
+    // Sequential — see the note in updatePainterChecklist. Pushed by the DB
+    // dispatcher; notification_is_relevant routes this "case flow" kind to
+    // advisors and the CEO.
+    for (const a of advisors) {
+      await supabase.from('notifications').insert({
+        user_id: a.id,
+        case_id: caseId,
+        type: 'PAINTER_FINISHED',
+        title: '✅ הפחח סיים עבודה',
+        body: `${customer} · ${plate} - הרכב מוכן פיזית`,
+        action_url: `/cases/${caseId}`,
+        triggered_by: user.id,
+      } as never);
+    }
+  }
+
+  revalidatePath(`/painters/${caseId}`);
+  revalidatePath('/painters');
+  revalidatePath(`/cases/${caseId}`);
+  return { ok: true, at: finished ? now : null };
+}

@@ -45,6 +45,8 @@ export default async function PaintersPage() {
     `)
     .is('closed_at', null)
     .is('deleted_at', null)
+    // "סיום עבודה": the painter is done — off the board (still in "תיקים").
+    .is('painter_finished_at', null)
     .order('opened_at', { ascending: false });
 
   const rawRows = (cases ?? []) as {

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { markRead, markUpdatesRead } from '@/app/actions/notifications';
+import { markActionsRead, markRead, markUpdatesRead } from '@/app/actions/notifications';
 import { actionTypesForRole } from '@/lib/notificationKinds';
 import { getAdvisorsForCases } from '@/app/actions/caseAdvisors';
 import { PushSubscriber } from '@/components/PushSubscriber';
@@ -375,11 +375,22 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     router.refresh(); // clear the yellow case cards that only had updates
   }
 
+  // Same on the "לטיפולי" tab. Waiting approvals / open painter requests
+  // stay listed (they leave when handled) but stop counting as unread.
+  async function handleMarkActions() {
+    if (actionUnread === 0) return;
+    setRows((prev) => prev.map((r) => (isAction(r, actionTypes) ? { ...r, read: true } : r)));
+    setUnreadCount((c) => Math.max(0, c - actionUnread));
+    await markActionsRead();
+    router.refresh();
+  }
+
   const actionRows = rows
     .filter((n) => isAction(n, actionTypes))
     .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)) || newestFirst(a, b));
   const updateRows = rows.filter((n) => !isAction(n, actionTypes)).sort(newestFirst);
   const updatesUnread = updateRows.filter((n) => !n.read).length;
+  const actionUnread = actionRows.filter((n) => !n.read).length;
   const activeTab: 'action' | 'updates' = tab ?? (actionRows.length > 0 ? 'action' : 'updates');
   const shown = activeTab === 'action' ? actionRows : updateRows;
 
@@ -427,6 +438,16 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                 className="text-xs text-brand-red hover:text-brand-red-dark font-medium"
               >
                 ✓ סמן עדכונים כנקראו
+              </button>
+            )}
+            {activeTab === 'action' && actionUnread > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleMarkActions()}
+                className="text-xs text-brand-red hover:text-brand-red-dark font-medium"
+                title="אישורים ממתינים ובקשות פחח פתוחות נשארים ברשימה עד שמטפלים בהם"
+              >
+                ✓ סמן כנקראו
               </button>
             )}
           </div>

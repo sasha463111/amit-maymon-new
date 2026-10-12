@@ -392,6 +392,7 @@ async function runEnterWorkReminders(supabase: ServiceClient, todayIso: string) 
     // filter in RLS — so deleted cases kept getting reminders (16 of Amit's
     // 33 open reminders on 2026-10-09 were on deleted cases).
     .is('deleted_at', null)
+    .is('painter_finished_at', null)
     .is('painter_entered_work_at', null);
 
   // Israel date of the last reminder, so "once a day" follows the local day.

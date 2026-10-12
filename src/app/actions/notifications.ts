@@ -52,3 +52,27 @@ export async function markUpdatesRead() {
   if (error) return { error: error.message };
   return { ok: true };
 }
+
+/** The same button on the "לטיפולי" tab (Amit, 2026-10-12): marks the
+ *  action-type notifications read. Approvals still waiting and painter
+ *  requests still open stay in "לטיפולי" anyway — they leave only when
+ *  handled (that is based on their state, not on read). */
+export async function markActionsRead() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+
+  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const actionTypes = actionTypesForRole((me as { role: string } | null)?.role);
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true } as never)
+    .eq('user_id', user.id)
+    .eq('read', false)
+    .in('type', [...actionTypes]);
+  if (error) return { error: error.message };
+  return { ok: true };
+}

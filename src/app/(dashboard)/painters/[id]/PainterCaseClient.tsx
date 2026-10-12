@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus } from '@/app/actions/painter';
+import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus, setPainterFinished } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
@@ -49,6 +49,8 @@ interface Props {
   painterStatusOtherText: string | null;
   partsArrived: boolean;
   enteredWorkAt: string | null;
+  /** "סיום עבודה" — set: the case is off the painters board. */
+  finishedAt: string | null;
   partsArrivedAt: string | null;
   enterWorkCompletedAt: string | null;
   enterWorkCompletedByName: string | null;
@@ -184,6 +186,7 @@ export function PainterCaseClient({
   painterStatusOtherText,
   partsArrived,
   enteredWorkAt,
+  finishedAt,
   partsArrivedAt,
   enterWorkCompletedAt,
   enterWorkCompletedByName,
@@ -260,6 +263,24 @@ export function PainterCaseClient({
   const [requestError, setRequestError] = useState<string | null>(null);
 
   const canEdit = role === 'PAINTER' || role === 'SERVICE_MANAGER' || role === 'CEO';
+  const canFinish = canEdit || role === 'SERVICE_ADVISOR';
+  const [finishedAtLocal, setFinishedAtLocal] = useState(finishedAt);
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  async function handleFinish(finished: boolean) {
+    if (finished && !window.confirm('לסמן שהעבודה ברכב הסתיימה? הרכב ירד מלוח הפחחים (ויישאר בתיקים עד הסגירה).')) return;
+    setFinishing(true);
+    setFinishError(null);
+    const res = await setPainterFinished(caseId, finished);
+    setFinishing(false);
+    if ('error' in res && res.error) {
+      setFinishError(res.error);
+      return;
+    }
+    setFinishedAtLocal(finished && 'at' in res ? res.at ?? null : null);
+    if (finished) router.push('/painters');
+  }
 
   async function handleChecklistChange(field: 'enteredWork' | 'partsArrived', value: boolean) {
     setChecklistError(null);
@@ -523,6 +544,34 @@ export function PainterCaseClient({
             </div>
             {partsArrivedLocal && <span className="text-green-600 font-bold text-lg">✓</span>}
           </label>
+
+          {/* סיום עבודה — off the painters board only (Amit, 2026-10-12) */}
+          {finishedAtLocal ? (
+            <div className="flex items-center gap-3 p-3 rounded-lg border bg-green-50 border-green-300">
+              <div className="flex-1">
+                <p className="font-bold text-green-800">✅ העבודה הסתיימה</p>
+                <p className="text-xs text-green-700">{formatCheckedAt(finishedAtLocal)} · הרכב ירד מלוח הפחחים</p>
+              </div>
+              {canFinish && (
+                <button type="button" disabled={finishing} onClick={() => void handleFinish(false)} className="text-xs text-gray-600 underline disabled:opacity-50">
+                  ↩️ החזר ללוח
+                </button>
+              )}
+            </div>
+          ) : (
+            canFinish && (
+              <button
+                type="button"
+                disabled={finishing}
+                onClick={() => void handleFinish(true)}
+                className="w-full p-4 rounded-lg bg-green-600 text-white font-bold text-base hover:bg-green-700 disabled:opacity-50"
+              >
+                {finishing ? 'שומר…' : '✅ סיום עבודה'}
+                <span className="block text-xs font-normal opacity-90">הרכב ירד מלוח הפחחים וימשיך בתיקים עד הסגירה</span>
+              </button>
+            )
+          )}
+          {finishError && <p className="text-xs text-red-600">⚠️ {finishError}</p>}
         </div>
       </div>
 
