@@ -1,4 +1,6 @@
 import { Suspense } from 'react';
+import { listPartReturns } from '@/app/actions/partReturns';
+import { CasePartReturns } from './CasePartReturns';
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import type { PartsStatus, GeneralStatus } from '@/types/database';
@@ -324,7 +326,12 @@ async function CaseDetailData({
     }
   }
 
+  // Parts returned from this case (empty for roles that may not see them).
+  const { rows: partReturns } = await listPartReturns({ caseId: id });
+
   return (
+    <>
+    <CasePartReturns rows={partReturns} />
     <CaseDetailClientV2
       caseId={id}
       caseKey={caseRow.case_key}
@@ -379,6 +386,7 @@ async function CaseDetailData({
       caseNotifications={caseNotifications}
       canDeleteCase={canDeleteCase}
     />
+    </>
   );
 }
 

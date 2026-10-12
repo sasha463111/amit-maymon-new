@@ -18,6 +18,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
     { label: 'תיקים', href: '/cases' },
     { label: 'הודעות', href: '/messages' },
+    { label: 'החזרות', href: '/returns' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'תוספות', href: '/extras' },
     { label: 'התראות', href: '/notifications' },
@@ -39,6 +40,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'סגירה', href: '/closure' },
     { label: 'הפניות', href: '/referrals' },
     { label: 'פחחים', href: '/painters' },
+    { label: 'החזרות', href: '/returns' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'הגדרות', href: '/settings' },
@@ -46,6 +48,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   PAINTER: [
     { label: 'תיקים', href: '/painters' },
     { label: 'הודעות', href: '/messages' },
+    { label: 'החזרות', href: '/returns' },
     { label: 'תוספת חדשה', href: '/extras/new' },
     { label: 'התוספות שלי', href: '/extras/mine' },
     { label: 'התראות', href: '/notifications' },
@@ -53,7 +56,19 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_ADVISOR: [
     { label: 'תיקים', href: '/cases' },
     { label: 'הודעות', href: '/messages' },
+    { label: 'החזרות', href: '/returns' },
     { label: 'ארכיון', href: '/cases/archive' },
+    { label: 'התראות', href: '/notifications' },
+  ],
+  // Parts-returns module (2026-10-12): warehouse staff and Roei.
+  WAREHOUSE: [
+    { label: 'החזרות', href: '/returns' },
+    { label: 'הודעות', href: '/messages' },
+    { label: 'התראות', href: '/notifications' },
+  ],
+  WAREHOUSE_MANAGER: [
+    { label: 'החזרות', href: '/returns' },
+    { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],
 };
@@ -64,6 +79,8 @@ const ROLE_LABEL: Record<UserRole, string> = {
   CEO: 'מנכ"ל',
   PAINTER: 'פחח',
   SERVICE_ADVISOR: 'יועצת שירות',
+  WAREHOUSE: 'מחסנאי',
+  WAREHOUSE_MANAGER: 'מנהל מחסן',
 };
 
 export default async function DashboardLayout({

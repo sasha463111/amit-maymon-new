@@ -55,6 +55,20 @@ export const STAFF_JOBS: StaffJob[] = [
     notifications: 'רכב נכנס לעבודה, חלקים הגיעו, תזכורת לסמן התחלת עבודה, תשובות לבקשות, הודעות אישיות',
   },
   {
+    key: 'WAREHOUSE',
+    role: 'WAREHOUSE',
+    officeFunction: null,
+    label: 'מחסנאי',
+    notifications: 'חלק חדש להחזרה, הודעות אישיות',
+  },
+  {
+    key: 'WAREHOUSE_MANAGER',
+    role: 'WAREHOUSE_MANAGER',
+    officeFunction: null,
+    label: 'מנהל מחסן',
+    notifications: 'חלק שלא נאסף 7 ימים, זיכויים, הודעות אישיות',
+  },
+  {
     key: 'CEO',
     role: 'CEO',
     officeFunction: null,

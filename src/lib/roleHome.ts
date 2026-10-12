@@ -8,6 +8,8 @@ export const ROLE_HOME: Record<UserRole, string> = {
   CEO: '/approvals',
   PAINTER: '/extras/new',
   SERVICE_ADVISOR: '/cases',
+  WAREHOUSE: '/returns',
+  WAREHOUSE_MANAGER: '/returns',
 };
 
 export function homeForRole(role: string | null | undefined, officeFunction?: string | null): string {

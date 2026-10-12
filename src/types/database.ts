@@ -8,7 +8,10 @@ export type UserRole =
   | 'OFFICE'
   | 'CEO'
   | 'PAINTER'
-  | 'SERVICE_ADVISOR';
+  | 'SERVICE_ADVISOR'
+  // Parts-returns module (2026-10-12)
+  | 'WAREHOUSE'
+  | 'WAREHOUSE_MANAGER';
 
 export type GeneralStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED';
 

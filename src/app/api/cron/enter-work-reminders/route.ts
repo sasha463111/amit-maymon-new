@@ -727,6 +727,59 @@ async function runBackupEmails(supabase: ReturnType<typeof getServiceClient> & o
   return { emailed, checked: rows.length };
 }
 
+/**
+ * Item 7 — parts returns not collected (Amit, 2026-10-12): a part still
+ * WAITING_PICKUP after 7 days → the warehouse manager (Roei); after 14 days →
+ * the CEO. Once per part per threshold (alert7_sent_at / alert14_sent_at).
+ * Who may receive which is also enforced by notification_is_relevant.
+ */
+async function runPartReturnAlerts(supabase: ServiceClient) {
+  const day = 86_400_000;
+  const { data } = await supabase
+    .from('part_returns')
+    .select('id, case_id, plate, supplier, supplier_other, sku, description, quantity, created_at, alert7_sent_at, alert14_sent_at')
+    .eq('status', 'WAITING_PICKUP')
+    .lt('created_at', new Date(Date.now() - 7 * day).toISOString());
+  const rows = (data ?? []) as {
+    id: string; case_id: string | null; plate: string | null; supplier: string; supplier_other: string | null;
+    sku: string | null; description: string | null; quantity: number; created_at: string;
+    alert7_sent_at: string | null; alert14_sent_at: string | null;
+  }[];
+  if (rows.length === 0) return { alerted7: 0, alerted14: 0 };
+
+  const { data: people } = await supabase.from('profiles').select('id, role').in('role', ['WAREHOUSE_MANAGER', 'CEO']).eq('is_active', true);
+  const managers = ((people ?? []) as { id: string; role: string }[]).filter((p) => p.role === 'WAREHOUSE_MANAGER').map((p) => p.id);
+  // One CEO row — the fan-out trigger copies it to the other CEOs.
+  const ceo = ((people ?? []) as { id: string; role: string }[]).find((p) => p.role === 'CEO')?.id;
+
+  let alerted7 = 0;
+  let alerted14 = 0;
+  for (const r of rows) {
+    const days = Math.floor((Date.now() - new Date(r.created_at).getTime()) / day);
+    const what = [r.supplier === 'אחר' ? r.supplier_other : r.supplier, r.description || r.sku, r.plate ? `רכב ${r.plate}` : 'כללי']
+      .filter(Boolean)
+      .join(' · ');
+    if (days >= 14 && !r.alert14_sent_at && ceo) {
+      await supabase.from('notifications').insert({
+        user_id: ceo, case_id: r.case_id, type: 'PART_RETURN_OVERDUE_14',
+        title: `⏰ חלק לא נאסף ${days} ימים`, body: what, action_url: '/returns',
+      } as never);
+      await supabase.from('part_returns').update({ alert14_sent_at: new Date().toISOString(), alert7_sent_at: r.alert7_sent_at ?? new Date().toISOString() } as never).eq('id', r.id);
+      alerted14++;
+    } else if (days >= 7 && !r.alert7_sent_at && managers.length) {
+      for (const m of managers) {
+        await supabase.from('notifications').insert({
+          user_id: m, case_id: r.case_id, type: 'PART_RETURN_OVERDUE_7',
+          title: `⏰ חלק לא נאסף ${days} ימים`, body: what, action_url: '/returns',
+        } as never);
+      }
+      await supabase.from('part_returns').update({ alert7_sent_at: new Date().toISOString() } as never).eq('id', r.id);
+      alerted7++;
+    }
+  }
+  return { alerted7, alerted14 };
+}
+
 export async function GET(req: NextRequest) {
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
@@ -769,5 +822,8 @@ export async function GET(req: NextRequest) {
     ? { skipped: true as const }
     : await sendDailyReport(supabase, isoDate, new URL(req.url).origin).catch((e: unknown) => ({ ok: false as const, error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport });
+  // 7. Parts returns not collected for 7 / 14 days.
+  const partReturns = await runPartReturnAlerts(supabase).catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns });
 }
