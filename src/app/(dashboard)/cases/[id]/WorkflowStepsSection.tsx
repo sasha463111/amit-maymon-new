@@ -439,22 +439,7 @@ export function WorkflowStepsSection({
         setStepError('לא ניתן להשלים - יש תוספות פחחות בטיפול');
         return;
       }
-      // Take the LATEST approval per type to avoid being blocked by a stale duplicate row.
-      const byType = new Map<string, { status: string }>();
-      for (const a of effectiveApprovals) {
-        // assume effectiveApprovals is roughly ordered; if not, the server-side check is authoritative.
-        if (!byType.has(a.approval_type)) byType.set(a.approval_type, a);
-      }
-      const estimate = byType.get('ESTIMATE_AND_DETAILS');
-      const wheels = byType.get('WHEELS_CHECK');
-      if (!estimate || estimate.status !== 'APPROVED') {
-        setStepError('לא ניתן להשלים - נדרש אישור CEO לאומדן');
-        return;
-      }
-      if (wheels && wheels.status !== 'APPROVED') {
-        setStepError('לא ניתן להשלים - נדרש אישור CEO לטפסי גלגלים');
-        return;
-      }
+      // No CEO-approval gate at the last step (Amit, 2026-10-12) — see completeActiveStep.
     }
 
     await performComplete(step);
@@ -890,18 +875,11 @@ export function WorkflowStepsSection({
                 warningMessage = `חלקים לא זמינים — סטטוס נוכחי: ${PARTS_STATUS_LABELS[partsValue] ?? partsValue}`;
               } else if (s.step_key === 'READY_FOR_OFFICE') {
                 const hasExtrasInTreatment = extras.some((e) => e.status === 'IN_TREATMENT');
-                // Take the LATEST approval per type (Bug C — duplicate rows could falsely block).
-                const byType = new Map<string, { status: string }>();
-                for (const a of effectiveApprovals) {
-                  if (!byType.has(a.approval_type)) byType.set(a.approval_type, a);
-                }
-                const estimate = byType.get('ESTIMATE_AND_DETAILS');
-                const wheels = byType.get('WHEELS_CHECK');
-                const estimateOk = estimate && estimate.status === 'APPROVED';
-                const wheelsOk = !wheels || wheels.status === 'APPROVED';
-                if (hasExtrasInTreatment || !estimateOk || !wheelsOk) {
+                // Only extras in treatment block the last step now — no CEO
+                // approval gate (Amit, 2026-10-12).
+                if (hasExtrasInTreatment) {
                   isBlocked = true;
-                  blockReason = hasExtrasInTreatment ? 'תוספות בטיפול' : 'נדרש אישור CEO';
+                  blockReason = 'תוספות בטיפול';
                 }
               }
             }

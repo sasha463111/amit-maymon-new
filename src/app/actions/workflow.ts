@@ -476,53 +476,12 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       return { error: 'יש תוספות בטיפול' };
     }
 
-    // CLOSE_CASE no longer requires a separate CASE_CLOSURE approval (Session 6).
-    // ESTIMATE_AND_DETAILS approval (already given mid-workflow) is the single CEO sign-off.
-    if (stepKey === 'CLOSE_CASE') {
-      // No further approval gate — proceed to closure logic below.
-    } else {
-      // SEND_COMPLETION_PHOTOS / READY_FOR_OFFICE: gate on ESTIMATE_AND_DETAILS only.
-      // WHEELS_CHECK used to also require a CEO approval here — explicit request
-      // removed that gate (2026-08-31): wheel forms only need a plain FYI
-      // notification to the CEO, not a blocking sign-off. See the WHEELS_CHECK
-      // completion notification below instead of a ceo_approvals row.
-      const { data: approvals } = await supabase
-        .from('ceo_approvals')
-        .select('approval_type, status, created_at')
-        .eq('case_id', caseId);
-      const approvalsArr = (approvals ?? []) as { approval_type: string; status: string; created_at: string }[];
-      const latest = latestApprovalsByType(approvalsArr);
-      const estimateApproval = latest.get('ESTIMATE_AND_DETAILS') ?? null;
-
-      // Ensure approval exists (so case appears on the approvals screen).
-      if (!estimateApproval) {
-        await supabase.from('ceo_approvals').insert({
-          case_id: caseId,
-          approval_type: 'ESTIMATE_AND_DETAILS',
-          status: 'PENDING',
-        } as never);
-      }
-
-      if (!estimateApproval || estimateApproval.status !== 'APPROVED') {
-        const blockedTitle = 'פעולה חסומה';
-        const blockedBody = 'חסר או נדחה אישור CEO לאומדן';
-        const { error: notifErr } = await supabase.from('notifications').insert({
-          user_id: profile!.id,
-          case_id: caseId,
-          type: 'BLOCKED_ACTION',
-          title: blockedTitle,
-          body: blockedBody,
-          action_url: `/approvals`,
-          triggered_by: user.id,
-        } as never);
-        if (notifErr) console.error('[notifications] insert failed', notifErr);
-        await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: '/approvals', tag: `blocked-est-${caseId}` });
-        await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
-          reason: 'ceo_approval_missing_or_rejected',
-        });
-        return { error: 'נדרש אישור CEO לאומדן' };
-      }
-    }
+    // No CEO-approval gate here any more (Amit, 2026-10-12): the estimate is
+    // approved mid-workflow (WAIT_APPRAISER_APPROVAL); requiring it again at
+    // the last step blocked cars whose estimate was approved in practice but
+    // whose approval row was REJECTED (e.g. "לא עלה אומדן") — and a rejected
+    // row is never re-opened here, so the case could not move at all. Only
+    // the extras-in-treatment gate above remains.
   }
 
   // For steps that require CEO approval: ensure approval row(s) exist (so case appears in approvals screen).
