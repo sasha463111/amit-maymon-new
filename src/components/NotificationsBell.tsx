@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { markActionsRead, markRead, markUpdatesRead } from '@/app/actions/notifications';
+import { markActionsRead, markManyRead, markRead, markUpdatesRead } from '@/app/actions/notifications';
 import { actionTypesForRole } from '@/lib/notificationKinds';
 import { getAdvisorsForCases } from '@/app/actions/caseAdvisors';
 import { PushSubscriber } from '@/components/PushSubscriber';
@@ -32,6 +32,38 @@ interface Row {
   awaiting: boolean;
   /** PAINTER_REQUEST row: the case still has an open painter request. */
   requestPending: boolean;
+  /** CEO updates tab: ids of every update of this car folded into this row. */
+  groupIds?: string[];
+  /** …and how many of them are unread. */
+  groupUnread?: number;
+}
+
+/** The CEO's running feed, one row per car (Amit, 2026-10-12: 145
+ *  notifications a day, six about the same car). Keeps the newest update of
+ *  each case and remembers the rest so one click marks them all read.
+ *  Updates without a case stay as they are. */
+function groupByCase(rows: Row[]): Row[] {
+  const out: Row[] = [];
+  const byCase = new Map<string, Row>();
+  for (const n of rows) {
+    if (!n.case_id) {
+      out.push({ ...n, groupIds: [n.id], groupUnread: n.read ? 0 : 1 });
+      continue;
+    }
+    const g = byCase.get(n.case_id);
+    if (!g) {
+      const head = { ...n, groupIds: [n.id], groupUnread: n.read ? 0 : 1 };
+      byCase.set(n.case_id, head);
+      out.push(head);
+    } else {
+      g.groupIds!.push(n.id);
+      if (!n.read) {
+        g.groupUnread = (g.groupUnread ?? 0) + 1;
+        g.read = false;
+      }
+    }
+  }
+  return out;
 }
 
 // Reminder bodies repeat what the row header already shows ("חנן ריידיס ·
@@ -105,6 +137,8 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
   // What counts as "for me" depends on my role (see notificationKinds.ts).
   const actionTypeList = actionTypesForRole(role);
   const actionTypes: ReadonlySet<string> = new Set(actionTypeList);
+  // CEO: updates are folded one row per car (see groupByCase).
+  const groupUpdates = role === 'CEO';
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -126,7 +160,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
       .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(30);
+      .limit(groupUpdates ? 150 : 30);
 
     type BaseRow = {
       id: string;
@@ -258,7 +292,11 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     }));
 
     setRows(enriched);
-    const unread = enriched.filter((n) => !n.read).length;
+    // CEO: the badge counts cars with news, not every single update.
+    const unread = groupUpdates
+      ? enriched.filter((n) => !n.read && isAction(n, actionTypes)).length +
+        groupByCase(enriched.filter((n) => !isAction(n, actionTypes))).filter((g) => !g.read).length
+      : enriched.filter((n) => !n.read).length;
     setUnreadCount(unread);
     setLoaded(true);
 
@@ -333,7 +371,15 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     setOpen(false);
     // Mark read optimistically; revert if the server call fails so the badge
     // doesn't lie about the unread count for a full poll cycle.
-    if (!n.read) {
+    if (!n.read && n.groupIds && n.groupIds.length > 1) {
+      // A car's folded updates: mark them all read in one go.
+      const ids = new Set(n.groupIds);
+      setRows((prev) => prev.map((r) => (ids.has(r.id) ? { ...r, read: true } : r)));
+      setUnreadCount((c) => Math.max(0, c - 1));
+      markManyRead(n.groupIds).then(() => router.refresh()).catch((err) => {
+        console.error('[NotificationsBell] markManyRead failed', err);
+      });
+    } else if (!n.read) {
       setRows((prev) => prev.map((r) => (r.id === n.id ? { ...r, read: true } : r)));
       setUnreadCount((c) => Math.max(0, c - 1));
       // Refresh after the write so the case list's "N התראות לטיפול" and
@@ -388,7 +434,8 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
   const actionRows = rows
     .filter((n) => isAction(n, actionTypes))
     .sort((a, b) => Number(needsMyApproval(b)) - Number(needsMyApproval(a)) || newestFirst(a, b));
-  const updateRows = rows.filter((n) => !isAction(n, actionTypes)).sort(newestFirst);
+  const plainUpdates = rows.filter((n) => !isAction(n, actionTypes)).sort(newestFirst);
+  const updateRows = groupUpdates ? groupByCase(plainUpdates) : plainUpdates;
   const updatesUnread = updateRows.filter((n) => !n.read).length;
   const actionUnread = actionRows.filter((n) => !n.read).length;
   const activeTab: 'action' | 'updates' = tab ?? (actionRows.length > 0 ? 'action' : 'updates');
@@ -542,6 +589,14 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                             <span className={`text-sm leading-snug ${!n.read ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
                               {n.title}
                             </span>
+                            {(n.groupIds?.length ?? 0) > 1 && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-semibold"
+                                title="עדכונים נוספים על הרכב הזה — נפתחים בתיק"
+                              >
+                                +{n.groupIds!.length - 1} עדכונים
+                              </span>
+                            )}
                           </div>
                           {n.body && bodyWithoutCaseInfo(n.body, n.customer_name, n.license_plate) && (
                             <p className="text-xs text-gray-600 leading-snug truncate">

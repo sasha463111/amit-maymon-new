@@ -20,6 +20,25 @@ export async function markRead(notificationId: string) {
   return { ok: true };
 }
 
+/** Marks several of my notifications read at once — the CEO's bell shows
+ *  one row per car, and opening it marks every update of that car read. */
+export async function markManyRead(ids: string[]) {
+  if (ids.length === 0) return { ok: true };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true } as never)
+    .in('id', ids)
+    .eq('user_id', user.id);
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 export async function markAllRead() {
   const supabase = await createClient();
   const {
