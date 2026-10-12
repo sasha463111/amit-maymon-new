@@ -10,6 +10,7 @@ import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
 import { SidebarNav } from '@/components/SidebarNav';
 import { jobLabel } from '@/lib/staffJobs';
+import { canUsePartReturns } from '@/lib/partReturns';
 import { LogOut, Eye } from 'lucide-react';
 import { getViewAsState } from '@/app/actions/users';
 import { StopViewAsButton } from './StopViewAsButton';
@@ -124,7 +125,7 @@ export default async function DashboardLayout({
         { label: 'תוספות', href: '/extras' },
         { label: 'התראות', href: '/notifications' },
       ]
-    : ROLE_LINKS[role];
+    : ROLE_LINKS[role].filter((l) => l.href !== '/returns' || canUsePartReturns(role));
   // "משרד הפניות" / "משרד סגירה" instead of a bare "משרד" (staffJobs.ts).
   const roleLabel = viewAs ? ROLE_LABEL[role] : jobLabel(role, profile?.office_function);
 

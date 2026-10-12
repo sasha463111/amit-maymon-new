@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
+import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, PART_RETURNS_CEO_ONLY, canUsePartReturns } from '@/lib/partReturns';
 
 // Parts returns & credits (Amit's spec, 2026-10-12) — replaces, in parallel
 // at first, his Google Forms/Sheets. Table public.part_returns (migration
@@ -73,7 +73,7 @@ export async function createPartReturn(formData: FormData) {
   const ctx = await me();
   if (!ctx) return { error: 'לא מחובר' };
   const { supabase, user, profile } = ctx;
-  if (!MARK_ROLES.has(profile.role)) return { error: 'אין הרשאה לסמן החזרה' };
+  if (!MARK_ROLES.has(profile.role) || !canUsePartReturns(profile.role)) return { error: 'אין הרשאה לסמן החזרה' };
 
   const photo = formData.get('photo');
   if (!(photo instanceof File) || photo.size === 0) return { error: 'חובה לצלם את המדבקה' };
@@ -160,7 +160,8 @@ export async function createPartReturn(formData: FormData) {
     .filter((w) => !w.branch_ids?.length || w.branch_ids.includes(branchId))
     .map((w) => w.id)
     .filter((id) => id !== user.id);
-  if (targets.length) {
+  // Preview (CEO only): nobody else is told about it yet.
+  if (targets.length && !PART_RETURNS_CEO_ONLY) {
     const supplierLabel = supplier === 'אחר' ? supplierOther : supplier;
     await supabase.from('notifications').insert(
       targets.map((id) => ({
@@ -188,6 +189,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
   const ctx = await me();
   if (!ctx) return { rows: [], role: null, error: 'לא מחובר' };
   const { supabase, user, profile } = ctx;
+  if (!canUsePartReturns(profile.role)) return { rows: [], role: profile.role };
 
   let q = supabase
     .from('part_returns')
@@ -255,7 +257,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
 export async function handOverToDriver(ids: string[], driverName: string) {
   const ctx = await me();
   if (!ctx) return { error: 'לא מחובר' };
-  if (!HANDOVER_ROLES.has(ctx.profile.role)) return { error: 'אין הרשאה לעדכן מסירה' };
+  if (!HANDOVER_ROLES.has(ctx.profile.role) || !canUsePartReturns(ctx.profile.role)) return { error: 'אין הרשאה לעדכן מסירה' };
   const driver = driverName.trim().slice(0, 80);
   if (!driver) return { error: 'נא לכתוב את שם הנהג' };
   const list = Array.from(new Set(ids)).slice(0, 200);

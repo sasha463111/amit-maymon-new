@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { listPartReturns } from '@/app/actions/partReturns';
 import { ReturnsClient } from './ReturnsClient';
+import { canUsePartReturns } from '@/lib/partReturns';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ export default async function ReturnsPage() {
 
   const { data: prof } = await supabase.from('profiles').select('role, branch_ids').eq('id', user.id).maybeSingle();
   const profile = prof as { role: string; branch_ids: string[] | null } | null;
-  if (!profile || !ALLOWED.has(profile.role)) redirect('/');
+  if (!profile || !ALLOWED.has(profile.role) || !canUsePartReturns(profile.role)) redirect('/');
 
   const [{ rows, error }, { data: branchRows }] = await Promise.all([
     listPartReturns(),
