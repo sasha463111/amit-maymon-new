@@ -31,7 +31,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
       painter_entered_work_at, parts_arrived_at,
       painter_finished_at, painter_finished_by,
       opened_at,
-      cars(license_plate, make, model, year),
+      cars(license_plate, make, model, year, vehicle_type),
       branches(name)
     `)
     .eq('id', params.id)
@@ -53,7 +53,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
     painter_finished_at: string | null;
     painter_finished_by: string | null;
     opened_at: string | null;
-    cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null } | null;
+    cars: { license_plate: string | null; make: string | null; model: string | null; year: number | null; vehicle_type: string | null } | null;
     branches: { name: string } | null;
   };
 
@@ -167,6 +167,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
         openedAt={c.opened_at}
         licensePlate={car?.license_plate ?? null}
         carMake={car?.make ?? null}
+        carVehicleType={car?.vehicle_type ?? null}
         carModel={car?.model ?? null}
         carYear={car?.year ?? null}
         branchName={branch?.name ?? null}

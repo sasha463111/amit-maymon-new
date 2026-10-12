@@ -57,6 +57,8 @@ interface Props {
   openedAt: string | null;
   licensePlate: string | null;
   carMake: string | null;
+  /** Ministry lookup, e.g. "קיה ד. קוריאה STONIC" — what the painters board shows. */
+  carVehicleType: string | null;
   carModel: string | null;
   carYear: number | null;
   branchName: string | null;
@@ -193,6 +195,7 @@ export function PainterCaseClient({
   openedAt,
   licensePlate,
   carMake,
+  carVehicleType,
   carModel,
   carYear,
   branchName,
@@ -364,7 +367,9 @@ export function PainterCaseClient({
     }
   }
 
-  const carLabel = [carMake, carModel, carYear].filter(Boolean).join(' ');
+  // Case creation fills only vehicle_type (make/model are almost always
+  // empty) — show it, like the painters board does (Amit, 2026-10-12).
+  const carLabel = [carVehicleType?.trim() || [carMake, carModel].filter(Boolean).join(' '), carYear].filter(Boolean).join(' · ');
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto" dir="rtl">
