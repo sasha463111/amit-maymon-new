@@ -471,8 +471,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         caseId={caseId}
       />
 
-      {/* Estimate rejected → resend for approval (Amit, 2026-10-12) */}
-      <EstimateRejectedBanner caseId={caseId} approvals={approvals} role={role} />
+      {/* Estimate rejected → resend for approval (Amit, 2026-10-12). Only
+          while the car is still in treatment — once it reached the office or
+          was closed, an old rejection is moot and must not nag anyone. */}
+      {isActive && <EstimateRejectedBanner caseId={caseId} approvals={approvals} role={role} />}
 
       <div className="flex items-center justify-between">
         <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
