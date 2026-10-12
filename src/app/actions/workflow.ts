@@ -878,6 +878,80 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   return { ok: true, error: null };
 }
 
+/**
+ * "דלג" (Amit, 2026-10-12): continue without doing the step — it counts as
+ * passed (state SKIPPED, who/when recorded) and the next step becomes active.
+ * Only these steps may be skipped; the step's own side effects
+ * (notifications, approvals) do NOT run.
+ */
+const SKIPPABLE_STEPS = new Set(['PREP_ESTIMATE', 'SEND_TO_APPRAISER', 'ENTER_WORK', 'ISSUE_CATALOG_NUMBERS', 'WASH']);
+
+export async function skipStep(caseId: string, stepId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+
+  const { data: profileData } = await supabase.from('profiles').select('role, branch_ids, sees_all_branches').eq('id', user.id).single();
+  const profile = profileData as { role: string; branch_ids: string[] | null; sees_all_branches?: boolean } | null;
+  const { data: caseData } = await supabase.from('cases').select('branch_id').eq('id', caseId).single();
+  if (!caseData) return { error: 'תיק לא נמצא' };
+  const branchId = (caseData as { branch_id: string }).branch_id;
+  if (profile?.role !== 'CEO' && !profile?.sees_all_branches && !profile?.branch_ids?.includes(branchId)) {
+    return { error: 'אין הרשאה לתיק זה (סניף אחר)' };
+  }
+  if (!(await hasPermission(supabase, 'complete_professional_step'))) return { error: 'אין הרשאה להשלים שלב מקצועי' };
+
+  const { data: runData } = await supabase
+    .from('case_workflow_runs')
+    .select('id')
+    .eq('case_id', caseId)
+    .eq('workflow_type', 'PROFESSIONAL')
+    .eq('status', 'ACTIVE')
+    .maybeSingle();
+  if (!runData) return { error: 'לא נמצא workflow מקצועי פעיל' };
+  const runId = (runData as { id: string }).id;
+
+  const { data: stepData } = await supabase
+    .from('case_workflow_steps')
+    .select('id, step_key, order_index, state')
+    .eq('id', stepId)
+    .eq('run_id', runId)
+    .single();
+  if (!stepData) return { error: 'שלב לא נמצא' };
+  const step = stepData as { id: string; step_key: string; order_index: number; state: string };
+  if (!SKIPPABLE_STEPS.has(step.step_key)) return { error: 'אי אפשר לדלג על שלב זה' };
+  if (step.state !== 'ACTIVE' && step.state !== 'PENDING') return { error: 'שלב זה כבר הושלם או דולג' };
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('case_workflow_steps')
+    .update({ state: 'SKIPPED', completed_by: user.id, completed_at: now } as never)
+    .eq('id', step.id);
+  if (error) return { error: error.message };
+
+  // Same as completing: if this was the current step, the next one starts.
+  if (step.state === 'ACTIVE') {
+    const { data: nextSteps } = await supabase
+      .from('case_workflow_steps')
+      .select('id, state')
+      .eq('run_id', runId)
+      .gt('order_index', step.order_index)
+      .not('state', 'in', '(DONE,SKIPPED)')
+      .order('order_index', { ascending: true })
+      .limit(1);
+    const next = ((nextSteps ?? []) as { id: string; state: string }[])[0];
+    if (next) {
+      await supabase.from('case_workflow_steps').update({ state: 'ACTIVE', activated_at: now } as never).eq('id', next.id);
+    } else {
+      await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', runId);
+    }
+  }
+
+  await writeAudit(supabase, 'WORKFLOW_STEP', step.id, 'STEP_SKIPPED', user.id, { step_key: step.step_key });
+  revalidatePath('/cases');
+  return { ok: true, error: null };
+}
+
 export async function returnToEstimate(caseId: string) {
   const supabase = await createClient();
   const {

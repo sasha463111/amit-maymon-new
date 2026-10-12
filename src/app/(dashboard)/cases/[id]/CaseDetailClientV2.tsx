@@ -316,6 +316,23 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       userId: string | null;
     }> = [];
 
+    // "דלג" (2026-10-12) — who skipped which step.
+    auditEvents
+      .filter((e) => e.action === 'STEP_SKIPPED')
+      .forEach((e) => {
+        const stepKey = (e.payload as { step_key?: string } | null)?.step_key;
+        items.push({
+          id: e.id,
+          action: 'STEP_SKIPPED',
+          stepKey,
+          stepLabel: `דולג: ${stepKey ? (STEP_LABELS[stepKey] ?? stepKey) : 'שלב'}`,
+          timestamp: e.created_at,
+          type: 'step',
+          performedBy: e.user_id ? (userNames[e.user_id] ?? null) : null,
+          userId: e.user_id,
+        });
+      });
+
     auditEvents
       .filter((e) => e.action === 'STEP_COMPLETED')
       .forEach((e) => {

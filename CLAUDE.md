@@ -130,6 +130,8 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 | 11 | `SEND_COMPLETION_PHOTOS` | שליחת תמונות לשמאי גמר | — |
 | 12 | `READY_FOR_OFFICE` | מוכן למשרד | התראה ל-OFFICE + פתיחת closure workflow אוטומטית |
 
+**⏭ "דלג" (2026-10-12, עמית):** כפתור ליד "סמן בוצע" בשלבים `PREP_ESTIMATE`, `SEND_TO_APPRAISER`, `ENTER_WORK`, `ISSUE_CATALOG_NUMBERS`, `WASH` (שורות 4,5,7,8,11 במסך — לפי step_key כי המספור זז כשטפסי גלגלים מוסתרים). `skipStep()` ב-`actions/workflow.ts` (`SKIPPABLE_STEPS`, חייב להתאים ל-`SKIPPABLE_STEP_KEYS` בקומפוננטה): state=`SKIPPED` עם `completed_by/at`, מפעיל את השלב הבא, audit `STEP_SKIPPED` (מוצג בהיסטוריה "דולג: …"). **ללא** תופעות הלוואי של השלב (התראות/אישורים). צבע ייעודי: ענבר ⏭ (דילוג אוטומטי של גלגלים לרכב צעיר נשאר אפור — `completed_by` ריק).
+
 **חסימות:**
 - `READY_FOR_OFFICE`: חסום אם יש extras IN_TREATMENT, או אישורי CEO חסרים/נדחו
 - `CLOSE_CASE`: רק בדיקה משותפת שאין extras ב-IN_TREATMENT

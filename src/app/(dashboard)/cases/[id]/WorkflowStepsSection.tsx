@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { completeActiveStep, returnToEstimate } from '@/app/actions/workflow';
+import { completeActiveStep, returnToEstimate, skipStep } from '@/app/actions/workflow';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
@@ -62,6 +62,10 @@ const NO_PARTS_REPAIR = 'תיקון ללא חלקים';
 const NO_PARTS_WHEELS = 'תיקון ללא חלקים — ללא גלגלים';
 // WHEELS_CHECK completed without forms: "ללא חלקים — אין צורך בטפסי גלגלים".
 const NO_WHEELS_FORMS = 'ללא טפסי גלגלים';
+// "⏭ דלג" (Amit, 2026-10-12): rows 4,5,7,8,11 on screen — by step key, since
+// the numbers shift when WHEELS_CHECK is hidden for young cars. Must match
+// SKIPPABLE_STEPS in actions/workflow.ts.
+const SKIPPABLE_STEP_KEYS = new Set(['PREP_ESTIMATE', 'SEND_TO_APPRAISER', 'ENTER_WORK', 'ISSUE_CATALOG_NUMBERS', 'WASH']);
 
 // Prepend https:// if the user-entered URL has no scheme — prevents browsers from
 // interpreting it as a relative path under /cases/[id].
@@ -301,6 +305,20 @@ export function WorkflowStepsSection({
   }
 
   const [returning, setReturning] = useState(false);
+
+  const [skippingStepId, setSkippingStepId] = useState<string | null>(null);
+  async function handleSkip(step: StepRow, label: string) {
+    if (!window.confirm(`לדלג על "${label}"? השלב יסומן כאילו בוצע והתיק ימשיך לשלב הבא.`)) return;
+    setStepError(null);
+    setSkippingStepId(step.id);
+    const res = await skipStep(caseId, step.id);
+    setSkippingStepId(null);
+    if (res?.error) {
+      setStepError(res.error);
+      return;
+    }
+    await reloadStepsFromDB();
+  }
 
   async function reloadStepsFromDB() {
     // Versioned reload — ignore result if a newer reload has started
@@ -853,6 +871,8 @@ export function WorkflowStepsSection({
           {orderedSteps.map((s, index) => {
             const isDone = s.state === 'DONE';
             const isSkipped = s.state === 'SKIPPED';
+            // Skipped by a person ("דלג") — not the automatic WHEELS_CHECK skip for young cars.
+            const isUserSkipped = isSkipped && !!s.completed_by;
             const isActive = s.state === 'ACTIVE';
             const label = stepLabels[s.step_key] ?? s.step_key ?? `שלב ${index + 1}`;
             const savedLink = stepLinks[s.id] || (s.step_key === 'FIXCAR_PHOTOS' ? fixcarValue : '');
@@ -919,7 +939,9 @@ export function WorkflowStepsSection({
                       ? isBlocked
                         ? 'bg-orange-50 border-orange-300'
                         : 'bg-white border-accent shadow-md'
-                      : isDone
+                      : isUserSkipped
+                        ? 'bg-amber-50 border-amber-300'
+                        : isDone
                         ? 'bg-green-50 border-green-200'
                         : 'bg-gray-50 border-gray-100'
                   } ${wheelsAgeTier ? WHEELS_AGE_RING[wheelsAgeTier] : ''}`}
@@ -929,7 +951,7 @@ export function WorkflowStepsSection({
                       isDone
                         ? 'bg-green-500 text-white'
                         : isSkipped
-                          ? 'bg-gray-300 text-gray-500'
+                          ? isUserSkipped ? 'bg-amber-400 text-white' : 'bg-gray-300 text-gray-500'
                           : isActive
                             ? isBlocked
                               ? 'bg-orange-500 text-white'
@@ -937,7 +959,7 @@ export function WorkflowStepsSection({
                             : 'bg-gray-200 text-gray-500'
                     }`}
                   >
-                    {isDone ? '✓' : isSkipped ? '—' : isBlocked ? '⚠' : index + 1}
+                    {isDone ? '✓' : isUserSkipped ? '⏭' : isSkipped ? '—' : isBlocked ? '⚠' : index + 1}
                   </div>
                   <div className="flex-1">
                     <span
@@ -945,7 +967,7 @@ export function WorkflowStepsSection({
                         isDone
                           ? 'text-green-700 line-through'
                           : isSkipped
-                            ? 'text-gray-400'
+                            ? isUserSkipped ? 'text-amber-800 line-through' : 'text-gray-400'
                             : isBlocked
                               ? 'text-orange-800'
                               : isActive
@@ -955,7 +977,7 @@ export function WorkflowStepsSection({
                     >
                       {label}
                     </span>
-                    {isSkipped && <span className="mr-2 text-xs text-gray-400">(דולג)</span>}
+                    {isSkipped && <span className={`mr-2 text-xs ${isUserSkipped ? 'text-amber-700 font-semibold' : 'text-gray-400'}`}>(דולג)</span>}
                     {isBlocked && blockReason && (
                       <span className="mr-2 text-xs text-orange-700 font-normal">({blockReason})</span>
                     )}
@@ -994,6 +1016,17 @@ export function WorkflowStepsSection({
                           title={isBlocked ? blockReason : undefined}
                         >
                           {completingStepId === s.id ? 'מבצע...' : isBlocked ? 'חסום' : 'סמן בוצע'}
+                        </button>
+                      )}
+                      {!isDone && SKIPPABLE_STEP_KEYS.has(s.step_key) && (
+                        <button
+                          type="button"
+                          disabled={isStepInFlight(s.id) || skippingStepId === s.id}
+                          onClick={() => void handleSkip(s, label)}
+                          className="px-3 py-1.5 text-xs rounded-md font-bold border border-amber-400 text-amber-800 bg-amber-50 hover:bg-amber-100 disabled:opacity-50"
+                          title="ממשיך בלי לבצע את השלב — מסומן כאילו בוצע"
+                        >
+                          {skippingStepId === s.id ? '...' : '⏭ דלג'}
                         </button>
                       )}
                       {isDone && STEPS_REQUIRING_FILE_OR_LINK.has(s.step_key) && (
