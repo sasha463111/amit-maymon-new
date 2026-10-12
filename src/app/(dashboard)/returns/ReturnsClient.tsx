@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  attachInvoicePhoto,
   cancelPartReturn,
   createPartReturn,
   handOverToDriver,
@@ -15,7 +16,7 @@ import { PART_RETURN_ALERT_DAYS, PART_RETURN_REASONS, PART_RETURN_STATUS_LABEL, 
 import { shrinkImage } from '@/lib/shrinkImage';
 import { formatDate, formatDateTime } from '@/lib/dates';
 
-type Tab = 'pickup' | 'credit' | 'done';
+type Tab = 'pickup' | 'credit' | 'done' | 'all';
 
 const HANDOVER_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
 const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER']);
@@ -45,6 +46,20 @@ export function ReturnsClient({
   const waiting = rows.filter((r) => r.status === 'WAITING_PICKUP');
   const forCredit = rows.filter((r) => r.status === 'COLLECTED' || r.status === 'DISPUTE');
   const done = rows.filter((r) => r.status === 'CREDITED');
+  // Search over everything (Amit: a part or a credit shows up a month or two
+  // later — "was this returned or not?"): part, SKU, invoice numbers, plate…
+  const [query, setQuery] = useState('');
+  const q = query.trim().toLowerCase();
+  const found = useMemo(
+    () =>
+      q
+        ? rows.filter((r) =>
+            [r.description, r.sku, r.plate, r.customer_name, r.supplier_label, r.document_number, r.credit_invoice_number, r.driver_name, r.reason_label, r.notes]
+              .some((v) => (v ?? '').toLowerCase().includes(q)),
+          )
+        : rows,
+    [rows, q],
+  );
 
   function done_(msg: string) {
     setToast(msg);
@@ -73,11 +88,34 @@ export function ReturnsClient({
       {toast && <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-4 py-2 text-sm font-semibold">{toast}</div>}
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
 
+      <div className="relative">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='🔎 חיפוש: שם חלק, מק"ט, מספר חשבונית, מספר רכב…'
+          className="w-full h-11 pr-3 pl-10 rounded-xl border border-gray-300 text-sm"
+          dir="auto"
+        />
+        {query && (
+          <button type="button" onClick={() => setQuery('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-label="נקה חיפוש">
+            ✕
+          </button>
+        )}
+      </div>
+
+      {q ? (
+        <>
+          <p className="text-sm text-gray-600">נמצאו {found.length} תוצאות</p>
+          <ReturnsTable rows={found} onDone={done_} canCredit={canCredit} />
+        </>
+      ) : (
+      <>
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
         {([
           ['pickup', `ממתין לאיסוף (${waiting.length})`],
           ['credit', `ממתין לזיכוי (${forCredit.length})`],
           ['done', `זוכה (${done.length})`],
+          ['all', `📋 טבלה (${rows.length})`],
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -103,9 +141,13 @@ export function ReturnsClient({
                 ✓ זוכה {r.credited_at ? formatDate(r.credited_at) : ''} · חשבונית זיכוי {r.credit_invoice_number}
                 {r.credit_amount != null ? ` · ₪${r.credit_amount.toLocaleString('he-IL')}` : ''}
               </p>
+              <InvoiceButtons r={r} canCredit={canCredit} onDone={done_} />
             </PartCard>
           ))}
         </div>
+      )}
+      {tab === 'all' && <ReturnsTable rows={rows} onDone={done_} canCredit={canCredit} />}
+      </>
       )}
 
       {adding && (
@@ -295,6 +337,7 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
                 : undefined
             }
           >
+            {!supplier && <InvoiceButtons r={r} canCredit={false} onDone={onDone} />}
             {(r.mine || canHandOver) && !supplier && (
               <button
                 type="button"
@@ -331,6 +374,7 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
   const [inv, setInv] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [creditPhoto, setCreditPhoto] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -344,11 +388,21 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
       open.mode === 'credit'
         ? await markCredited(open.id, inv, amount.trim() ? Number(amount.replace(/[^\d.]/g, '')) : null)
         : await markDispute(open.id, note);
-    setBusy(false);
     if ('error' in res && res.error) {
+      setBusy(false);
       setErr(res.error);
       return;
     }
+    if (open.mode === 'credit' && creditPhoto) {
+      const fd = new FormData();
+      fd.append('id', open.id);
+      fd.append('kind', 'credit');
+      fd.append('photo', await shrinkImage(creditPhoto));
+      const up = await attachInvoicePhoto(fd).catch(() => ({ error: 'שגיאה' }));
+      if ('error' in up && up.error) alert(`הזיכוי נרשם, אבל תמונת החשבונית לא נשמרה: ${up.error}`);
+    }
+    setBusy(false);
+    setCreditPhoto(null);
     setOpen(null);
     setInv('');
     setAmount('');
@@ -365,6 +419,7 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
             {r.collected_by_name ? ` · ע״י ${r.collected_by_name}` : ''}
           </p>
           {r.status === 'DISPUTE' && <p className="text-xs text-amber-700 font-semibold mt-1">⚠️ בבירור: {r.dispute_note}</p>}
+          <InvoiceButtons r={r} canCredit={false} onDone={onDone} />
           {canCredit && open?.id !== r.id && (
             <div className="flex gap-2 mt-2">
               <button type="button" onClick={() => { setOpen({ id: r.id, mode: 'credit' }); setErr(null); }} className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-bold">
@@ -381,6 +436,11 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
                 <>
                   <input value={inv} onChange={(e) => setInv(e.target.value)} placeholder="מספר חשבונית זיכוי" className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm" />
                   <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="סכום הזיכוי ₪ (לא חובה)" className="w-full h-9 px-3 rounded-lg border border-gray-300 text-sm" />
+                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                    <span className="px-3 py-1.5 rounded-lg border border-gray-300 bg-white font-semibold">📄 {creditPhoto ? 'צולם ✓' : 'צלם חשבונית זיכוי'}</span>
+                    <span className="text-gray-400">(לא חובה)</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setCreditPhoto(e.target.files?.[0] ?? null)} />
+                  </label>
                 </>
               ) : (
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="מה הבעיה עם הזיכוי?" className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm" />
@@ -414,6 +474,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [reason, setReason] = useState('');
   const [reasonOther, setReasonOther] = useState('');
   const [doc, setDoc] = useState('');
+  const [invoice, setInvoice] = useState<File | null>(null);
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -442,6 +503,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     fd.append('reason', reason);
     fd.append('reason_other', reasonOther);
     fd.append('document_number', doc);
+    if (invoice) fd.append('invoice', await shrinkImage(invoice));
     fd.append('branch_id', branchId);
     const res = await createPartReturn(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }));
     setBusy(false);
@@ -529,7 +591,16 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
           )}
         </div>
 
-        <input value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="מספר חשבונית / תעודת משלוח (אם ידוע)" className="w-full h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="auto" />
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">חשבונית מקור <span className="text-xs text-gray-400 font-normal">(אם כבר הגיעה — אפשר להוסיף גם אחר כך)</span></p>
+          <div className="flex gap-2">
+            <input value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="מספר חשבונית / תעודת משלוח" className="flex-1 h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="auto" />
+            <label className={`${chip(!!invoice)} cursor-pointer whitespace-nowrap flex items-center`}>
+              📄 {invoice ? 'צולמה ✓' : 'צלם חשבונית'}
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setInvoice(e.target.files?.[0] ?? null)} />
+            </label>
+          </div>
+        </div>
 
         {branches.length > 1 && (
           <div>
@@ -554,6 +625,148 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
           {busy ? 'שומר…' : 'שמור החזרה'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** The supplier's original invoice and the credit invoice: view the photo, or
+ *  photograph it as soon as the paper arrives (Amit, 2026-10-12). */
+function InvoiceButtons({ r, canCredit, onDone }: { r: PartReturnRow; canCredit: boolean; onDone: (m: string) => void }) {
+  const [busy, setBusy] = useState<'original' | 'credit' | null>(null);
+  const [view, setView] = useState<string | null>(null);
+
+  async function upload(kind: 'original' | 'credit', f: File | null) {
+    if (!f) return;
+    const number = kind === 'original' && !r.document_number ? window.prompt('מספר החשבונית (לא חובה):') ?? '' : '';
+    setBusy(kind);
+    const fd = new FormData();
+    fd.append('id', r.id);
+    fd.append('kind', kind);
+    fd.append('number', number);
+    fd.append('photo', await shrinkImage(f));
+    const res = await attachInvoicePhoto(fd).catch(() => ({ error: 'שגיאה' }));
+    setBusy(null);
+    if ('error' in res && res.error) alert(res.error);
+    else onDone(kind === 'credit' ? 'חשבונית הזיכוי נשמרה ✓' : 'החשבונית נשמרה ✓');
+  }
+
+  const btn = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer';
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()}>
+      {r.invoice_url ? (
+        <button type="button" onClick={() => setView(r.invoice_url)} className={`${btn} border-blue-200 bg-blue-50 text-blue-800`}>
+          📄 חשבונית מקור{r.document_number ? ` ${r.document_number}` : ''}
+        </button>
+      ) : (
+        <label className={`${btn} border-gray-300 bg-white text-gray-700`}>
+          {busy === 'original' ? 'שומר…' : '📷 צלם חשבונית מקור'}
+          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload('original', e.target.files?.[0] ?? null)} />
+        </label>
+      )}
+      {r.credit_invoice_url ? (
+        <button type="button" onClick={() => setView(r.credit_invoice_url)} className={`${btn} border-green-200 bg-green-50 text-green-800`}>
+          📄 חשבונית זיכוי{r.credit_invoice_number ? ` ${r.credit_invoice_number}` : ''}
+        </button>
+      ) : (
+        canCredit &&
+        r.status === 'CREDITED' && (
+          <label className={`${btn} border-gray-300 bg-white text-gray-700`}>
+            {busy === 'credit' ? 'שומר…' : '📷 צלם חשבונית זיכוי'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload('credit', e.target.files?.[0] ?? null)} />
+          </label>
+        )
+      )}
+      {view && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={view} alt="חשבונית" className="max-w-full max-h-full rounded-lg" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STATUS_CHIP: Record<string, string> = {
+  WAITING_PICKUP: 'bg-amber-100 text-amber-800',
+  COLLECTED: 'bg-blue-100 text-blue-800',
+  DISPUTE: 'bg-red-100 text-red-800',
+  CREDITED: 'bg-green-100 text-green-800',
+};
+
+/** Everything in one table — the view Amit knows from his Sheets: what is
+ *  waiting, what went with which driver, invoice and credit numbers. */
+function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDone: (m: string) => void; canCredit: boolean }) {
+  const [view, setView] = useState<string | null>(null);
+  if (rows.length === 0) return <p className="text-gray-400 py-8 text-center">לא נמצאו החזרות</p>;
+  const pic = (url: string | null, label: string) =>
+    url ? (
+      <button type="button" onClick={() => setView(url)} className="text-blue-700 underline decoration-dotted">
+        {label}
+      </button>
+    ) : (
+      <span>{label}</span>
+    );
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="min-w-[900px] w-full text-sm">
+        <thead className="bg-gray-50 text-gray-600 text-xs">
+          <tr>
+            {['תאריך', 'חלק', 'מק"ט', 'ספק', 'רכב', 'חשבונית מקור', 'סטטוס', 'נמסר לנהג', 'חשבונית זיכוי', 'סכום', ''].map((h) => (
+              <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r) => (
+            <tr key={r.id} className="align-top">
+              <td className="px-3 py-2 whitespace-nowrap text-gray-500">{formatDate(r.created_at)}</td>
+              <td className="px-3 py-2">
+                {pic(r.photo_url, r.description || '—')}
+                {r.quantity > 1 && <span className="text-gray-500"> ×{r.quantity}</span>}
+                <div className="text-[11px] text-gray-400">{r.reason_label}</div>
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap" dir="ltr">{r.sku ?? '—'}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{r.supplier_label}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {r.case_id ? (
+                  <Link href={`/go/${r.case_id}`} className="text-indigo-700 font-semibold">{r.plate}</Link>
+                ) : (
+                  r.plate ?? 'כללי'
+                )}
+                {r.branch_name && <div className="text-[11px] text-gray-400">{r.branch_name}</div>}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">{pic(r.invoice_url, r.document_number || (r.invoice_url ? '📄 תמונה' : '—'))}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
+                  {PART_RETURN_STATUS_LABEL[r.status] ?? r.status}
+                </span>
+                {r.status === 'WAITING_PICKUP' && <div className="text-[11px] text-gray-400">{daysSince(r.created_at)} ימים</div>}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {r.collected_at ? (
+                  <>
+                    {r.driver_name}
+                    <div className="text-[11px] text-gray-400">{formatDate(r.collected_at)}</div>
+                  </>
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">{pic(r.credit_invoice_url, r.credit_invoice_number || (r.credit_invoice_url ? '📄 תמונה' : '—'))}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{r.credit_amount != null ? `₪${r.credit_amount.toLocaleString('he-IL')}` : '—'}</td>
+              <td className="px-3 py-2">
+                <InvoiceButtons r={r} canCredit={canCredit} onDone={onDone} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {view && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={view} alt="" className="max-w-full max-h-full rounded-lg" />
+        </div>
+      )}
     </div>
   );
 }

@@ -35,6 +35,10 @@ async function me() {
   return { supabase, user, profile: p };
 }
 
+function photoPath(branchId: string, f: File): string {
+  return `${branchId}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${f.type === 'image/png' ? 'png' : 'jpg'}`;
+}
+
 const digits = (s: string | null | undefined) => (s ?? '').replace(/\D/g, '');
 const clean = (v: FormDataEntryValue | null, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -65,6 +69,9 @@ export type PartReturnRow = {
   dispute_note: string | null;
   notes: string | null;
   photo_url: string | null;
+  /** Photo of the supplier's original invoice / of the credit invoice. */
+  invoice_url: string | null;
+  credit_invoice_url: string | null;
   mine: boolean;
 };
 
@@ -120,9 +127,18 @@ export async function createPartReturn(formData: FormData) {
 
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
-  const path = `${branchId}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${photo.type === 'image/png' ? 'png' : 'jpg'}`;
+  const path = photoPath(branchId, photo);
   const { error: upErr } = await db.storage.from(BUCKET).upload(path, photo, { contentType: photo.type, upsert: false });
   if (upErr) return { error: `שמירת התמונה נכשלה: ${upErr.message}` };
+  // The supplier's invoice, if it is already at hand (optional here — it can
+  // be added later from the part's card).
+  const invoice = formData.get('invoice');
+  let invoicePath: string | null = null;
+  if (invoice instanceof File && invoice.size > 0 && invoice.type.startsWith('image/')) {
+    invoicePath = photoPath(branchId, invoice);
+    const { error: invErr } = await db.storage.from(BUCKET).upload(invoicePath, invoice, { contentType: invoice.type, upsert: false });
+    if (invErr) invoicePath = null;
+  }
 
   const { data: row, error } = await supabase
     .from('part_returns')
@@ -140,12 +156,13 @@ export async function createPartReturn(formData: FormData) {
       document_number: clean(formData.get('document_number'), 80) || null,
       notes: clean(formData.get('notes'), 500) || null,
       sticker_path: path,
+      invoice_path: invoicePath,
       created_by: user.id,
     } as never)
     .select('id')
     .single();
   if (error || !row) {
-    await db.storage.from(BUCKET).remove([path]);
+    await db.storage.from(BUCKET).remove(invoicePath ? [path, invoicePath] : [path]);
     return { error: error?.message ?? 'שמירה נכשלה' };
   }
 
@@ -203,6 +220,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
   type Raw = Record<string, unknown> & {
     id: string; branch_id: string; case_id: string | null; plate: string | null; supplier: string; supplier_other: string | null;
     reason: string; reason_other: string | null; sticker_path: string; created_by: string; collected_by: string | null;
+    invoice_path: string | null; credit_invoice_path: string | null;
     credit_amount: string | number | null;
   };
   const raw = (data ?? []) as Raw[];
@@ -214,7 +232,12 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     personIds.length && db ? db.from('profiles').select('id, full_name').in('id', personIds) : Promise.resolve({ data: [] }),
     supabase.from('branches').select('id, name'),
     caseIds.length ? supabase.from('cases').select('id, customer_name').in('id', caseIds) : Promise.resolve({ data: [] }),
-    raw.length && db ? db.storage.from(BUCKET).createSignedUrls(raw.map((r) => r.sticker_path), 60 * 60) : Promise.resolve({ data: [] }),
+    raw.length && db
+      ? db.storage.from(BUCKET).createSignedUrls(
+          raw.flatMap((r) => [r.sticker_path, r.invoice_path, r.credit_invoice_path]).filter((x): x is string => !!x),
+          60 * 60,
+        )
+      : Promise.resolve({ data: [] }),
   ]);
   const nameById = new Map(((names.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
   const branchById = new Map(((branches.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
@@ -248,6 +271,8 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     dispute_note: (r.dispute_note as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
     photo_url: urlByPath.get(r.sticker_path) ?? null,
+    invoice_url: r.invoice_path ? urlByPath.get(r.invoice_path) ?? null : null,
+    credit_invoice_url: r.credit_invoice_path ? urlByPath.get(r.credit_invoice_path) ?? null : null,
     mine: r.created_by === user.id,
   }));
   return { rows, role: profile.role };
@@ -323,6 +348,51 @@ export async function cancelPartReturn(id: string) {
     .update({ status: 'CANCELLED', updated_at: new Date().toISOString() } as never)
     .eq('id', id);
   if (error) return { error: error.message };
+  revalidatePath('/returns');
+  return { ok: true };
+}
+
+/** Photo of the supplier's original invoice (and its number), or of the
+ *  credit invoice — added whenever the paper arrives (Amit, 2026-10-12). */
+export async function attachInvoicePhoto(formData: FormData) {
+  const ctx = await me();
+  if (!ctx) return { error: 'לא מחובר' };
+  const { supabase, user, profile } = ctx;
+  if (!canUsePartReturns(profile.role)) return { error: 'אין הרשאה' };
+  const id = clean(formData.get('id'), 40);
+  const kind = clean(formData.get('kind'), 10) === 'credit' ? 'credit' : 'original';
+  const file = formData.get('photo');
+  if (!(file instanceof File) || file.size === 0 || !file.type.startsWith('image/')) return { error: 'נא לצלם את החשבונית' };
+
+  // Visible to me (RLS) — and allowed: the warehouse side, or whoever marked it.
+  const { data: rowData } = await supabase.from('part_returns').select('id, branch_id, created_by, invoice_path, credit_invoice_path').eq('id', id).maybeSingle();
+  const row = rowData as { id: string; branch_id: string; created_by: string; invoice_path: string | null; credit_invoice_path: string | null } | null;
+  if (!row) return { error: 'לא נמצא' };
+  const allowed = kind === 'credit' ? CREDIT_ROLES.has(profile.role) : HANDOVER_ROLES.has(profile.role) || row.created_by === user.id;
+  if (!allowed) return { error: 'אין הרשאה' };
+
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const path = photoPath(row.branch_id, file);
+  const { error: upErr } = await db.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  if (upErr) return { error: `שמירת התמונה נכשלה: ${upErr.message}` };
+
+  const number = clean(formData.get('number'), 80);
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (kind === 'credit') {
+    patch.credit_invoice_path = path;
+    if (number) patch.credit_invoice_number = number;
+  } else {
+    patch.invoice_path = path;
+    if (number) patch.document_number = number;
+  }
+  const { error } = await db.from('part_returns').update(patch as never).eq('id', row.id);
+  if (error) {
+    await db.storage.from(BUCKET).remove([path]);
+    return { error: error.message };
+  }
+  const old = kind === 'credit' ? row.credit_invoice_path : row.invoice_path;
+  if (old) await db.storage.from(BUCKET).remove([old]);
   revalidatePath('/returns');
   return { ok: true };
 }
