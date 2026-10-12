@@ -10,6 +10,7 @@ import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
+import { ClosureStatusSection } from './ClosureStatusSection';
 import { shrinkImage } from '@/lib/shrinkImage';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
@@ -441,6 +442,9 @@ export function ClosureDetailClient({
         <span>←</span>
         <span>חזרה לסגירה</span>
       </Link>
+
+      {/* Manual case status, shown on the closure card (Amit, 2026-10-12) */}
+      <ClosureStatusSection caseId={caseId} />
 
       {/* Free-text notes to chosen people (אילנה, 2026-10-07) */}
       <CaseNotesComposer caseId={caseId} />
