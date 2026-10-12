@@ -97,20 +97,11 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     .eq('status', 'IN_TREATMENT');
   const blockedByExtras = (extras?.length ?? 0) > 0;
 
-  const { data: approvalsData } = await supabase
-    .from('ceo_approvals')
-    .select('approval_type, status')
-    .eq('case_id', id);
-  const approvals = (approvalsData ?? []) as { approval_type: string; status: string }[];
-  const estimateOk = approvals.some(
-    (a) => a.approval_type === 'ESTIMATE_AND_DETAILS' && a.status === 'APPROVED'
-  );
-  const wheelsDone = approvals.some((a) => a.approval_type === 'WHEELS_CHECK');
-  const wheelsOk = !wheelsDone || approvals.some(
-    (a) => a.approval_type === 'WHEELS_CHECK' && a.status === 'APPROVED'
-  );
-  // Session 6: CASE_CLOSURE approval removed — no longer gates closing.
-  const blockedByApprovals = !estimateOk || !wheelsOk;
+  // No CEO-approval gate on closing (Amit, 2026-10-12): the estimate is
+  // approved mid-workflow; a REJECTED approval row (e.g. "לא מצורף אומדן")
+  // was never re-opened and left cases impossible to close. Only extras in
+  // treatment block closing now (also enforced in completeActiveStep).
+  const blockedByApprovals = false;
 
   const car = Array.isArray((caseRow as { cars: unknown }).cars)
     ? (caseRow as { cars: { license_plate: string; make: string | null; model: string | null }[] }).cars[0]

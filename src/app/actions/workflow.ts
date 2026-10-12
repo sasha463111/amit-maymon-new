@@ -508,23 +508,23 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       // 2. The latest is REJECTED — allow re-submission with a fresh row (keeps audit trail)
       const needsNewApproval = !existing || existing.status === 'REJECTED';
       if (needsNewApproval) {
-        const { data: newApproval } = await supabase
-          .from('ceo_approvals')
-          .insert({
-            case_id: caseId,
-            approval_type: approvalType,
-            status: 'PENDING',
-          } as never)
-          .select('id')
-          .single();
-        const newApprovalId = (newApproval as { id: string } | null)?.id;
-        if (newApprovalId) await notifyCeosPendingApproval(supabase, caseId, approvalType, user.id, newApprovalId);
+        // Insert, or re-open the rejected row (one row per case+type).
+        await requestCeoApproval(supabase, caseId, approvalType, user.id);
         // WHEELS_CHECK used to also get a ceo_approvals row created here — removed
         // 2026-08-31, see the READY_FOR_OFFICE gate above and the WHEELS_CHECK
         // completion notification below.
       }
       // Allow step to be marked DONE — gating is only at READY_FOR_OFFICE.
     }
+  }
+
+  // Re-estimate after a rejection (Amit, 2026-10-12): completing "אומדן"
+  // again while the latest estimate approval is REJECTED sends a NEW approval
+  // request to the CEO. Before, a rejected request was re-opened only when
+  // WAIT_APPRAISER_APPROVAL was completed again, which never happens once it
+  // is DONE — the case stayed blocked and the CEO got no request.
+  if (stepKey === 'PREP_ESTIMATE') {
+    await reopenRejectedEstimateApproval(supabase, caseId, user.id);
   }
 
   const now = new Date().toISOString();
@@ -834,6 +834,84 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   // Only revalidate the list — the case detail page uses client-side reloadStepsFromDB()
   // which avoids the RSC push flicker caused by revalidating the current route
   revalidatePath('/cases');
+  return { ok: true, error: null };
+}
+
+/** Puts an approval request in front of the CEO: inserts one if the case
+ *  has none of this type, or re-opens a REJECTED one (status → PENDING) and
+ *  notifies the CEO. There can be only ONE row per (case, type) — unique
+ *  index uniq_ceo_approvals_case_type — so the old "insert a fresh PENDING row
+ *  after a rejection" failed silently (duplicate key), the CEO never got the
+ *  request and the case stayed blocked (Amit, 2026-10-12: 8 open cases).
+ *  Returns whether a request was (re)sent. */
+async function requestCeoApproval(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caseId: string,
+  approvalType: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('ceo_approvals')
+    .select('id, approval_type, status, created_at')
+    .eq('case_id', caseId)
+    .eq('approval_type', approvalType)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const existing = ((data ?? []) as { id: string; status: string }[])[0];
+  let id: string | null = null;
+  if (!existing) {
+    const { data: row } = await supabase
+      .from('ceo_approvals')
+      .insert({ case_id: caseId, approval_type: approvalType, status: 'PENDING' } as never)
+      .select('id')
+      .single();
+    id = (row as { id: string } | null)?.id ?? null;
+  } else if (existing.status === 'REJECTED') {
+    // The previous rejection note stays on the row, so the CEO sees why it
+    // was rejected last time.
+    const { error } = await supabase
+      .from('ceo_approvals')
+      .update({ status: 'PENDING', decided_at: null, decided_by: null, updated_at: new Date().toISOString() } as never)
+      .eq('id', existing.id);
+    if (!error) id = existing.id;
+  }
+  if (id) await notifyCeosPendingApproval(supabase, caseId, approvalType, userId, id);
+  return !!id;
+}
+
+/** Re-estimate after a rejection: re-open the rejected estimate approval. */
+async function reopenRejectedEstimateApproval(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  caseId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('ceo_approvals')
+    .select('status, created_at')
+    .eq('case_id', caseId)
+    .eq('approval_type', 'ESTIMATE_AND_DETAILS')
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const latest = ((data ?? []) as { status: string }[])[0];
+  if (!latest || latest.status !== 'REJECTED') return false;
+  return requestCeoApproval(supabase, caseId, 'ESTIMATE_AND_DETAILS', userId);
+}
+
+/** "📤 שלח אומדן לאישור חוזר" — after the CEO rejected the estimate. */
+export async function requestEstimateReapproval(caseId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+  const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const role = (profileData as { role: string } | null)?.role;
+  if (role !== 'SERVICE_MANAGER' && role !== 'SERVICE_ADVISOR' && role !== 'CEO' && role !== 'OFFICE') {
+    return { error: 'אין הרשאה' };
+  }
+  const sent = await reopenRejectedEstimateApproval(supabase, caseId, user.id);
+  if (!sent) return { error: 'אין אומדן שנדחה בתיק הזה (אולי כבר נשלח לאישור)' };
+  await writeAudit(supabase, 'CASE', caseId, 'ESTIMATE_RESUBMITTED', user.id);
+  revalidatePath(`/cases/${caseId}`);
+  revalidatePath('/approvals');
   return { ok: true, error: null };
 }
 

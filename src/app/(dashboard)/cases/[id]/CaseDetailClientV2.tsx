@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';
 import { PROFESSIONAL_STEP_LABELS as DEFAULT_STEP_LABELS } from '@/types/database';
 import { CaseStatusBanner } from './CaseStatusBanner';
+import { EstimateRejectedBanner } from './EstimateRejectedBanner';
 import { CaseNotificationsPanel } from './CaseNotificationsPanel';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { DocumentsSection } from './DocumentsSection';
@@ -469,6 +470,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         role={role}
         caseId={caseId}
       />
+
+      {/* Estimate rejected → resend for approval (Amit, 2026-10-12) */}
+      <EstimateRejectedBanner caseId={caseId} approvals={approvals} role={role} />
 
       <div className="flex items-center justify-between">
         <Link href="/cases" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
