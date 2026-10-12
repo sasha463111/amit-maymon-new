@@ -55,6 +55,13 @@ const ASSIGNEE_FIELD_BY_STEP: Record<string, 'catalog_numbers_assignee' | 'parts
 
 // Sub-checklist items for ENTER_WORK (advisory — does not block step completion).
 const ENTER_WORK_CHECKLIST_ITEMS = ['רץ גלגלים', 'הודפסו גלגלים אחרי שעה מינימום'];
+// "תיקון ללא חלקים" (Amit, 2026-10-12) — kept in enter_work_checklist_state
+// like the wheels items, so no schema change. Separate keys for the parts
+// group and the wheels group, both shown as "תיקון ללא חלקים".
+const NO_PARTS_REPAIR = 'תיקון ללא חלקים';
+const NO_PARTS_WHEELS = 'תיקון ללא חלקים — ללא גלגלים';
+// WHEELS_CHECK completed without forms: "ללא חלקים — אין צורך בטפסי גלגלים".
+const NO_WHEELS_FORMS = 'ללא טפסי גלגלים';
 
 // Prepend https:// if the user-entered URL has no scheme — prevents browsers from
 // interpreting it as a relative path under /cases/[id].
@@ -247,7 +254,7 @@ export function WorkflowStepsSection({
 
   // WHEELS CHECK file/link panel state
   const [wheelsCheckPanelStepId, setWheelsCheckPanelStepId] = useState<string | null>(null);
-  const [wheelsMode, setWheelsMode] = useState<'link' | 'file'>('link');
+  const [wheelsMode, setWheelsMode] = useState<'link' | 'file' | 'none'>('link');
   const [wheelsLinkValue, setWheelsLinkValue] = useState(wheelsCheckLink ?? '');
   const [wheelsFile, setWheelsFile] = useState<File | null>(null);
   const [wheelsUploading, setWheelsUploading] = useState(false);
@@ -522,7 +529,17 @@ export function WorkflowStepsSection({
     try {
       const supabase = createClient();
 
-      if (wheelsMode === 'link') {
+      if (wheelsMode === 'none') {
+        // No parts → no wheel forms needed: mark it on the case, then complete.
+        const next = enterWorkChecklist.includes(NO_WHEELS_FORMS) ? enterWorkChecklist : [...enterWorkChecklist, NO_WHEELS_FORMS];
+        const res = await updateCaseDetails(caseId, { enter_work_checklist_state: next });
+        if (res?.error) {
+          setStepError(`שמירה נכשלה: ${res.error}`);
+          setWheelsUploading(false);
+          return;
+        }
+        setEnterWorkChecklist(next);
+      } else if (wheelsMode === 'link') {
         const raw = wheelsLinkValue.trim();
         if (!raw) { setStepError('נדרש קישור'); setWheelsUploading(false); return; }
         const link = normalizeUrl(raw);
@@ -848,7 +865,7 @@ export function WorkflowStepsSection({
             let warningMessage = '';
 
             if (!isDone && !isSkipped) {
-              if (s.step_key === 'ENTER_WORK' && partsValue !== 'AVAILABLE') {
+              if (s.step_key === 'ENTER_WORK' && partsValue !== 'AVAILABLE' && !enterWorkChecklist.includes(NO_PARTS_REPAIR)) {
                 showWarning = true;
                 warningMessage = `חלקים לא זמינים — סטטוס נוכחי: ${PARTS_STATUS_LABELS[partsValue] ?? partsValue}`;
               } else if (s.step_key === 'READY_FOR_OFFICE') {
@@ -1024,6 +1041,15 @@ export function WorkflowStepsSection({
                       />
                       הגיע חלקים
                     </label>
+                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enterWorkChecklist.includes(NO_PARTS_REPAIR)}
+                        onChange={() => void toggleEnterWorkItem(NO_PARTS_REPAIR)}
+                        className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                      />
+                      תיקון ללא חלקים
+                    </label>
                     <div className="border-t border-blue-200 pt-2 mt-2">
                       <p className="text-xs font-semibold text-blue-700 mb-1">צ&apos;קליסט גלגלים</p>
                       {ENTER_WORK_CHECKLIST_ITEMS.map((item) => (
@@ -1037,6 +1063,15 @@ export function WorkflowStepsSection({
                           {item}
                         </label>
                       ))}
+                      <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enterWorkChecklist.includes(NO_PARTS_WHEELS)}
+                          onChange={() => void toggleEnterWorkItem(NO_PARTS_WHEELS)}
+                          className="w-4 h-4 rounded border-gray-300 text-brand-red focus:ring-brand-red"
+                        />
+                        תיקון ללא חלקים
+                      </label>
                       {enterWorkSaveError && (
                         <p className="mt-2 text-xs text-red-600">⚠️ שמירה נכשלה: {enterWorkSaveError}</p>
                       )}
@@ -1232,6 +1267,13 @@ export function WorkflowStepsSection({
                       {savedLink}
                     </a>
                     {renderDoneLinkEditor('FIXCAR_PHOTOS')}
+                  </div>
+                )}
+
+                {/* WHEELS_CHECK done without forms (no parts) */}
+                {isDone && !hasWheelsLink && s.step_key === 'WHEELS_CHECK' && enterWorkChecklist.includes(NO_WHEELS_FORMS) && (
+                  <div className="mr-11 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs text-gray-700">
+                    🚫 ללא חלקים — אין צורך בטפסי גלגלים
                   </div>
                 )}
 
@@ -1460,9 +1502,22 @@ export function WorkflowStepsSection({
                       >
                         📁 קובץ
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setWheelsMode('none')}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                          wheelsMode === 'none' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-600'
+                        }`}
+                      >
+                        🚫 ללא חלקים
+                      </button>
                     </div>
 
-                    {wheelsMode === 'link' ? (
+                    {wheelsMode === 'none' ? (
+                      <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                        תיקון ללא חלקים — <b>אין צורך בטפסי גלגלים</b>. השלב יסומן כבוצע בלי קישור או קובץ.
+                      </p>
+                    ) : wheelsMode === 'link' ? (
                       <input
                         autoFocus
                         type="url"
