@@ -9,7 +9,7 @@ import type { UserRole } from '@/types/database';
 const VIEW_AS_COOKIE = 'tehila_view_as';
 // Real staff accounts; anything else (tehila.test, developer accounts) is a
 // test account and is listed separately.
-const STAFF_EMAIL_DOMAIN = '@toyota-tehila.co.il';
+import { STAFF_EMAIL_DOMAIN } from '@/lib/demo';
 
 /** Auth admin calls need the service-role key — the user session can't. Use
  *  only after requireCeo(). */

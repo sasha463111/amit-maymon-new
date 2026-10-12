@@ -14,6 +14,8 @@ import { canUsePartReturns } from '@/lib/partReturns';
 import { LogOut, Eye } from 'lucide-react';
 import { getViewAsState } from '@/app/actions/users';
 import { StopViewAsButton } from './StopViewAsButton';
+import { BRAND_NAME } from '@/lib/demo';
+import { DemoBanner } from '@/components/DemoBanner';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -161,6 +163,7 @@ export default async function DashboardLayout({
       {/* Real-time sync for profile changes */}
       {!isPreview && <RealtimeProfileSync userId={user.id} />}
       {!isPreview && <AutoRefresh />}
+      <DemoBanner />
 
       {isPreview && (
         <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-sm text-amber-900">
@@ -213,7 +216,7 @@ export default async function DashboardLayout({
 
           {/* Left side: Logo/branding — full on desktop, compact on mobile */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xl sm:text-2xl font-black text-primary-container tracking-tight">תהילה</span>
+            <span className="text-xl sm:text-2xl font-black text-primary-container tracking-tight">{BRAND_NAME}</span>
             <span className="text-xs text-gray-400 font-medium hidden sm:inline">ניהול מוסך</span>
           </div>
         </div>

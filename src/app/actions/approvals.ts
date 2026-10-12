@@ -7,6 +7,7 @@ import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
 import type { ApprovalDecisionInput } from '@/types/database';
 import { APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS } from '@/types/database';
+import { CEO_NAME } from '@/lib/demo';
 
 export async function decideApproval(input: ApprovalDecisionInput) {
   const supabase = await createClient();
@@ -85,7 +86,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     const managers = (await branchRecipients(supabase, branchId))
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const rejTitle = `${approvalTypeLabel} נדחה`;
-    const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - עמית דחה את האישור`;
+    const rejBody = input.rejection_note ? `${plateLabel}: ${input.rejection_note}` : `רכב ${plateLabel} - ${CEO_NAME} דחה את האישור`;
     // Sequential, not Promise.all: concurrent inserts race the DB fan-out
     // trigger's (031/032) 10-second de-dup check against each other, so
     // several can all pass the "not already sent" check before any of their
@@ -147,7 +148,7 @@ export async function decideApproval(input: ApprovalDecisionInput) {
     const managers = (await branchRecipients(supabase, branchId))
       .filter((p) => p.role === 'SERVICE_MANAGER');
     const okTitle = `${approvalTypeLabel} אושר ✓`;
-    const okBody = `רכב ${plateLabel} - עמית אישר. אפשר להמשיך בטיפול.`;
+    const okBody = `רכב ${plateLabel} - ${CEO_NAME} אישר. אפשר להמשיך בטיפול.`;
     // Sequential — see the comment on the identical pattern above.
     for (const m of managers) {
       const { error: notifErr } = await supabase.from('notifications').insert({

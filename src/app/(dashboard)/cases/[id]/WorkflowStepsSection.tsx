@@ -10,6 +10,7 @@ import type { PartsStatus } from '@/types/database';
 import { PARTS_STATUS_LABELS } from '@/types/database';
 import type { CaseDocument } from './DocumentsSection';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { CEO_NAME } from '@/lib/demo';
 
 /**
  * Extracted from CaseDetailClientV2.tsx — the largest, highest-effort step
@@ -1100,7 +1101,7 @@ export function WorkflowStepsSection({
                     {finalEstimatePanelStepId === s.id ? (
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-purple-700">📄 העלה אומדן סופי (אופציונלי)</p>
-                        <p className="text-xs text-gray-600">האומדן הסופי כולל הנחות, מק&quot;טים והכל. עמית יראה אותו לפני סגירה.</p>
+                        <p className="text-xs text-gray-600">האומדן הסופי כולל הנחות, מק&quot;טים והכל. {CEO_NAME} יראה אותו לפני סגירה.</p>
                         <div className="grid grid-cols-2 gap-2">
                           <label className="flex items-center justify-center gap-1.5 px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium cursor-pointer hover:bg-gray-50">
                             📁 בחר קובץ

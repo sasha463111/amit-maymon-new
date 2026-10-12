@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Heebo, JetBrains_Mono } from 'next/font/google';
 import { PushSubscriber } from '@/components/PushSubscriber';
+import { BRAND_NAME, DEMO_MODE } from '@/lib/demo';
 
 // Design system (Tehila Bodyshop): Heebo is the Hebrew-first workhorse, with
 // JetBrains Mono reserved for catalog numbers / codes where digit clarity matters.
@@ -20,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tehila Bodyshop CRM',
+  title: DEMO_MODE ? `${BRAND_NAME} — גרסת הדגמה` : 'Tehila Bodyshop CRM',
   description: 'Bodyshop repair workflow management',
   manifest: '/manifest.json',
   icons: {
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'תהילה',
+    title: BRAND_NAME,
   },
 };
 

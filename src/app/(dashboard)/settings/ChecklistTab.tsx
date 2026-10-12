@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { updateWorkflowStep, addWorkflowStep, removeWorkflowStep } from '@/app/actions/settings';
 import type { WorkflowStepTemplate } from '@/types/database';
+import { CEO_NAME } from '@/lib/demo';
 
 const PROTECTED_KEYS = new Set(['OPEN_CASE', 'READY_FOR_OFFICE', 'CLOSE_CASE']);
 
@@ -99,7 +100,7 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
       showMsg(res.error, false);
       setSteps((prev) => prev.map((s) => (s.id === step.id ? { ...s, requires_ceo_approval: !newVal } : s)));
     } else {
-      showMsg(newVal ? 'דורש אישור עמית — הופעל' : 'דורש אישור עמית — הושבת', true);
+      showMsg(newVal ? `דורש אישור ${CEO_NAME} — הופעל` : `דורש אישור ${CEO_NAME} — הושבת`, true);
     }
   }
 
@@ -304,14 +305,14 @@ export function ChecklistTab({ initialSteps }: ChecklistTabProps) {
                     type="button"
                     disabled={isSaving}
                     onClick={() => void handleToggleRequiresCeoApproval(step)}
-                    title="האם השלב דורש אישור עמית לפני שניתן להתקדם?"
+                    title={`האם השלב דורש אישור ${CEO_NAME} לפני שניתן להתקדם?`}
                     className={`px-2 py-1 text-xs rounded border transition-colors disabled:opacity-50 ${
                       step.requires_ceo_approval
                         ? 'bg-amber-100 text-amber-700 border-amber-300 font-semibold'
                         : 'bg-white text-gray-400 border-gray-200 hover:border-amber-300 hover:text-amber-600'
                     }`}
                   >
-                    👑 אישור עמית
+                    👑 אישור {CEO_NAME}
                   </button>
                 )}
 

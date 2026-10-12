@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginAction, signedInHomeAction } from '@/app/actions/auth';
 import { Logo } from '@/components/Logo';
+import { DEMO_MODE, DEMO_LOGIN_EMAIL } from '@/lib/demo';
 
 const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(DEMO_MODE ? DEMO_LOGIN_EMAIL : '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -92,6 +93,11 @@ export default function LoginPage() {
           {isPreview && (
             <div className="mb-5 text-sm text-amber-700 bg-amber-50 px-3 py-2.5 rounded-lg border border-amber-200">
               מצב תצוגה מקדימה — תועבר אוטומטית בעוד רגע.
+            </div>
+          )}
+          {DEMO_MODE && (
+            <div className="mb-5 text-sm text-indigo-800 bg-indigo-50 px-3 py-2.5 rounded-lg border border-indigo-200">
+              גרסת הדגמה — הנתונים בדויים. לחצו &quot;התחבר&quot; כדי להיכנס כמנכ&quot;ל.
             </div>
           )}
 

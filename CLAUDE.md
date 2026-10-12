@@ -576,6 +576,13 @@ page.tsx (async Server Component)
 - **מיגרציות DB הן שלב נפרד** — פוש קוד לא מריץ SQL. מריצים דרך `supabase db push` או ידנית
 - **Vercel Region:** `iad1` (הועבר מ-fra1, אל תחזיר)
 
+### אתר הדגמה (2026-10-12)
+- **אותו קוד**, פרויקט Vercel נפרד (שם מתוכנן `garage-demo` — לא להתחיל ב-`amit-maymon-new`, ה-middleware מפנה כתובות כאלה לאתר האמיתי) על פרויקט Supabase נפרד **garage-demo** (`xzeyxoagzeddadalfkym`) עם נתונים בדויים בלבד.
+- המתג: `NEXT_PUBLIC_DEMO_MODE=true` — רק בפרויקט ההדגמה. בפרודקשן לא מוגדר ⇒ הכול זהה לאתר האמיתי. כל ההבדלים מרוכזים ב-`src/lib/demo.ts`: `BRAND_NAME` ("מוסך הדגמה" / "תהילה"), `CEO_NAME` ("רונן" / "עמית"), `CLOSURE_CLERK_NAME` ("אורית" / "אילנה"), `STAFF_EMAIL_DOMAIN`, `DEMO_LOGIN_EMAIL`; פס "גרסת הדגמה" (`src/components/DemoBanner.tsx`); הלוגו מוצג כטקסט בלבד.
+- **כלל:** שם של עובד/לקוח אמיתי לא נכתב קבוע בקוד שמוצג למשתמש — רק דרך `src/lib/demo.ts`.
+- **כל מיגרציה שרצה בפרודקשן מורצת גם על garage-demo** (חוץ מ-pg_cron של התזכורות — ההדגמה לא צריכה תזכורות, וה-job מפנה לכתובת האמיתית).
+- לא לבלבל עם `NEXT_PUBLIC_PREVIEW_MODE` (נתוני מוק בזיכרון, בלי DB).
+
 </important>
 
 ---

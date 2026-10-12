@@ -6,6 +6,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
+import { CLOSURE_CLERK_NAME } from '@/lib/demo';
 import {
   PROFESSIONAL_WORKFLOW_STEPS,
   APPROVAL_NOTIFICATION_TYPE_LABELS as APPROVAL_TYPE_LABELS,
@@ -771,7 +772,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
     const advisors = (await branchRecipients(supabase, washCase?.branch_id))
       .filter((p) => p.is_bodywork_advisor === true);
     const washTitle = 'רכב נשלח לשטיפה';
-    const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר לאילנה`;
+    const washBody = `רכב ${washPlate} נשלח לשטיפה - התחל תהליך בקרת איכות, טפל בניירת והעבר ל${CLOSURE_CLERK_NAME}`;
     // Body text points advisors straight at QUALITY_CONTROL — highlight it so
     // they land scrolled to the right step instead of scanning the list.
     const washUrl = `/cases/${caseId}?highlight=QUALITY_CONTROL`;

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { formatDate } from '@/lib/dates';
+import { CLOSURE_CLERK_NAME } from '@/lib/demo';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
@@ -51,7 +52,7 @@ export function CaseStatusBanner({
           <p className="text-xs text-amber-700">
             הסתיים הטיפול המקצועי בתאריך{' '}
             {treatmentFinishedAt ? formatDate(treatmentFinishedAt) : '—'} —
-            אילנה משלימה את הסגירה.
+            {CLOSURE_CLERK_NAME} משלימה את הסגירה.
           </p>
         </div>
         {(role === 'OFFICE' || role === 'CEO') && (

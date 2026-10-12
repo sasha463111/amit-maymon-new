@@ -16,7 +16,7 @@ import { sendPushToUser } from '@/app/actions/push';
 const NOTE_TYPE = 'DIRECT_NOTE';
 // Only real staff are offered as recipients — the database also holds test
 // and developer accounts, which must never receive notes.
-const STAFF_EMAIL_DOMAIN = '@toyota-tehila.co.il';
+import { STAFF_EMAIL_DOMAIN } from '@/lib/demo';
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

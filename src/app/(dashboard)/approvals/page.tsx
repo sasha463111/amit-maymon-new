@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { ApprovalsList } from './ApprovalsList';
+import { CEO_NAME } from '@/lib/demo';
 
 export default async function ApprovalsPage() {
   const supabase = await createClient();
@@ -105,7 +106,7 @@ export default async function ApprovalsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">אישורי עמית</h1>
+      <h1 className="text-2xl font-bold mb-4">אישורי {CEO_NAME}</h1>
       <Suspense fallback={null}>
         <ApprovalsList approvals={approvals} />
       </Suspense>

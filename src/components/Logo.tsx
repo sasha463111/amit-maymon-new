@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { BRAND_NAME, DEMO_MODE } from '@/lib/demo';
 
 type LogoVariant = 'header' | 'login';
 
@@ -18,13 +19,14 @@ const variantClasses: Record<LogoVariant, { wrapper: string; text: string; imgSi
 };
 
 export function Logo({ variant = 'header' }: { variant?: LogoVariant }) {
-  const [useTextFallback, setUseTextFallback] = useState(false);
+  // Demo site: never show the real business logo image.
+  const [useTextFallback, setUseTextFallback] = useState(DEMO_MODE);
   const { wrapper, text, imgSize } = variantClasses[variant];
 
   if (useTextFallback) {
     return (
       <div className={`${wrapper} inline-flex items-center justify-center`}>
-        <span className={text}>תהילה</span>
+        <span className={text}>{BRAND_NAME}</span>
       </div>
     );
   }
@@ -33,7 +35,7 @@ export function Logo({ variant = 'header' }: { variant?: LogoVariant }) {
     <div className={`${wrapper} inline-flex items-center justify-center overflow-hidden`}>
       <img
         src="/logo.png"
-        alt="תהילה"
+        alt={BRAND_NAME}
         className={`object-contain ${imgSize}`}
         onError={() => setUseTextFallback(true)}
       />
