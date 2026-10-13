@@ -120,18 +120,25 @@ export function CasesMasterDetail({
       <div className="flex flex-col gap-4">
         {children}
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-baseline gap-2">
+        {/* Search right next to the title (Amit, 2026-10-13). It used to sit
+            beside the branch tabs, whose w-full squeezed it to zero width —
+            on a wide screen it simply wasn't there. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-baseline gap-2 shrink-0">
             <h1 className="text-xl font-bold text-stone-900">תיקים</h1>
             <span className="text-sm font-medium text-stone-500">{filtered.length} פתוחים</span>
           </div>
-          {canCreate && <CreateCaseButton branchIds={branchIds} isCeo={isCeo} />}
+          <div className="order-last w-full sm:order-none sm:w-80 lg:w-96">
+            <SearchField
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="חיפוש: מספר רכב, לקוח, ביטוח או סוג רכב"
+            />
+          </div>
+          <div className="mr-auto">{canCreate && <CreateCaseButton branchIds={branchIds} isCeo={isCeo} />}</div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 min-w-0">
-            <SearchField value={query} onChange={(e) => setQuery(e.target.value)} />
-          </div>
           {mineFirstFor && (
             <button
               type="button"
