@@ -18,14 +18,16 @@ export async function GET() {
   });
 
   const ms: number[] = [];
+  const results: string[] = [];
   for (let i = 0; i < 5; i++) {
     const t = Date.now();
     // A different query each time, so nothing upstream can answer from a cache.
-    await db.from('branches').select('id').neq('name', `probe-${Date.now()}-${i}`).limit(1);
+    const r = await db.from('branches').select('id').neq('name', `probe-${Date.now()}-${i}`).limit(1);
     ms.push(Date.now() - t);
+    results.push(r.error ? `${r.status} ${r.error.message.slice(0, 80)}` : `${r.status} rows=${r.data?.length ?? 0}`);
   }
   return NextResponse.json(
-    { region: process.env.VERCEL_REGION ?? 'local', queriesMs: ms, totalMs: ms.reduce((a, b) => a + b, 0) },
+    { region: process.env.VERCEL_REGION ?? 'local', queriesMs: ms, totalMs: ms.reduce((a, b) => a + b, 0), results, dbHost: new URL(url).host.split('.')[0].slice(0, 6) },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }
