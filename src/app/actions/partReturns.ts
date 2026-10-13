@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, PART_RETURNS_CEO_ONLY, canUsePartReturns } from '@/lib/partReturns';
+import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, canUsePartReturns } from '@/lib/partReturns';
 
 // Parts returns & credits (Amit's spec, 2026-10-12) — replaces, in parallel
 // at first, his Google Forms/Sheets. Table public.part_returns (migration
@@ -177,8 +177,8 @@ export async function createPartReturn(formData: FormData) {
     .filter((w) => !w.branch_ids?.length || w.branch_ids.includes(branchId))
     .map((w) => w.id)
     .filter((id) => id !== user.id);
-  // Preview (CEO only): nobody else is told about it yet.
-  if (targets.length && !PART_RETURNS_CEO_ONLY) {
+  // Warehouse staff are in the pilot (PART_RETURNS_ROLES) — tell them.
+  if (targets.length) {
     const supplierLabel = supplier === 'אחר' ? supplierOther : supplier;
     await supabase.from('notifications').insert(
       targets.map((id) => ({

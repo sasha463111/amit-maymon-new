@@ -1,10 +1,10 @@
-// PREVIEW (Tomer, 2026-10-12): for now ONLY the CEO (Amit) sees the module —
-// menu, page, case box, and no notifications to anyone else. Set to false to
-// open it to everyone in the spec (painters, advisors, warehouse).
-export const PART_RETURNS_CEO_ONLY = true;
+// Who sees the module. Pilot from 2026-10-13 (Tomer): Amit + the warehouse —
+// Roey (WAREHOUSE_MANAGER) and Liron (WAREHOUSE). Painters and advisors join
+// when Amit says: add their roles here (and send the staff message).
+export const PART_RETURNS_ROLES: readonly string[] = ['CEO', 'WAREHOUSE', 'WAREHOUSE_MANAGER'];
 
 export function canUsePartReturns(role: string | null | undefined): boolean {
-  return !PART_RETURNS_CEO_ONLY || role === 'CEO';
+  return PART_RETURNS_ROLES.includes(role ?? '');
 }
 
 // Lists for the parts-returns module (Amit, 2026-10-12). "אחר" opens free
