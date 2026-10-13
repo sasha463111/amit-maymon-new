@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { formatDate } from '@/lib/dates';
+import { sendMail } from '@/lib/mailer';
 
 /**
  * Summary email report (#11). Sends via Resend's plain REST API — no SDK
@@ -19,7 +20,6 @@ import { formatDate } from '@/lib/dates';
  *    report and compares against what they meant.
  */
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
 
 /**
  * Encode Hebrew and other non-ASCII characters as HTML entities
@@ -155,9 +155,6 @@ export async function sendSummaryReport(params?: {
   const auth = await requireCeo(supabase);
   if ('error' in auth) return { error: auth.error };
 
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { error: 'RESEND_API_KEY לא מוגדר בשרת' };
-
   // Get current user's email for default BCC
   const { data: { user } } = await supabase.auth.getUser();
   const userEmail = user?.email;
@@ -172,29 +169,14 @@ export async function sendSummaryReport(params?: {
     ? params.bcc
     : (userEmail ? [userEmail] : []);
 
-  // Ensure proper UTF-8 encoding by using TextEncoder
-  const payload = {
-    from: 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>',
+  const res = await sendMail({
     to: toRecipients,
-    cc: ccRecipients.length > 0 ? ccRecipients : undefined,
-    bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
+    cc: ccRecipients,
+    bcc: bccRecipients,
     subject: `סיכום יומי — תהילה ניהול מוסך — ${dateStr}`,
     html,
-  };
-
-  const res = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify(payload),
   });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    return { error: `שליחה נכשלה: ${res.status} ${text.slice(0, 300)}` };
-  }
+  if (!res.ok) return { error: `שליחה נכשלה: ${res.error}` };
 
   return { ok: true, error: null };
 }

@@ -8,12 +8,11 @@
 // open cases per branch; cases closed today. Add rows to SECTIONS' data below.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { sendMail } from '@/lib/mailer';
 
 export const DAILY_REPORT_HOUR = 18;
 export const DAILY_REPORT_TO = ['Amitm@toyota-tehila.co.il'];
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
-const FROM = 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>';
 
 /** UTC instant of 00:00 Israel time on isoDate (DST-safe). */
 function israelDayStart(isoDate: string): Date {
@@ -101,33 +100,18 @@ export async function sendDailyReport(
   isoDate: string,
   appUrl: string,
 ): Promise<{ ok: true; status: 'sent' | 'duplicate' } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { ok: false, error: 'RESEND_API_KEY missing' };
-
   const report = await buildDailyReport(db, isoDate);
   const [y, m, d] = isoDate.split('-');
   const dateLabel = `${d}/${m}/${y}`;
 
-  const res = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json; charset=utf-8',
-      'Idempotency-Key': `daily-report/${isoDate}`,
-    },
-    body: JSON.stringify({
-      from: FROM,
-      to: DAILY_REPORT_TO,
-      subject: `דוח סוף יום — ${dateLabel}`,
-      html: buildHtml(dateLabel, report, appUrl),
-    }),
+  // Once per day: src/lib/mailer.ts honours the key with Resend
+  // (Idempotency-Key) and with Microsoft 365 (public.sent_emails).
+  const res = await sendMail({
+    to: DAILY_REPORT_TO,
+    subject: `דוח סוף יום — ${dateLabel}`,
+    html: buildHtml(dateLabel, report, appUrl),
+    onceKey: `daily-report/${isoDate}`,
   });
-  // Same key again today: Resend replays the first answer (same payload) or
-  // refuses with 409 (numbers changed since) — either way nothing new is sent.
-  if (res.status === 409) return { ok: true, status: 'duplicate' };
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    return { ok: false, error: `${res.status} ${text.slice(0, 300)}` };
-  }
-  return { ok: true, status: 'sent' };
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, status: res.status };
 }

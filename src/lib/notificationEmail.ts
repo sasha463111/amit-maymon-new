@@ -1,3 +1,4 @@
+import { sendMail } from '@/lib/mailer';
 // Email copy of a notification, sent alongside the push by /api/push/dispatch
 // (requested by Amit, 2026-10-06). Same Resend account and sender as the
 // daily summary report (src/app/actions/reports.ts).
@@ -15,8 +16,6 @@ export const EMAIL_TYPES = ['PENDING_APPROVAL', 'CEO_REJECTED', 'DIRECT_NOTE'];
  *  (Amit, 2026-10-09: "שעה"). */
 export const EMAIL_BACKUP_DELAY_MS = 60 * 60 * 1000;
 
-const RESEND_API_URL = 'https://api.resend.com/emails';
-const FROM = 'תהילה ניהול מוסך <reports@toyota-tehila.co.il>';
 
 function escapeHtml(s: string): string {
   return s
@@ -75,24 +74,13 @@ export async function sendNotificationEmail(opts: {
   plate?: string | null;
   customer?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return { ok: false, error: 'RESEND_API_KEY missing' };
-
   const isLast = opts.slot >= DAILY_EMAIL_LIMIT;
-  const res = await fetch(RESEND_API_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({
-      from: FROM,
-      to: [opts.to],
-      // e.g. "תיק חדש נפתח — רכב 12345678 · ישראל ישראלי"
-      subject: [opts.title, carLine(opts.plate, opts.customer)].filter(Boolean).join(' — ') + (isLast ? ' (מייל אחרון להיום)' : ''),
-      html: buildHtml(opts),
-    }),
+  const res = await sendMail({
+    to: [opts.to],
+    // e.g. "תיק חדש נפתח — רכב 12345678 · ישראל ישראלי"
+    subject: [opts.title, carLine(opts.plate, opts.customer)].filter(Boolean).join(' — ') + (isLast ? ' (מייל אחרון להיום)' : ''),
+    html: buildHtml(opts),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    return { ok: false, error: `${res.status} ${text.slice(0, 300)}` };
-  }
+  if (!res.ok) return { ok: false, error: res.error };
   return { ok: true };
 }
