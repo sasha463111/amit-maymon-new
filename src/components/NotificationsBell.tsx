@@ -10,6 +10,9 @@ import { actionTypesForRole } from '@/lib/notificationKinds';
 import { getAdvisorsForCases } from '@/app/actions/caseAdvisors';
 import { PushSubscriber } from '@/components/PushSubscriber';
 import { formatDate } from '@/lib/dates';
+import { shortVehicle } from '@/lib/vehicleLabel';
+
+type BellCar = { license_plate: string | null; vehicle_type: string | null; make: string | null; model: string | null };
 
 interface Row {
   id: string;
@@ -23,6 +26,8 @@ interface Row {
   triggered_by: string | null;
   // Joined
   license_plate: string | null;
+  /** "טויוטה C-HR HYBRID" next to the plate (Amit, 2026-10-13). */
+  vehicle: string | null;
   case_key: string | null;
   customer_name: string | null;
   /** "יועץ מטפל" of the case (src/lib/caseAdvisors.ts). */
@@ -248,6 +253,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     const plateMap = new Map<string, string>();
     const caseKeyMap = new Map<string, string>();
     const customerNameMap = new Map<string, string>();
+    const vehicleMap = new Map<string, string>();
     const userNameMap = new Map<string, string>();
     let advisorByCase: Record<string, string> = {};
 
@@ -256,11 +262,13 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
         if (caseIds.length === 0) return;
         const { data: caseRows } = await supabase
           .from('cases')
-          .select('id, case_key, customer_name, cars(license_plate)')
+          .select('id, case_key, customer_name, cars(license_plate, vehicle_type, make, model)')
           .in('id', caseIds);
-        for (const c of (caseRows ?? []) as Array<{ id: string; case_key: string | null; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }>) {
+        for (const c of (caseRows ?? []) as Array<{ id: string; case_key: string | null; customer_name: string | null; cars: BellCar | BellCar[] | null }>) {
           const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
           if (car?.license_plate) plateMap.set(c.id, car.license_plate);
+          const v = shortVehicle(car?.vehicle_type, car?.make, car?.model);
+          if (v) vehicleMap.set(c.id, v);
           if (c.case_key) caseKeyMap.set(c.id, c.case_key);
           if (c.customer_name) customerNameMap.set(c.id, c.customer_name);
         }
@@ -283,6 +291,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     const enriched: Row[] = list.map((n) => ({
       ...n,
       license_plate: n.case_id ? plateMap.get(n.case_id) ?? null : null,
+      vehicle: n.case_id ? vehicleMap.get(n.case_id) ?? null : null,
       case_key: n.case_id ? caseKeyMap.get(n.case_id) ?? null : null,
       customer_name: n.case_id ? customerNameMap.get(n.case_id) ?? null : null,
       advisor: n.case_id ? advisorByCase[n.case_id] ?? null : null,
@@ -566,6 +575,11 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
                             {n.license_plate && (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-bold tracking-wide" dir="ltr">
                                 🚗 {n.license_plate}
+                              </span>
+                            )}
+                            {n.vehicle && (
+                              <span className="text-[11px] font-semibold text-gray-600 truncate max-w-[130px]" dir="auto">
+                                {n.vehicle}
                               </span>
                             )}
                             {n.customer_name && (

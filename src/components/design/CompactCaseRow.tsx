@@ -26,6 +26,7 @@ const ROW_TONE: Record<CaseStatus, string> = {
  *  glance per row. */
 export function CompactCaseRow({
   plate,
+  vehicle = '',
   customer,
   activeStep,
   status,
@@ -34,6 +35,7 @@ export function CompactCaseRow({
   onClick,
 }: {
   plate: string;
+  vehicle?: string;
   customer: string;
   activeStep: string;
   status: CaseStatus;
@@ -57,6 +59,7 @@ export function CompactCaseRow({
       <LicensePlate plate={plate} size="sm" />
       <span className="flex-1 min-w-0 flex flex-col">
         <span className="font-bold text-[13px] text-stone-900 truncate leading-tight">{customer || '—'}</span>
+        {vehicle && <span className="text-[11.5px] font-semibold text-stone-600 truncate leading-tight" dir="auto">🚗 {vehicle}</span>}
         {/* The case's current stage as a bold tag, not small grey text, so the
             state of every case can be read at a glance (2026-10-08). */}
         <span

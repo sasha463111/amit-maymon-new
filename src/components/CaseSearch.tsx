@@ -111,6 +111,7 @@ export function CaseSearch() {
                       >
                         <span className="min-w-0">
                           <span className="font-bold text-gray-900 tracking-wide">{h.plate}</span>
+                          {h.vehicle && <span className="text-gray-600 text-sm" dir="auto"> · {h.vehicle}</span>}
                           {h.customer && <span className="text-gray-700"> · {h.customer}</span>}
                           <span className="block text-xs text-gray-500 mt-0.5">
                             {h.branch ?? ''}

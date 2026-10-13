@@ -22,6 +22,8 @@ function openedTime(c: RailCase): number {
 export interface RailCase {
   id: string;
   plate: string;
+  /** "טויוטה C-HR HYBRID" — shown next to the plate (src/lib/vehicleLabel.ts). */
+  vehicle?: string | null;
   opened_at: string | null;
   customer_name: string | null;
   insurer: string | null;
@@ -93,7 +95,7 @@ export function CasesMasterDetail({
         if (mineOnly && mineFirstFor && c.created_by !== mineFirstFor) return false;
         const okQuery =
           !q ||
-          [c.plate, c.customer_name ?? '', c.insurer ?? ''].some((f) => f.includes(q));
+          [c.plate, c.customer_name ?? '', c.insurer ?? '', c.vehicle ?? ''].some((f) => f.includes(q));
         return okBranch && okQuery;
       })
       .sort((a, b) => openedTime(b) - openedTime(a));
@@ -163,6 +165,7 @@ export function CasesMasterDetail({
             <CompactCaseRow
               key={c.id}
               plate={c.plate}
+              vehicle={c.vehicle ?? ''}
               customer={c.customer_name ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
@@ -185,6 +188,7 @@ export function CasesMasterDetail({
                 <CaseRow
                   key={c.id}
                   plate={c.plate}
+              vehicle={c.vehicle ?? ''}
                   customer={c.customer_name ?? ''}
                   insurer={c.insurer ?? ''}
                   branch={branchNameById[c.branch_id] ?? ''}
@@ -238,6 +242,7 @@ export function CasesMasterDetail({
             <CaseRow
               key={c.id}
               plate={c.plate}
+              vehicle={c.vehicle ?? ''}
               customer={c.customer_name ?? ''}
               insurer={c.insurer ?? ''}
               branch={branchNameById[c.branch_id] ?? ''}

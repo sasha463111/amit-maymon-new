@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { NotificationsList } from './NotificationsList';
+import { shortVehicle } from '@/lib/vehicleLabel';
+
+type CarCols = { license_plate: string | null; vehicle_type: string | null; make: string | null; model: string | null };
 
 export default async function NotificationsPage() {
   const supabase = await createClient();
@@ -40,6 +43,7 @@ export default async function NotificationsPage() {
     if (n.triggered_by) userIds.add(n.triggered_by);
   }
   const plateMap = new Map<string, string>();
+  const vehicleMap = new Map<string, string>();
   const userNameMap = new Map<string, string>();
   // Approvals still waiting — their notifications are drawn orange until the
   // approval is decided, whether or not the notification was read.
@@ -51,11 +55,13 @@ export default async function NotificationsPage() {
       if (caseIds.length === 0) return;
       const { data: caseRows } = await supabase
         .from('cases')
-        .select('id, cars(license_plate)')
+        .select('id, cars(license_plate, vehicle_type, make, model)')
         .in('id', caseIds);
-      for (const c of (caseRows ?? []) as { id: string; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }[]) {
+      for (const c of (caseRows ?? []) as { id: string; cars: CarCols | CarCols[] | null }[]) {
         const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
         if (car?.license_plate) plateMap.set(c.id, car.license_plate);
+        const v = shortVehicle(car?.vehicle_type, car?.make, car?.model);
+        if (v) vehicleMap.set(c.id, v);
       }
     })(),
     (async () => {
@@ -73,6 +79,7 @@ export default async function NotificationsPage() {
   const notificationsWithPlate = rows.map((n) => ({
     ...n,
     license_plate: n.case_id ? (plateMap.get(n.case_id) ?? null) : null,
+    vehicle: n.case_id ? (vehicleMap.get(n.case_id) ?? null) : null,
     triggered_by_name: n.triggered_by ? (userNameMap.get(n.triggered_by) ?? null) : null,
     awaiting: n.type === 'PENDING_APPROVAL' && !!n.case_id && pendingCaseIds.has(n.case_id),
   }));

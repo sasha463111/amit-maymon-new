@@ -14,6 +14,8 @@ interface NotificationRow {
   created_at: string;
   case_id: string | null;
   license_plate: string | null;
+  /** "טויוטה C-HR HYBRID" next to the plate (Amit, 2026-10-13). */
+  vehicle?: string | null;
   action_url: string | null;
   triggered_by_name: string | null;
   /** Approval request whose approval is still PENDING. */
@@ -121,6 +123,7 @@ function NotificationItem({
         )}
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <LicensePlate plate={n.license_plate} size="sm" />
+          {n.vehicle && <span className="text-xs font-semibold text-gray-600" dir="auto">{n.vehicle}</span>}
           <p
             className={`text-sm leading-snug ${
               !n.read ? 'font-semibold text-gray-900' : 'font-medium text-gray-600'
@@ -209,13 +212,13 @@ export function NotificationsList({
   }
 
   // Group by case_id — notifications without a case go last under "כללי"
-  const groups = new Map<string, { plate: string | null; items: NotificationRow[] }>();
+  const groups = new Map<string, { plate: string | null; vehicle: string | null; items: NotificationRow[] }>();
   const ungrouped: NotificationRow[] = [];
 
   for (const n of notifications) {
     if (n.case_id) {
       if (!groups.has(n.case_id)) {
-        groups.set(n.case_id, { plate: n.license_plate, items: [] });
+        groups.set(n.case_id, { plate: n.license_plate, vehicle: n.vehicle ?? null, items: [] });
       }
       groups.get(n.case_id)!.items.push(n);
     } else {
@@ -257,7 +260,10 @@ export function NotificationsList({
               onClick={() => router.push(`/go/${caseId}`)}
             >
               {group.plate ? (
-                <LicensePlate plate={group.plate} size="sm" />
+                <span className="flex items-center gap-2 min-w-0">
+                  <LicensePlate plate={group.plate} size="sm" />
+                  {group.vehicle && <span className="text-sm font-bold text-gray-700 truncate" dir="auto">{group.vehicle}</span>}
+                </span>
               ) : (
                 <span className="font-bold text-gray-800 text-sm">רכב לא ידוע</span>
               )}

@@ -6,6 +6,7 @@ import { LicensePlate } from '@/components/ui/LicensePlate';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { formatDate } from '@/lib/dates';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
+import { shortVehicle } from '@/lib/vehicleLabel';
 
 export interface PainterRow {
   id: string;
@@ -29,7 +30,7 @@ export interface PainterRow {
 // e.g. "טויוטה קורולה") — make/model are basically always empty in practice,
 // so prefer it and fall back to make+model for any older/manually-entered car.
 function carLineFor(row: Pick<PainterRow, 'car_vehicle_type' | 'car_make' | 'car_model' | 'car_year'>) {
-  const desc = row.car_vehicle_type?.trim() || [row.car_make, row.car_model].filter(Boolean).join(' ');
+  const desc = shortVehicle(row.car_vehicle_type, row.car_make, row.car_model);
   return [desc, row.car_year].filter(Boolean).join(' · ');
 }
 

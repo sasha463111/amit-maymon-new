@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/dates';
  *  element (what a manager scans for). Composes LicensePlate + StatusBadge. */
 export function CaseRow({
   plate,
+  vehicle = '',
   customer,
   insurer,
   branch,
@@ -20,6 +21,7 @@ export function CaseRow({
   unreadNotificationCount = 0,
 }: {
   plate: string;
+  vehicle?: string;
   customer: string;
   insurer: string;
   branch: string;
@@ -82,8 +84,11 @@ export function CaseRow({
         <StatusBadge status={status} size="sm" />
       </div>
 
-      {/* plate */}
-      <LicensePlate plate={plate} size="md" />
+      {/* plate + car (Amit, 2026-10-13: see the car without opening the case) */}
+      <div className="flex items-center gap-2 min-w-0">
+        <LicensePlate plate={plate} size="md" />
+        {vehicle && <span className="text-[13px] font-semibold text-stone-700 truncate" dir="auto">{vehicle}</span>}
+      </div>
 
       {/* active step + branch */}
       <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-200">
