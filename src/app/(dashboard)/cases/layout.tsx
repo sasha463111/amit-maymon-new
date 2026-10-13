@@ -34,7 +34,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
 
   let casesQuery = supabase
     .from('cases')
-    .select('id, opened_at, closed_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, created_by, cars!inner(license_plate, vehicle_type, make, model)')
+    .select('id, opened_at, closed_at, treatment_finished_at, notes, parts_status, general_status, customer_name, insurance_company, branch_id, created_by, cars!inner(license_plate, vehicle_type, make, model)')
     .is('deleted_at', null)
     // Newest first — a case opened now appears at the top.
     .order('opened_at', { ascending: false });
@@ -48,7 +48,14 @@ export default async function CasesLayout({ children }: { children: React.ReactN
   const branches = (branchesData ?? []) as { id: string; name: string }[];
   const branchNameById: Record<string, string> = Object.fromEntries(branches.map((b) => [b.id, b.name]));
 
-  const openCases = (casesRows ?? []).filter((c) => !(c as { closed_at: string | null }).closed_at);
+  // Cases still in treatment only. A case whose treatment finished has moved
+  // to the office's closure screen (and the archive tab "בתהליך סגירה") and
+  // left this list (Amit, 2026-10-13: "עבר לסגירה ולא ירד מהתיקים" — it sat
+  // here as "הושלם" until the office closed it).
+  const openCases = (casesRows ?? []).filter((c) => {
+    const row = c as { closed_at: string | null; treatment_finished_at: string | null };
+    return !row.closed_at && !row.treatment_finished_at;
+  });
   const caseIds = openCases.map((c) => (c as { id: string }).id);
   const safeIds = caseIds.length > 0 ? caseIds : ['00000000-0000-0000-0000-000000000000'];
 
