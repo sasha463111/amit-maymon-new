@@ -901,6 +901,7 @@ Standing rules are permanent architectural decisions that shape how Claude Code 
 
 - **Painter requests in the bell:** stay in "לטיפולי" for every advisor while the request is PENDING (not by read state), tagged "מיועד ל: <יועץ מטפל>"; once handled they move to updates with "✓ טופל".
 - **Push = row.** `sendPushToUser()` without `{direct:true}` is a no-op; all pushes go through `trg_dispatch_ceo_push` → `/api/push/dispatch` for every active user with a device. Never push inline again — insert the notification and let the dispatcher push it.
+- **אזור השרתים = bom1 (מומבאי), ליד בסיס הנתונים (2026-10-13).** Supabase יושב ב-`ap-south-1`. ב-`iad1` כל שאילתה לקחה כ-220ms (נמדד), וב-`bom1` היא לוקחת כ-35ms. בקשה עם 5 שאילתות מישראל ירדה מ-1.67 ל-0.73 שניות. הבדיקה: `GET /api/health/db` (5 שאילתות רצופות, מחזיר רק זמנים ואזור). לא להחזיר ל-iad1. השלב הבא, אם יידרש: להעביר את בסיס הנתונים לפרנקפורט + `fra1` (`SUPABASE_MIGRATION_GUIDE.md`).
 - **Pixcar בתיק הפחח (2026-10-13, עמית):** כפתור "📸 צפייה בתמונות Pixcar" ב-`painters/[id]` מתוך `cases.fixcar_link` (רק קישור http/https, נפתח בטאב חדש).
 - **חיפוש ברשימת התיקים (2026-10-13):** ליד הכותרת "תיקים". קודם הוא ישב ליד שורת הסניפים, וה-`w-full` שלה דחס אותו לרוחב 0.
 - **סוג רכב ליד מספר הרכב (2026-10-13, עמית):** `shortVehicle()` ב-`src/lib/vehicleLabel.ts` מקצר את נוסח משרד התחבורה ("טויוטה טורקיה C-HR HYBRID" → "טויוטה C-HR HYBRID"). מוצג ברשימת התיקים (CaseRow / CompactCaseRow, וגם בחיפוש של הרשימה), במסך ההתראות (כותרת קבוצה + כל שורה), בפעמון, בחיפוש 🔍 ובלוח הפחחים.
