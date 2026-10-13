@@ -234,7 +234,7 @@ export function ArchiveTabs({
                     {r.insurance && <span className="truncate">🏢 {r.insurance}</span>}
                     {r.branch_name && r.branch_name !== '—' && <span className="truncate">📍 {r.branch_name}</span>}
                     {tab === 'deleted' && r.deleted_by_name !== '—' && (
-                      <span className="truncate">❌ ע"י {r.deleted_by_name}</span>
+                      <span className="truncate">❌ ע&quot;י {r.deleted_by_name}</span>
                     )}
                     {tab === 'written_off' && r.written_off_reason && (
                       <span className="col-span-2 truncate">🚫 {r.written_off_reason}</span>
@@ -318,7 +318,7 @@ export function ArchiveTabs({
                             </span>
                           )}
                           {tab === 'deleted' && r.deleted_by_name !== '—' && (
-                            <span className="text-[10px] text-gray-400 mt-0.5">ע"י {r.deleted_by_name}</span>
+                            <span className="text-[10px] text-gray-400 mt-0.5">ע&quot;י {r.deleted_by_name}</span>
                           )}
                           {tab === 'written_off' && r.written_off_reason && (
                             <span className="text-[10px] text-stone-600 mt-0.5">🚫 {r.written_off_reason}</span>

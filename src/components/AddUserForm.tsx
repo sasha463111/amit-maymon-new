@@ -95,7 +95,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">דוא"ל</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">דוא&quot;ל</label>
               <div className="relative">
                 <Mail size={16} className="absolute right-3 top-2.5 text-gray-400" />
                 <input

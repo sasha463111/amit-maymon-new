@@ -455,7 +455,7 @@ export function ReferralDetailClient({
           </div>
         </div>
         <p className="text-xs text-gray-400 mt-1">
-          תזכורת מעקב תשלח התראה במשרד/מנכ"ל ביום שנקבע — לדוגמה "לקוח תואם לשבוע הבא"
+          תזכורת מעקב תשלח התראה במשרד/מנכ&quot;ל ביום שנקבע — לדוגמה &quot;לקוח תואם לשבוע הבא&quot;
         </p>
       </div>
 
