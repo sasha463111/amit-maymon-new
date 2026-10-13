@@ -69,11 +69,30 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
       .insert({ case_id: id, workflow_type: 'CLOSURE', status: 'ACTIVE' } as never)
       .select('id')
       .single();
-    const newRunRow = newRun as { id: string } | null;
+    let newRunRow = newRun as { id: string } | null;
+    if (!newRunRow?.id) {
+      // Someone else opened this page (or completed "send completion photos")
+      // at the same moment and created the run first — one closure run per
+      // case is enforced by uniq_case_workflow_runs_one_closure_per_case.
+      // Use theirs instead of showing a 404 (code review 2026-10-13).
+      const { data: raced } = await supabase
+        .from('case_workflow_runs')
+        .select('id')
+        .eq('case_id', id)
+        .eq('workflow_type', 'CLOSURE')
+        .maybeSingle();
+      newRunRow = raced as { id: string } | null;
+    }
     if (!newRunRow?.id) notFound();
     runId = newRunRow.id;
     const closureActivatedAt = new Date().toISOString();
-    for (let i = 0; i < CLOSURE_STEPS.length; i++) {
+    // Steps already there (the other request created them) → nothing to add;
+    // uniq_case_workflow_steps_run_step would reject duplicates anyway.
+    const { count: existingSteps } = await supabase
+      .from('case_workflow_steps')
+      .select('id', { count: 'exact', head: true })
+      .eq('run_id', runId);
+    for (let i = 0; i < ((existingSteps ?? 0) > 0 ? 0 : CLOSURE_STEPS.length); i++) {
       await supabase.from('case_workflow_steps').insert({
         run_id: runId,
         step_key: CLOSURE_STEPS[i],
