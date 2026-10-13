@@ -528,14 +528,22 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   }
 
   const now = new Date().toISOString();
-  await supabase
+  // Checked (code review 2026-10-13): an unchecked write here reported "done"
+  // when nothing was saved — the same silent-failure pattern as the stuck
+  // estimate approvals. Guarded on the state too, so a double click or two
+  // users at once cannot complete (and notify) the same step twice.
+  const { data: doneRows, error: doneErr } = await supabase
     .from('case_workflow_steps')
     .update({
       state: 'DONE',
       completed_at: now,
       completed_by: user.id,
     } as never)
-    .eq('id', activeStep.id);
+    .eq('id', activeStep.id)
+    .in('state', ['ACTIVE', 'PENDING'])
+    .select('id');
+  if (doneErr) return { error: `השלב לא נשמר: ${doneErr.message}` };
+  if (!doneRows?.length) return { error: 'השלב כבר הושלם (אולי על ידי מישהו אחר) — רעננו את הדף' };
 
   // Office handoff: trigger at SEND_COMPLETION_PHOTOS (preferred) or READY_FOR_OFFICE (legacy).
   // After SEND_COMPLETION_PHOTOS: notify office + create closure run + auto-complete READY_FOR_OFFICE.
@@ -757,8 +765,18 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
   // Removed in Session 6 — Amit's ESTIMATE_AND_DETAILS approval is the sole CEO sign-off.
 
   if (stepKey === 'CLOSE_CASE') {
-    await supabase.from('cases').update({ closed_at: now, general_status: 'COMPLETED' } as never).eq('id', caseId);
-    await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
+    const { data: closedRows, error: closeErr } = await supabase
+      .from('cases')
+      .update({ closed_at: now, general_status: 'COMPLETED' } as never)
+      .eq('id', caseId)
+      .select('id');
+    if (closeErr || !closedRows?.length) {
+      // Put the step back so the case does not look closed when it is not.
+      await supabase.from('case_workflow_steps').update({ state: 'ACTIVE', completed_at: null, completed_by: null } as never).eq('id', activeStep.id);
+      return { error: `התיק לא נסגר: ${closeErr?.message ?? 'אין הרשאה לעדכן את התיק'}` };
+    }
+    const { error: runCloseErr } = await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
+    if (runCloseErr) console.error('[completeActiveStep] closure run not completed', runCloseErr.message);
     await writeAudit(supabase, 'CASE', caseId, 'CASE_CLOSED', user.id);
 
     // Notify on final closure: the case's branch management (service managers +
@@ -817,10 +835,15 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       // Only activate if not already SKIPPED (e.g. WHEELS_CHECK auto-skipped for young cars)
       // and not already DONE (e.g. READY_FOR_OFFICE auto-completed by us)
       if (nextStep.state !== 'SKIPPED' && nextStep.state !== 'DONE') {
-        await supabase
+        const { error: nextErr } = await supabase
           .from('case_workflow_steps')
           .update({ state: 'ACTIVE', activated_at: now } as never)
           .eq('id', nextStep.id);
+        if (nextErr) {
+          console.error('[completeActiveStep] next step not activated', nextErr.message);
+          revalidatePath('/cases');
+          return { error: 'השלב נשמר, אבל השלב הבא לא הופעל — רעננו את הדף ונסו שוב' };
+        }
       }
     } else if (run.workflow_type === 'PROFESSIONAL') {
       await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', run.id);
@@ -978,7 +1001,8 @@ export async function skipStep(caseId: string, stepId: string) {
       .limit(1);
     const next = ((nextSteps ?? []) as { id: string; state: string }[])[0];
     if (next) {
-      await supabase.from('case_workflow_steps').update({ state: 'ACTIVE', activated_at: now } as never).eq('id', next.id);
+      const { error: nextErr } = await supabase.from('case_workflow_steps').update({ state: 'ACTIVE', activated_at: now } as never).eq('id', next.id);
+      if (nextErr) return { error: 'השלב דולג, אבל השלב הבא לא הופעל — רעננו את הדף' };
     } else {
       await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('id', runId);
     }
