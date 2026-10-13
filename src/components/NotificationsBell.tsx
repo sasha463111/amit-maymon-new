@@ -159,6 +159,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
 
   // Load rows + unread count (joins case + plate + sender name)
   async function loadRows() {
+    const perfStart = performance.now(); // speed measurement (PerfBeacon)
     const supabase = createClient();
     const { data: notifData } = await supabase
       .from('notifications')
@@ -301,6 +302,7 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     }));
 
     setRows(enriched);
+    window.dispatchEvent(new CustomEvent('perf:bell', { detail: { ms: performance.now() - perfStart } }));
     // CEO: the badge counts cars with news, not every single update.
     const unread = groupUpdates
       ? enriched.filter((n) => !n.read && isAction(n, actionTypes)).length +

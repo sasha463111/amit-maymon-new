@@ -16,6 +16,7 @@ import { getViewAsState } from '@/app/actions/users';
 import { StopViewAsButton } from './StopViewAsButton';
 import { BRAND_NAME } from '@/lib/demo';
 import { DemoBanner } from '@/components/DemoBanner';
+import { PerfBeacon } from '@/components/PerfBeacon';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -163,6 +164,8 @@ export default async function DashboardLayout({
       {/* Real-time sync for profile changes */}
       {!isPreview && <RealtimeProfileSync userId={user.id} />}
       {!isPreview && <AutoRefresh />}
+      {/* Speed measurement, temporary (2026-10-13). */}
+      {!isPreview && <PerfBeacon role={role} />}
       <DemoBanner />
 
       {isPreview && (
