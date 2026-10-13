@@ -9,7 +9,7 @@
 // actions/push.ts): the CEO is the primary recipient only of approvals; every
 // other CEO notification is an audit copy.
 const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
-  CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE'],
+  CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE', 'CASE_RESTORED'],
   SERVICE_MANAGER: ['CEO_REJECTED', 'BLOCKED_ACTION', 'PAINTER_REQUEST', 'EXTRA_CREATED', 'DIRECT_NOTE'],
   SERVICE_ADVISOR: ['PAINTER_REQUEST', 'CEO_REJECTED', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   // Referrals office and closure office share the role; each only ever

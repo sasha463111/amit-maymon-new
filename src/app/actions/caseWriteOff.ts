@@ -7,23 +7,65 @@ import { createClient } from '@/lib/supabase/server';
 // "🚫 רכב לא לתיקון / מושבת" (Amit, 2026-10-13): the car will not be repaired
 // (total loss, customer took it elsewhere…). The case is CLOSED — it leaves
 // every open list, workflows end — and is kept in the archive tab "מושבתים",
-// apart from cases that were repaired and closed. CEO only for now (new
-// features go to Amit first). Reversible: "↩️ החזר לטיפול".
+// apart from cases that were repaired and closed. Reversible: "↩️ החזר לטיפול".
+// Who (Amit, 2026-10-13: "לכל מי שרלוונטי"): whoever runs a case — CEO,
+// service manager, advisors, office — and the same people can undo it; the
+// CEO is told (push) whenever someone else brings a case back.
+// Branch reach is enforced by RLS (an update outside it changes 0 rows).
+// (A 'use server' file may export only async functions — keep this private.)
+const WRITE_OFF_ROLES = ['CEO', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE'];
 
-async function ceo() {
+async function actor(roles: string[]) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if ((data as { role: string } | null)?.role !== 'CEO') return null;
-  return { supabase, userId: user.id };
+  const { data } = await supabase.from('profiles').select('role, is_active').eq('id', user.id).maybeSingle();
+  const p = data as { role: string; is_active: boolean } | null;
+  if (!p || p.is_active === false || !roles.includes(p.role)) return null;
+  return { supabase, userId: user.id, role: p.role };
+}
+
+function serviceDb() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+/** "↩️ תיק מושבת הוחזר לטיפול" to every active CEO — type CASE_RESTORED is
+ *  in the CEO ACTION tier (ceo_notification_tier), so it is pushed too. */
+async function tellCeoRestored(caseId: string, byUserId: string) {
+  const db = serviceDb();
+  if (!db) return;
+  const [{ data: ceos }, { data: c }, { data: me }] = await Promise.all([
+    db.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true),
+    db.from('cases').select('customer_name, cars(license_plate)').eq('id', caseId).maybeSingle(),
+    db.from('profiles').select('full_name').eq('id', byUserId).maybeSingle(),
+  ]);
+  const row = c as { customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null } | null;
+  const car = Array.isArray(row?.cars) ? row?.cars[0] : row?.cars;
+  const who = (me as { full_name: string | null } | null)?.full_name ?? 'משתמש';
+  const what = [row?.customer_name, car?.license_plate ? `רכב ${car.license_plate}` : null].filter(Boolean).join(' · ');
+  const targets = ((ceos ?? []) as { id: string }[]).filter((x) => x.id !== byUserId);
+  if (!targets.length) return;
+  const { error } = await db.from('notifications').insert(
+    targets.map((x) => ({
+      user_id: x.id,
+      case_id: caseId,
+      type: 'CASE_RESTORED',
+      title: '↩️ תיק מושבת הוחזר לטיפול',
+      body: `${what || 'תיק'} — הוחזר ע"י ${who}`,
+      action_url: `/cases/${caseId}`,
+      triggered_by: byUserId,
+      read: false,
+    })) as never,
+  );
+  if (error) console.error('[restoreWrittenOffCase] CEO notification failed', error.message);
 }
 
 function closeOpenNotifications(caseId: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return Promise.resolve();
-  const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = serviceDb();
+  if (!admin) return Promise.resolve();
   return admin
     .from('notifications')
     .update({ read: true } as never)
@@ -35,8 +77,8 @@ function closeOpenNotifications(caseId: string) {
 }
 
 export async function writeOffCase(caseId: string, reason: string) {
-  const ctx = await ceo();
-  if (!ctx) return { error: 'רק המנכ"ל יכול לסמן רכב כמושבת' };
+  const ctx = await actor(WRITE_OFF_ROLES);
+  if (!ctx) return { error: 'אין הרשאה לסמן רכב כמושבת' };
   const { supabase, userId } = ctx;
   const note = reason.trim().slice(0, 300) || null;
   const now = new Date().toISOString();
@@ -49,7 +91,7 @@ export async function writeOffCase(caseId: string, reason: string) {
     .is('deleted_at', null)
     .select('id');
   if (error) return { error: error.message };
-  if (!data?.length) return { error: 'התיק כבר סגור או נמחק' };
+  if (!data?.length) return { error: 'התיק כבר סגור, נמחק, או בסניף אחר' };
 
   // Every workflow of the case ends — nothing left to do on it.
   await supabase.from('case_workflow_runs').update({ status: 'COMPLETED' } as never).eq('case_id', caseId).eq('status', 'ACTIVE');
@@ -70,9 +112,9 @@ export async function writeOffCase(caseId: string, reason: string) {
 
 /** Undo: the case is open again and its last workflow continues. */
 export async function restoreWrittenOffCase(caseId: string) {
-  const ctx = await ceo();
-  if (!ctx) return { error: 'רק המנכ"ל' };
-  const { supabase, userId } = ctx;
+  const ctx = await actor(WRITE_OFF_ROLES);
+  if (!ctx) return { error: 'אין הרשאה להחזיר לטיפול' };
+  const { supabase, userId, role } = ctx;
 
   const { data, error } = await supabase
     .from('cases')
@@ -81,7 +123,7 @@ export async function restoreWrittenOffCase(caseId: string) {
     .not('written_off_at', 'is', null)
     .select('id');
   if (error) return { error: error.message };
-  if (!data?.length) return { error: 'התיק לא מסומן כמושבת' };
+  if (!data?.length) return { error: 'התיק לא מסומן כמושבת, או בסניף אחר' };
 
   const { data: runs } = await supabase
     .from('case_workflow_runs')
@@ -99,6 +141,7 @@ export async function restoreWrittenOffCase(caseId: string) {
     user_id: userId,
     payload: null,
   } as never);
+  if (role !== 'CEO') await tellCeoRestored(caseId, userId);
 
   revalidatePath('/cases');
   revalidatePath('/cases/archive');

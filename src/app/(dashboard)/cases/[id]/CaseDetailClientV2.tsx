@@ -476,7 +476,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
       />
 
       {props.writtenOffAt && (
-        <WrittenOffBanner caseId={caseId} writtenOffAt={props.writtenOffAt} reason={props.writtenOffReason ?? null} canRestore={role === 'CEO'} />
+        <WrittenOffBanner caseId={caseId} writtenOffAt={props.writtenOffAt} reason={props.writtenOffReason ?? null} canRestore={['CEO', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE'].includes(role ?? '')} />
       )}
 
       {/* Estimate rejected → resend for approval (Amit, 2026-10-12). Only
@@ -490,8 +490,8 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           <span>חזרה לתיקים</span>
         </Link>
         <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* "Not for repair" — CEO only for now (new features go to Amit first). */}
-        {role === 'CEO' && !isClosed && <WriteOffButton caseId={caseId} />}
+        {/* "Not for repair" — whoever runs a case (Amit, 2026-10-13). */}
+        {['CEO', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE'].includes(role ?? '') && !isClosed && <WriteOffButton caseId={caseId} />}
         {(role === 'CEO' || props.canDeleteCase) && (
           deleteConfirm ? (
             <div className="flex items-center gap-2">
