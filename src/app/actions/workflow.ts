@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/app/actions/push';
+import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/lib/pushSend';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
 import { CLOSURE_CLERK_NAME } from '@/lib/demo';

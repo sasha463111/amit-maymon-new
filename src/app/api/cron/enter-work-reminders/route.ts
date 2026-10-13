@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser } from '@/lib/pushSend';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
 
 /**

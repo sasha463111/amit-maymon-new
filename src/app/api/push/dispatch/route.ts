@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser } from '@/lib/pushSend';
 
 // Push for EVERY notification a CEO receives (requested by Amit, 2026-10-06).
 // The email backup is sent separately by the reminders cron.

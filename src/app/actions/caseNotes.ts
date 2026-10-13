@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser } from '@/app/actions/push';
+import { sendPushToUser } from '@/lib/pushSend';
 
 // Free-text notes on a case, addressed to chosen people (requested for the
 // closure page by אילנה, 2026-10-07: "לעמית — הערה ספציפית, לנסיה וערן —
