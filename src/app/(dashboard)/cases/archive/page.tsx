@@ -16,6 +16,8 @@ type RawCase = {
   closed_at: string | null;
   deleted_at: string | null;
   deleted_by: string | null;
+  written_off_at?: string | null;
+  written_off_reason?: string | null;
   branch_id: string;
   cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
 };
@@ -35,6 +37,8 @@ function rowFrom(c: RawCase, branchById: Map<string, string>, profileById: Map<s
     closed_at: c.closed_at,
     deleted_at: c.deleted_at,
     deleted_by_name: c.deleted_by ? profileById.get(c.deleted_by) ?? '—' : '—',
+    written_off_at: c.written_off_at ?? null,
+    written_off_reason: c.written_off_reason ?? null,
     branch_name: branchById.get(c.branch_id) ?? '—',
   };
 }
@@ -65,9 +69,10 @@ export default async function CasesArchivePage({
   }
 
   const { tab = 'closed' } = await searchParams;
-  const activeTab = (['in_closure', 'closed', 'deleted'].includes(tab) ? tab : 'closed') as
+  const activeTab = (['in_closure', 'closed', 'written_off', 'deleted'].includes(tab) ? tab : 'closed') as
     | 'in_closure'
     | 'closed'
+    | 'written_off'
     | 'deleted';
 
   // CEO sees all branches; others only their branches (as array).
@@ -75,7 +80,7 @@ export default async function CasesArchivePage({
 
   // Three independent counts so the user sees what's where (archive queries)
   const baseSelect =
-    'id, case_key, claim_number, customer_name, phone, insurance_company, opened_at, treatment_finished_at, closed_at, deleted_at, deleted_by, branch_id, cars(license_plate)';
+    'id, case_key, claim_number, customer_name, phone, insurance_company, opened_at, treatment_finished_at, closed_at, deleted_at, deleted_by, written_off_at, written_off_reason, branch_id, cars(license_plate)';
 
   let inClosureQuery = supabase
     .from('cases')
@@ -90,7 +95,16 @@ export default async function CasesArchivePage({
     .select(baseSelect)
     .not('closed_at', 'is', null)
     .is('deleted_at', null)
+    .is('written_off_at', null)
     .order('closed_at', { ascending: false });
+
+  // "רכב לא לתיקון / מושבת" (2026-10-13) — closed, but not repaired.
+  let writtenOffQuery = supabase
+    .from('cases')
+    .select(baseSelect)
+    .not('written_off_at', 'is', null)
+    .is('deleted_at', null)
+    .order('written_off_at', { ascending: false });
 
   let deletedQuery = supabase
     .from('cases')
@@ -106,25 +120,29 @@ export default async function CasesArchivePage({
     if (branchIdsToFilter.length > 0) {
       inClosureQuery = inClosureQuery.in('branch_id', branchIdsToFilter);
       closedQuery = closedQuery.in('branch_id', branchIdsToFilter);
+      writtenOffQuery = writtenOffQuery.in('branch_id', branchIdsToFilter);
       deletedQuery = deletedQuery.in('branch_id', branchIdsToFilter);
     } else {
       // Safety: If no branch IDs found, filter by impossible condition to block access
       inClosureQuery = inClosureQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
       closedQuery = closedQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
+      writtenOffQuery = writtenOffQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
       deletedQuery = deletedQuery.eq('branch_id', '00000000-0000-0000-0000-000000000000');
     }
   }
 
   // CEO sees deleted tab; others don't.
-  const [inClosureRes, closedRes, deletedRes] = await Promise.all([
+  const [inClosureRes, closedRes, writtenOffRes, deletedRes] = await Promise.all([
     inClosureQuery,
     closedQuery,
+    writtenOffQuery,
     role === 'CEO' ? deletedQuery : Promise.resolve({ data: [] }),
   ]);
 
   const allCases: RawCase[] = [
     ...((inClosureRes.data ?? []) as RawCase[]),
     ...((closedRes.data ?? []) as RawCase[]),
+    ...((writtenOffRes.data ?? []) as RawCase[]),
     ...((deletedRes.data ?? []) as RawCase[]),
   ];
 
@@ -147,6 +165,7 @@ export default async function CasesArchivePage({
 
   const inClosureRows = ((inClosureRes.data ?? []) as RawCase[]).map((c) => rowFrom(c, branchById, profileById));
   const closedRows = ((closedRes.data ?? []) as RawCase[]).map((c) => rowFrom(c, branchById, profileById));
+  const writtenOffRows = ((writtenOffRes.data ?? []) as RawCase[]).map((c) => rowFrom(c, branchById, profileById));
   const deletedRows = ((deletedRes.data ?? []) as RawCase[]).map((c) => rowFrom(c, branchById, profileById));
 
   return (
@@ -177,6 +196,7 @@ export default async function CasesArchivePage({
         activeTab={activeTab}
         inClosure={inClosureRows}
         closed={closedRows}
+        writtenOff={writtenOffRows}
         deleted={deletedRows}
         canRestoreDeleted={role === 'CEO'}
       />

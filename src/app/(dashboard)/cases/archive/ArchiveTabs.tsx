@@ -4,7 +4,7 @@ import { useState, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { restoreCase } from '@/app/actions/workflow';
-import { RotateCcw, FileText, Search, Clock, CheckCircle2, Trash2, ArrowUpDown } from 'lucide-react';
+import { RotateCcw, FileText, Search, Clock, CheckCircle2, Trash2, ArrowUpDown, Ban } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 
@@ -21,10 +21,12 @@ export type ArchiveRow = {
   closed_at: string | null;
   deleted_at: string | null;
   deleted_by_name: string;
+  written_off_at: string | null;
+  written_off_reason: string | null;
   branch_name: string;
 };
 
-type TabKey = 'in_closure' | 'closed' | 'deleted';
+type TabKey = 'in_closure' | 'closed' | 'written_off' | 'deleted';
 
 function daysSince(iso: string | null): number | null {
   if (!iso) return null;
@@ -36,12 +38,14 @@ export function ArchiveTabs({
   activeTab,
   inClosure,
   closed,
+  writtenOff,
   deleted,
   canRestoreDeleted,
 }: {
   activeTab: TabKey;
   inClosure: ArchiveRow[];
   closed: ArchiveRow[];
+  writtenOff: ArchiveRow[];
   deleted: ArchiveRow[];
   canRestoreDeleted: boolean;
 }) {
@@ -52,12 +56,12 @@ export function ArchiveTabs({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const sourceRows = tab === 'in_closure' ? inClosure : tab === 'closed' ? closed : deleted;
+  const sourceRows = tab === 'in_closure' ? inClosure : tab === 'closed' ? closed : tab === 'written_off' ? writtenOff : deleted;
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
     if (!s) return sourceRows;
     return sourceRows.filter((r) =>
-      [r.plate, r.customer, r.claim, r.insurance ?? '', r.case_key, r.branch_name]
+      [r.plate, r.customer, r.claim, r.insurance ?? '', r.case_key, r.branch_name, r.written_off_reason ?? '']
         .some((v) => v.toLowerCase().includes(s))
     );
   }, [sourceRows, search]);
@@ -90,6 +94,7 @@ export function ArchiveTabs({
   const TABS: { key: TabKey; label: string; icon: typeof Clock; count: number; tone: string }[] = [
     { key: 'in_closure', label: 'בתהליך סגירה', icon: Clock, count: inClosure.length, tone: 'amber' },
     { key: 'closed', label: 'סגורים', icon: CheckCircle2, count: closed.length, tone: 'emerald' },
+    { key: 'written_off', label: 'מושבתים', icon: Ban, count: writtenOff.length, tone: 'stone' },
   ];
   if (canRestoreDeleted) {
     TABS.push({ key: 'deleted', label: 'מחוקים', icon: Trash2, count: deleted.length, tone: 'rose' });
@@ -105,6 +110,11 @@ export function ArchiveTabs({
       active: 'bg-emerald-100 text-emerald-900 border-emerald-400 shadow-sm',
       inactive: 'bg-white text-gray-600 border-gray-200 hover:bg-emerald-50 hover:border-emerald-200',
       chip: 'bg-emerald-500 text-white',
+    },
+    stone: {
+      active: 'bg-stone-200 text-stone-900 border-stone-500 shadow-sm',
+      inactive: 'bg-white text-gray-600 border-gray-200 hover:bg-stone-50 hover:border-stone-300',
+      chip: 'bg-stone-600 text-white',
     },
     rose: {
       active: 'bg-rose-100 text-rose-900 border-rose-400 shadow-sm',
@@ -175,6 +185,8 @@ export function ArchiveTabs({
               <Clock size={24} className="text-gray-400" />
             ) : tab === 'closed' ? (
               <CheckCircle2 size={24} className="text-gray-400" />
+            ) : tab === 'written_off' ? (
+              <Ban size={24} className="text-gray-400" />
             ) : (
               <Trash2 size={24} className="text-gray-400" />
             )}
@@ -183,6 +195,7 @@ export function ArchiveTabs({
             {search ? 'לא נמצאו תוצאות לחיפוש' :
               tab === 'in_closure' ? 'אין כרגע תיקים בתהליך סגירה' :
               tab === 'closed' ? 'אין כרגע תיקים סגורים' :
+              tab === 'written_off' ? 'אין רכבים מושבתים' :
               'אין תיקים מחוקים'}
           </p>
         </div>
@@ -194,6 +207,7 @@ export function ArchiveTabs({
               const dateValue =
                 tab === 'in_closure' ? r.treatment_finished_at :
                 tab === 'closed' ? r.closed_at :
+                tab === 'written_off' ? r.written_off_at :
                 r.deleted_at;
               const days = daysSince(dateValue);
               const isStale = tab === 'in_closure' && days !== null && days > 7;
@@ -221,6 +235,9 @@ export function ArchiveTabs({
                     {r.branch_name && r.branch_name !== '—' && <span className="truncate">📍 {r.branch_name}</span>}
                     {tab === 'deleted' && r.deleted_by_name !== '—' && (
                       <span className="truncate">❌ ע"י {r.deleted_by_name}</span>
+                    )}
+                    {tab === 'written_off' && r.written_off_reason && (
+                      <span className="col-span-2 truncate">🚫 {r.written_off_reason}</span>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -260,7 +277,7 @@ export function ArchiveTabs({
                   <th className="px-4 py-3 text-right font-semibold">
                     <span className="inline-flex items-center gap-1">
                       <ArrowUpDown size={12} />
-                      {tab === 'in_closure' ? 'הועבר למשרד' : tab === 'closed' ? 'נסגר' : 'נמחק'}
+                      {tab === 'in_closure' ? 'הועבר למשרד' : tab === 'closed' ? 'נסגר' : tab === 'written_off' ? 'הושבת' : 'נמחק'}
                     </span>
                   </th>
                   <th className="px-4 py-3"></th>
@@ -271,6 +288,7 @@ export function ArchiveTabs({
                   const dateValue =
                     tab === 'in_closure' ? r.treatment_finished_at :
                     tab === 'closed' ? r.closed_at :
+                    tab === 'written_off' ? r.written_off_at :
                     r.deleted_at;
                   const days = daysSince(dateValue);
                   const isStale = tab === 'in_closure' && days !== null && days > 7;
@@ -301,6 +319,9 @@ export function ArchiveTabs({
                           )}
                           {tab === 'deleted' && r.deleted_by_name !== '—' && (
                             <span className="text-[10px] text-gray-400 mt-0.5">ע"י {r.deleted_by_name}</span>
+                          )}
+                          {tab === 'written_off' && r.written_off_reason && (
+                            <span className="text-[10px] text-stone-600 mt-0.5">🚫 {r.written_off_reason}</span>
                           )}
                         </div>
                       </td>

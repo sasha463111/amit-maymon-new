@@ -11,6 +11,7 @@ import type { PartsStatus } from '@/types/database';
 import { PROFESSIONAL_STEP_LABELS as DEFAULT_STEP_LABELS } from '@/types/database';
 import { CaseStatusBanner } from './CaseStatusBanner';
 import { EstimateRejectedBanner } from './EstimateRejectedBanner';
+import { WriteOffButton, WrittenOffBanner } from './WriteOffControl';
 import { CaseNotificationsPanel } from './CaseNotificationsPanel';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { DocumentsSection } from './DocumentsSection';
@@ -90,6 +91,9 @@ interface CaseDetailClientProps {
   // Session 7 — status banner
   treatmentFinishedAt?: string | null;
   closedAt?: string | null;
+  /** "רכב לא לתיקון / מושבת" (src/app/actions/caseWriteOff.ts). */
+  writtenOffAt?: string | null;
+  writtenOffReason?: string | null;
   painterRequests: PainterRequestRow[];
   /** This user's unread notifications about this case. */
   caseNotifications?: { id: string; title: string; body: string | null; created_at: string; type: string }[];
@@ -471,6 +475,10 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         caseId={caseId}
       />
 
+      {props.writtenOffAt && (
+        <WrittenOffBanner caseId={caseId} writtenOffAt={props.writtenOffAt} reason={props.writtenOffReason ?? null} canRestore={role === 'CEO'} />
+      )}
+
       {/* Estimate rejected → resend for approval (Amit, 2026-10-12). Only
           while the car is still in treatment — once it reached the office or
           was closed, an old rejection is moot and must not nag anyone. */}
@@ -481,6 +489,9 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
           <span>←</span>
           <span>חזרה לתיקים</span>
         </Link>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* "Not for repair" — CEO only for now (new features go to Amit first). */}
+        {role === 'CEO' && !isClosed && <WriteOffButton caseId={caseId} />}
         {(role === 'CEO' || props.canDeleteCase) && (
           deleteConfirm ? (
             <div className="flex items-center gap-2">
@@ -512,6 +523,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
             </button>
           )
         )}
+        </div>
       </div>
       {deleteError && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">

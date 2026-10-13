@@ -44,7 +44,7 @@ export async function buildDailyReport(db: SupabaseClient, isoDate: string) {
     db.from('branches').select('id, name').order('name'),
     db.from('referrals').select('branch_id').eq('status', 'ACTIVE'),
     db.from('cases').select('branch_id').is('closed_at', null).is('deleted_at', null),
-    db.from('cases').select('branch_id').is('deleted_at', null).gte('closed_at', start).lt('closed_at', end),
+    db.from('cases').select('branch_id').is('deleted_at', null).is('written_off_at', null).gte('closed_at', start).lt('closed_at', end),
     db.from('referrals').select('branch_id, cases!inner(created_at)').eq('status', 'CONVERTED').is('cases.deleted_at', null).gte('cases.created_at', start).lt('cases.created_at', end),
   ]);
   for (const r of [branchesRes, openRefRes, openCasesRes, closedRes, convertedRes]) {

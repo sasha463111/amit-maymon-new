@@ -45,6 +45,8 @@ type CaseRowMinimal = {
   opened_at: string | null;
   treatment_finished_at: string | null;
   closed_at: string | null;
+  written_off_at?: string | null;
+  written_off_reason?: string | null;
   general_status: string;
   customer_name: string | null;
   phone: string | null;
@@ -382,6 +384,8 @@ async function CaseDetailData({
       completionPhotosAssignee={caseRow.completion_photos_assignee ?? null}
       treatmentFinishedAt={caseRow.treatment_finished_at ?? null}
       closedAt={caseRow.closed_at ?? null}
+      writtenOffAt={caseRow.written_off_at ?? null}
+      writtenOffReason={caseRow.written_off_reason ?? null}
       painterRequests={painterRequests}
       caseNotifications={caseNotifications}
       canDeleteCase={canDeleteCase}
@@ -419,7 +423,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     const { data, error } = await supabase
       .from('cases')
       .select(
-        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,sub_claim_type_other_text,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,painter_status_other_text,appraiser_status,enter_work_checklist_state,catalog_numbers_assignee,parts_discounts_assignee,completion_photos_assignee,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
+        'id,case_key,claim_number,fixcar_link,wheels_check_link,parts_status,opened_at,treatment_finished_at,closed_at,written_off_at,written_off_reason,general_status,branch_id,customer_name,phone,insurance_company,appraiser_name,event_date,sub_claim_type,sub_claim_type_other_text,insurance_type,claim_type,notes,parts_ordered,parts_arrived,qc_assignee,estimate_link,painter_status,painter_status_other_text,appraiser_status,enter_work_checklist_state,catalog_numbers_assignee,parts_discounts_assignee,completion_photos_assignee,cars(license_plate,first_registration_date,vehicle_type,year,make,model,vin),branches(name)'
       )
       .eq('id', id)
       .single();
