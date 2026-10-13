@@ -58,8 +58,12 @@ async function refreshSession(request: NextRequest): Promise<NextResponse> {
       },
     },
   });
-  // getUser() is what triggers the refresh when the access token has expired.
-  await supabase.auth.getUser();
+  // Refreshes the session when the access token has expired (getClaims →
+  // getSession(), the same refresh-and-save path getUser() used). The result
+  // is not used here, so the signature is checked locally (ES256 key, JWKS)
+  // instead of a round trip to the Auth server on every page (2026-10-13);
+  // with an HS-signed token it falls back to getUser() by itself.
+  await supabase.auth.getClaims();
   return response;
 }
 
