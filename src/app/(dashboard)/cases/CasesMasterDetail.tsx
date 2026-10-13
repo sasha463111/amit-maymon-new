@@ -8,6 +8,7 @@ import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { SearchField } from '@/components/design/SearchField';
 import { CreateCaseButton } from './CreateCaseButton';
 import type { CaseStatus } from '@/components/design/StatusBadge';
+import { matchesCaseQuery } from '@/lib/caseQuery';
 
 // Sort order: by opening date, NEWEST first (Amit, 2026-10-07). History:
 // urgency sort → oldest-first (2026-10-05) → newest-first, because with
@@ -93,9 +94,7 @@ export function CasesMasterDetail({
       .filter((c) => {
         const okBranch = branchFilter === 'all' || c.branch_id === branchFilter;
         if (mineOnly && mineFirstFor && c.created_by !== mineFirstFor) return false;
-        const okQuery =
-          !q ||
-          [c.plate, c.customer_name ?? '', c.insurer ?? '', c.vehicle ?? ''].some((f) => f.includes(q));
+        const okQuery = matchesCaseQuery(q, [c.plate, c.customer_name, c.insurer, c.vehicle]);
         return okBranch && okQuery;
       })
       .sort((a, b) => openedTime(b) - openedTime(a));

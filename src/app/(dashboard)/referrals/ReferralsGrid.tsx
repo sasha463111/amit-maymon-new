@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { formatIsoDate } from '@/lib/dates';
+import { SearchField } from '@/components/design/SearchField';
+import { matchesCaseQuery } from '@/lib/caseQuery';
 
 export interface ReferralRow {
   id: string;
@@ -32,15 +34,22 @@ export function ReferralsGrid({
   branchNameById: Map<string, string>;
 }) {
   const [branchFilter, setBranchFilter] = useState('all');
+  const [query, setQuery] = useState('');
   const showBranchFilter = branches.length > 1;
 
   const filtered = useMemo(
-    () => (branchFilter === 'all' ? referrals : referrals.filter((r) => r.branch_id === branchFilter)),
-    [referrals, branchFilter]
+    () =>
+      (branchFilter === 'all' ? referrals : referrals.filter((r) => r.branch_id === branchFilter)).filter((r) =>
+        matchesCaseQuery(query, [r.plate_number, r.customer_name, r.insurance_company, r.status_note, r.important_notes, r.current_status_tag]),
+      ),
+    [referrals, branchFilter, query]
   );
 
   return (
     <div className="space-y-4">
+      {/* Case search, same box as the cases list (Amit, 2026-10-13). */}
+      <SearchField value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש: מספר רכב, לקוח או חברת ביטוח" />
+
       {showBranchFilter && (
         <SegmentedControl
           // Count per tab, so each branch's open referrals are visible at a

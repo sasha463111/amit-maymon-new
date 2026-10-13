@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { INSURANCE_TYPE_LABELS } from '@/types/database';
+import { SearchField } from '@/components/design/SearchField';
+import { matchesCaseQuery } from '@/lib/caseQuery';
+import { shortVehicle } from '@/lib/vehicleLabel';
 
 const PARTS_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   AVAILABLE: { label: 'חלקים זמינים', color: 'text-green-700 bg-green-50 border-green-200' },
@@ -43,15 +46,22 @@ export function ClosureCasesGrid({
   branches: { id: string; name: string }[];
 }) {
   const [branchFilter, setBranchFilter] = useState('all');
+  const [query, setQuery] = useState('');
   const showBranchFilter = branches.length > 1;
 
   const filtered = useMemo(
-    () => (branchFilter === 'all' ? cases : cases.filter((c) => c.branch_id === branchFilter)),
-    [cases, branchFilter]
+    () =>
+      (branchFilter === 'all' ? cases : cases.filter((c) => c.branch_id === branchFilter)).filter((c) =>
+        matchesCaseQuery(query, [c.license_plate, c.customer_name, c.case_key, c.insurance_company, shortVehicle(c.vehicle_type, c.make, c.model), c.status_note]),
+      ),
+    [cases, branchFilter, query]
   );
 
   return (
     <div className="space-y-4">
+      {/* Case search, same box as the cases list (Amit, 2026-10-13). */}
+      <SearchField value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש: מספר רכב, לקוח, ביטוח או סוג רכב" />
+
       {showBranchFilter && (
         <SegmentedControl
           options={[{ value: 'all', label: 'הכל' }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}

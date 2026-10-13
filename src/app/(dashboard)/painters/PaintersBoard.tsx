@@ -7,6 +7,8 @@ import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { formatDate } from '@/lib/dates';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { shortVehicle } from '@/lib/vehicleLabel';
+import { SearchField } from '@/components/design/SearchField';
+import { matchesCaseQuery } from '@/lib/caseQuery';
 
 export interface PainterRow {
   id: string;
@@ -150,9 +152,12 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
   const [selected, setSelected] = useState<PainterRow | null>(null);
   const [branch, setBranch] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const branchNames = Array.from(new Set(rows.map((r) => r.branch_name).filter((b): b is string => !!b))).sort((a, b) => a.localeCompare(b, 'he'));
-  const inBranch = branch === 'all' ? rows : rows.filter((r) => r.branch_name === branch);
+  const inBranch = (branch === 'all' ? rows : rows.filter((r) => r.branch_name === branch)).filter((r) =>
+    matchesCaseQuery(query, [r.license_plate, r.customer_name, r.case_key, shortVehicle(r.car_vehicle_type, r.car_make, r.car_model), ...r.advisors]),
+  );
 
   const groups: Record<string, PainterRow[]> = {
     READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], OTHER: [], '': [],
@@ -173,6 +178,9 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
 
   return (
     <div className="space-y-4">
+      {/* Case search, same box as the cases list (Amit, 2026-10-13). */}
+      <SearchField value={query} onChange={(e) => setQuery(e.target.value)} placeholder="חיפוש: מספר רכב, לקוח, סוג רכב או יועץ" />
+
       {/* Branch tabs */}
       {branchNames.length > 1 && (
         <SegmentedControl
