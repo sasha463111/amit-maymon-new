@@ -7,7 +7,7 @@ import 'server-only';
 // (the dispatcher route, the self-test action, other actions) imports this.
 
 import { createClient } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import webpush from 'web-push';
 
@@ -85,7 +85,7 @@ export async function sendPushToUser(
   // Read subscriptions with the service-role client so we can see the
   // RECIPIENT's subscriptions even when the acting user isn't them (and isn't a
   // CEO). Falls back to the RLS client only if the service key is missing.
-  const db = getServiceClient() ?? (await createClient());
+  const db = (getServiceClient() ?? (await createClient())) as unknown as SupabaseClient<Database>;
   const { data: subs } = await db
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
@@ -190,7 +190,7 @@ export async function pushToOverseers(
   payload: { title: string; body?: string; url?: string; tag?: string },
   excludeUserId?: string
 ) {
-  const db = getServiceClient() ?? (await createClient());
+  const db = (getServiceClient() ?? (await createClient())) as unknown as SupabaseClient<Database>;
   const { data: overseers } = await db
     .from('profiles')
     .select('id, role')
@@ -292,7 +292,7 @@ export async function notifyRelevantParties(
     return;
   }
 
-  const db = getServiceClient() ?? (await createClient());
+  const db = (getServiceClient() ?? (await createClient())) as unknown as SupabaseClient<Database>;
 
   // Determine target roles
   let targetRoles = [...config.roles];

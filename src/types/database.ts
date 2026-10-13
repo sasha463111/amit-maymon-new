@@ -499,37 +499,6 @@ export interface UpdateExtraStatusInput {
   status: ExtraStatus;
 }
 
-// Supabase generated types (for use with supabase.from<>())
-export type Database = {
-  public: {
-    Tables: {
-      branches: { Row: Branch; Insert: Omit<Branch, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<Branch> };
-      profiles: { Row: Profile; Insert: Omit<Profile, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }; Update: Partial<Profile> };
-      cars: { Row: Car; Insert: Omit<Car, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<Car> };
-      cases: { Row: Case; Insert: Omit<Case, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<Case> };
-      case_workflow_runs: { Row: CaseWorkflowRun; Insert: Omit<CaseWorkflowRun, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<CaseWorkflowRun> };
-      case_workflow_steps: { Row: CaseWorkflowStep; Insert: Omit<CaseWorkflowStep, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<CaseWorkflowStep> };
-      ceo_approvals: { Row: CeoApproval; Insert: Omit<CeoApproval, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<CeoApproval> };
-      bodywork_extras: { Row: BodyworkExtra; Insert: Omit<BodyworkExtra, 'id' | 'created_at' | 'updated_at'> & { id?: string; created_at?: string; updated_at?: string }; Update: Partial<BodyworkExtra> };
-      notifications: { Row: Notification; Insert: Omit<Notification, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<Notification> };
-      audit_events: { Row: AuditEvent; Insert: Omit<AuditEvent, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<AuditEvent> };
-      role_permissions: { Row: RolePermission; Insert: Omit<RolePermission, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<RolePermission> };
-      workflow_step_templates: { Row: WorkflowStepTemplate; Insert: Omit<WorkflowStepTemplate, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<WorkflowStepTemplate> };
-    };
-    Enums: {
-      user_role: UserRole;
-      general_status: GeneralStatus;
-      parts_status: PartsStatus;
-      insurance_type: InsuranceType;
-      claim_type: ClaimType;
-      sub_claim_type: SubClaimType;
-      workflow_type: WorkflowType;
-      workflow_run_status: WorkflowRunStatus;
-      step_state: StepState;
-      approval_type: ApprovalType;
-      approval_status: ApprovalStatus;
-      extra_status: ExtraStatus;
-      audit_entity_type: AuditEntityType;
-    };
-  };
-};
+// Generated from the live DB (supabase gen types) — src/types/supabase.ts.
+// Regenerate after schema changes: npx supabase gen types typescript --project-id yhanmyvolpeiuxspcxmk --schema public > src/types/supabase.ts
+export type { Database } from './supabase';
