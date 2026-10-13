@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { ClosureStatusSection } from './ClosureStatusSection';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { CameraBatchUpload } from '@/components/CameraBatchUpload';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
 // professional-workflow STEP_LABELS (types/database.ts's
@@ -658,23 +659,12 @@ export function ClosureDetailClient({
                         />
                         📁 {docsUploading ? 'מעלה...' : 'בחר קבצים'}
                       </label>
-                      <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          multiple
-                          className="hidden"
-                          disabled={docsUploading}
-                          onChange={async (e) => {
-                            const files = e.target.files;
-                            if (!files || files.length === 0) return;
-                            await uploadClosureDocs(Array.from(files));
-                            e.target.value = '';
-                          }}
-                        />
-                        📷 {docsUploading ? 'מעלה...' : 'צלם'}
-                      </label>
+                      {/* Several shots, then one upload (Amit, 2026-10-13). */}
+                      <CameraBatchUpload
+                        onUpload={async (files) => { await uploadClosureDocs(files); }}
+                        disabled={docsUploading}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                      />
                       {docsUploadedCount > 0 && !docsUploadError && (
                         <span className="text-xs text-green-600">✓ הועלו {docsUploadedCount} קבצים</span>
                       )}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { formatDate } from '@/lib/dates';
+import { CameraBatchUpload } from '@/components/CameraBatchUpload';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (safe first step of the god-component
@@ -89,23 +90,12 @@ export function DocumentsSection({
               />
               📁 {uploadingDocument ? 'מעלה...' : 'בחר קבצים'}
             </label>
-            <label className={`flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors ${uploadingDocument ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                className="hidden"
-                onChange={async (e) => {
-                  const files = e.target.files;
-                  if (!files || files.length === 0) return;
-                  await onUploadFiles(Array.from(files));
-                  e.target.value = '';
-                }}
-                disabled={uploadingDocument}
-              />
-              📷 {uploadingDocument ? 'מעלה...' : 'צלם'}
-            </label>
+            {/* Several shots, then one upload (Amit, 2026-10-13). */}
+            <CameraBatchUpload
+              onUpload={async (files) => { await onUploadFiles(files); }}
+              disabled={uploadingDocument}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"
+            />
           </div>
         )}
       </div>
