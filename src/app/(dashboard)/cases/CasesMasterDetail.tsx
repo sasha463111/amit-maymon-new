@@ -28,6 +28,8 @@ export interface RailCase {
   opened_at: string | null;
   customer_name: string | null;
   insurer: string | null;
+  /** The case's notes, shown on the card (Amit, 2026-10-13) — src/lib/cardNote.ts. */
+  notes?: string | null;
   branch_id: string;
   created_by: string | null;
   nextStep: string | null;
@@ -94,7 +96,7 @@ export function CasesMasterDetail({
       .filter((c) => {
         const okBranch = branchFilter === 'all' || c.branch_id === branchFilter;
         if (mineOnly && mineFirstFor && c.created_by !== mineFirstFor) return false;
-        const okQuery = matchesCaseQuery(q, [c.plate, c.customer_name, c.insurer, c.vehicle]);
+        const okQuery = matchesCaseQuery(q, [c.plate, c.customer_name, c.insurer, c.vehicle, c.notes]);
         return okBranch && okQuery;
       })
       .sort((a, b) => openedTime(b) - openedTime(a));
@@ -172,6 +174,7 @@ export function CasesMasterDetail({
               key={c.id}
               plate={c.plate}
               vehicle={c.vehicle ?? ''}
+              notes={c.notes ?? ''}
               customer={c.customer_name ?? ''}
               activeStep={c.nextStep ?? ''}
               status={caseStatus(c)}
@@ -195,6 +198,7 @@ export function CasesMasterDetail({
                   key={c.id}
                   plate={c.plate}
               vehicle={c.vehicle ?? ''}
+              notes={c.notes ?? ''}
                   customer={c.customer_name ?? ''}
                   insurer={c.insurer ?? ''}
                   branch={branchNameById[c.branch_id] ?? ''}
@@ -249,6 +253,7 @@ export function CasesMasterDetail({
               key={c.id}
               plate={c.plate}
               vehicle={c.vehicle ?? ''}
+              notes={c.notes ?? ''}
               customer={c.customer_name ?? ''}
               insurer={c.insurer ?? ''}
               branch={branchNameById[c.branch_id] ?? ''}

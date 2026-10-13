@@ -4,6 +4,7 @@ import { hasPermission } from '@/lib/permissions';
 import { CasesMasterDetail, type RailCase } from './CasesMasterDetail';
 import { PROFESSIONAL_STEP_LABELS as STEP_LABELS } from '@/types/database';
 import { shortVehicle } from '@/lib/vehicleLabel';
+import { cardNote } from '@/lib/cardNote';
 
 type CarCols = { license_plate: string | null; vehicle_type: string | null; make: string | null; model: string | null };
 
@@ -111,6 +112,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
   const railCases: RailCase[] = openCases.map((c) => {
     const row = c as {
       id: string; opened_at: string | null; customer_name: string | null; insurance_company: string | null; branch_id: string; created_by: string | null;
+      notes: string | null;
       cars: CarCols | CarCols[] | null;
     };
     const car = Array.isArray(row.cars) ? row.cars[0] : row.cars;
@@ -121,6 +123,7 @@ export default async function CasesLayout({ children }: { children: React.ReactN
       opened_at: row.opened_at,
       customer_name: row.customer_name,
       insurer: row.insurance_company,
+      notes: cardNote(row.notes),
       branch_id: row.branch_id,
       created_by: row.created_by,
       nextStep: caseIdToNextStep.get(row.id) ?? null,

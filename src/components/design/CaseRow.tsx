@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/dates';
 export function CaseRow({
   plate,
   vehicle = '',
+  notes = '',
   customer,
   insurer,
   branch,
@@ -22,6 +23,7 @@ export function CaseRow({
 }: {
   plate: string;
   vehicle?: string;
+  notes?: string;
   customer: string;
   insurer: string;
   branch: string;
@@ -89,6 +91,13 @@ export function CaseRow({
         <LicensePlate plate={plate} size="md" />
         {vehicle && <span className="text-[13px] font-semibold text-stone-700 truncate" dir="auto">{vehicle}</span>}
       </div>
+
+      {/* Notes on the card, so they are seen without opening the case (Amit, 2026-10-13). */}
+      {notes && (
+        <div className="rounded-md bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-[12.5px] leading-snug text-amber-900 line-clamp-2" title={notes} dir="auto">
+          📝 {notes}
+        </div>
+      )}
 
       {/* active step + branch */}
       <div className="flex items-center justify-between gap-3 pt-1 border-t border-stone-200">
