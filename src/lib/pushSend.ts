@@ -1,3 +1,5 @@
+import 'server-only';
+
 // Server-side push sending (moved out of the 'use server' module
 // src/app/actions/push.ts on 2026-10-13). Every export of a 'use server'
 // file is a publicly callable endpoint, so sendPushToUser(…, {direct:true})
