@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/lib/pushSend';
 import { branchRecipients } from '@/lib/recipients';
 
 /** Update painter checklist fields on the case */
@@ -80,10 +79,8 @@ export async function updatePainterChecklist(
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(p.id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` });
     }
     // Notify PAINTER + CEO for audit trail
-    await notifyRelevantParties('PARTS_ARRIVED', c?.branch_id, { title, body, url: `/painters/${caseId}`, tag: `parts-${caseId}` }, user.id, recipients as { id: string; role: string }[]);
   }
 
   revalidatePath(`/painters/${caseId}`);
@@ -185,11 +182,7 @@ export async function createPainterRequest(
       triggered_by: user.id,
     } as never);
     if (notifErr) console.error('[notifications] insert failed', notifErr);
-    await sendPushToUser(adv.id, { title: reqTitle, body: reqBody, url: reqUrl, tag: `painter-${caseId}` });
   }
-  // Notify SERVICE_ADVISOR + PAINTER + CEO for audit trail
-  const advisorsForRouter = advisors as { id: string; role: string }[];
-  await notifyRelevantParties('PAINTER_REQUEST', c?.branch_id, { title: reqTitle, body: reqBody, url: reqUrl, tag: `painter-${caseId}` }, user.id, advisorsForRouter);
 
   revalidatePath(`/painters/${caseId}`);
   return { ok: true, requestId: reqId, error: null };
@@ -290,7 +283,6 @@ export async function updatePainterRequestStatus(
       triggered_by: user.id,
     } as never);
     if (notifErr) console.error('[notifications] insert failed', notifErr);
-    await sendPushToUser(req.created_by, { title, body, url: statusUrl, tag: `req-status-${requestId}` });
   }
 
   return { ok: true, error: null };

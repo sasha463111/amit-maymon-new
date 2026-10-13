@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/lib/pushSend';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
 import { CLOSURE_CLERK_NAME } from '@/lib/demo';
@@ -340,15 +339,8 @@ export async function createCase(input: CreateCaseInput) {
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
     }
-    // Pushes in parallel, after the inserts. They used to be awaited one by
-    // one inside the loop, so the case's creator waited for every push in
-    // turn before the dialog could close (2026-10-08: Avia stuck on
-    // "יוצר תיק..." although the case had been created).
-    await Promise.all([
-      ...recipients.map((staff) => sendPushToUser(staff.id, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` })),
-      // Notify SERVICE_MANAGER in branch + CEO for audit trail
-      notifyRelevantParties('NEW_CASE', branchId, { title, body, url: `/go/${caseId}`, tag: `new-case-${caseId}` }, user.id, branchStaff),
-    ]);
+    // Pushes are sent by the DB dispatcher for each notification row above
+    // (trg_dispatch_ceo_push) — nothing to send from here.
   }
 
   return { caseId: String(caseId) };
@@ -469,7 +461,6 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(profile!.id, { title: blockedTitle, body: blockedBody, url: blockedUrl, tag: `blocked-extras-${caseId}` });
       await writeAudit(supabase, 'WORKFLOW_STEP', activeStep.id, 'BLOCKED_ACTION', user.id, {
         reason: 'extras_in_treatment',
       });
@@ -580,10 +571,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(ou.id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` });
     }
     // Notify OFFICE staff + CEO for audit trail
-    await notifyRelevantParties('READY_FOR_OFFICE', caseNotif?.branch_id, { title: officeTitle, body: officeBody, url: `/closure/${caseId}`, tag: `office-${caseId}` }, user.id, officeUsers as { id: string; role: string }[]);
 
     // Auto-start CLOSURE workflow if not already exists. The DB has a unique
     // index `uniq_case_workflow_runs_one_closure_per_case` so a concurrent
@@ -688,10 +677,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(p.id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` });
     }
     // Notify PAINTER + SERVICE_ADVISOR + CEO for audit trail
-    await notifyRelevantParties('ENTER_WORK', ew?.branch_id, { title: ewTitle, body: ewBody, url: `/painters/${caseId}`, tag: `enter-work-${caseId}` }, user.id, ewBranchUsers);
   }
 
   // WHEELS_CHECK: FYI notification to the CEO only — explicit request (2026-08-31)
@@ -755,10 +742,8 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(adv.id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` });
     }
     // Notify SERVICE_ADVISOR + CEO for audit trail
-    await notifyRelevantParties('WASH_COMPLETE', washCase?.branch_id, { title: washTitle, body: washBody, url: washUrl, tag: `wash-${caseId}` }, user.id, advisors as { id: string; role: string }[]);
   }
 
   // CLOSURE_PREPARE_CLOSING_FORMS used to create a CASE_CLOSURE approval (Session 5).
@@ -812,11 +797,7 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(rid, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` });
     }
-    // Notify OFFICE + SERVICE_MANAGER + CEO for audit trail
-    const allBranchMgmt = branchMgmt as { id: string; role: string }[];
-    await notifyRelevantParties('CASE_CLOSED', cc?.branch_id, { title: closeTitle, body: closeBody, url: `/cases/${caseId}`, tag: `closed-${caseId}` }, user.id, allBranchMgmt);
   }
 
   // SEND_COMPLETION_PHOTOS already auto-completed READY_FOR_OFFICE and closed the

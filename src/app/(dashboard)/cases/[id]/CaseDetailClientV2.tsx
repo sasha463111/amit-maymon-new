@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { deleteCase } from '@/app/actions/workflow';
-import { updateCaseDetails } from '@/app/actions/caseDetails';
 import { uploadCaseDocument, deleteCaseDocument, getSignedFileUrls } from '@/app/actions/documents';
 import { createClient } from '@/lib/supabase/client';
 import type { PartsStatus } from '@/types/database';

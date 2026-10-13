@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/lib/pushSend';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
 import type { ApprovalDecisionInput } from '@/types/database';
@@ -104,10 +103,8 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(m.id, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` });
     }
     // Notify SERVICE_MANAGER + CEO for audit trail
-    await notifyRelevantParties('APPROVAL_REJECTED', branchId, { title: rejTitle, body: rejBody, url: `/cases/${approval.case_id}`, tag: `rejected-${approval.case_id}` }, user.id, managers as { id: string; role: string }[]);
 
     // Revert step on ESTIMATE_AND_DETAILS rejection: allow SERVICE_MANAGER to re-submit
     const approvalType = (approvalTypeRow as { approval_type: string } | null)?.approval_type;
@@ -161,10 +158,8 @@ export async function decideApproval(input: ApprovalDecisionInput) {
         triggered_by: user.id,
       } as never);
       if (notifErr) console.error('[notifications] insert failed', notifErr);
-      await sendPushToUser(m.id, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` });
     }
     // Notify SERVICE_MANAGER + CEO for audit trail
-    await notifyRelevantParties('APPROVAL_APPROVED', branchId, { title: okTitle, body: okBody, url: `/cases/${approval.case_id}`, tag: `approved-${approval.case_id}` }, user.id, managers as { id: string; role: string }[]);
   }
 
   // Auto-complete READY_FOR_OFFICE when all required approvals are approved

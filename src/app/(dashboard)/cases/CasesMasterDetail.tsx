@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { CaseRow } from '@/components/design/CaseRow';
 import { CompactCaseRow } from '@/components/design/CompactCaseRow';

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser } from '@/lib/pushSend';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
 
 /**
@@ -445,7 +444,6 @@ async function runEnterWorkReminders(supabase: ServiceClient, todayIso: string) 
         action_url: `/painters/${c.id}`,
       } as never);
       if (notifErr) console.error('[enter-work-reminders] notification insert failed', notifErr);
-      await sendPushToUser(userId, { title, body, url: `/painters/${c.id}`, tag: `enter-work-reminder-${c.id}` });
     }
 
     await supabase.from('cases').update({ painter_reminder_sent_at: new Date().toISOString() } as never).eq('id', c.id);
@@ -515,11 +513,7 @@ async function runPainterRequestEscalation(supabase: ServiceClient) {
         action_url: url,
       } as never);
       if (notifErr) console.error('[painter-request-escalation] notification insert failed', notifErr);
-      await sendPushToUser(adv.id, { title, body, url, tag: `painter-escalation-${r.id}` });
     }
-
-    const overseers = users.filter((p) => p.role === 'CEO' || p.role === 'SERVICE_ADVISOR');
-    await Promise.all(overseers.map((o) => sendPushToUser(o.id, { title, body, url, tag: `painter-escalation-${r.id}` })));
 
     await supabase.from('painter_requests').update({ reminder_sent_at: new Date().toISOString() } as never).eq('id', r.id);
     notified++;
@@ -596,11 +590,7 @@ async function runOfficeClosureEscalation(supabase: ServiceClient) {
         action_url: url,
       } as never);
       if (notifErr) console.error('[office-closure-escalation] notification insert failed', notifErr);
-      await sendPushToUser(ou.id, { title, body, url, tag: `office-escalation-${c.id}` });
     }
-
-    const overseers = users.filter((p) => p.role === 'CEO' || p.role === 'SERVICE_ADVISOR');
-    await Promise.all(overseers.map((o) => sendPushToUser(o.id, { title, body, url, tag: `office-escalation-${c.id}` })));
 
     await supabase.from('cases').update({ office_reminder_sent_at: new Date().toISOString() } as never).eq('id', c.id);
     notified++;
@@ -658,7 +648,6 @@ async function runReferralFollowUpReminders(supabase: ServiceClient, todayIso: s
         action_url: url,
       } as never);
       if (notifErr) console.error('[referral-followup-reminder] notification insert failed', notifErr);
-      await sendPushToUser(userId, { title, body, url, tag: `referral-followup-${r.id}` });
     }
 
     await supabase.from('referrals').update({ follow_up_reminder_sent_at: new Date().toISOString() } as never).eq('id', r.id);

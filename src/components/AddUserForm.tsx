@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Mail, User, Shield } from 'lucide-react';
-import { createNewSystemUser, type SystemUser } from '@/app/actions/users';
+import { createNewSystemUser } from '@/app/actions/users';
 import type { UserRole } from '@/types/database';
 import { STAFF_JOBS, jobByKey } from '@/lib/staffJobs';
 

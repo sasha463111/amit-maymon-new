@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { sendPushToUser } from '@/lib/pushSend';
 
 // Free-text notes on a case, addressed to chosen people (requested for the
 // closure page by אילנה, 2026-10-07: "לעמית — הערה ספציפית, לנסיה וערן —
@@ -153,7 +152,6 @@ async function deliverNote(caseId: string | null, recipientIds: string[], text: 
 
   // Push for non-CEO recipients; CEO pushes come from the DB dispatcher and
   // sendPushToUser skips them here, so nobody is pushed twice.
-  await Promise.all(targets.map((id) => sendPushToUser(id, { title, body, url, tag: `note-${caseId ?? 'general'}` })));
 
   if (caseId) {
     revalidatePath(`/closure/${caseId}`);

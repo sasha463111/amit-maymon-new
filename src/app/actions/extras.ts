@@ -1,7 +1,6 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { sendPushToUser, pushToOverseers, notifyRelevantParties } from '@/lib/pushSend';
 import { branchRecipients } from '@/lib/recipients';
 import { hasPermission } from '@/lib/permissions';
 import type { CreateExtraInput, UpdateExtraStatusInput } from '@/types/database';
@@ -64,10 +63,8 @@ export async function createExtra(input: CreateExtraInput) {
       triggered_by: user.id,
     } as never);
     if (notifErr) console.error('[notifications] insert failed', notifErr);
-    await sendPushToUser(m.id, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` });
   }
   // Notify SERVICE_MANAGER + CEO for audit trail
-  await notifyRelevantParties('EXTRA_CREATED', branchId, { title: extraTitle, body: extraBody, url: `/cases/${input.case_id}`, tag: `extra-${input.case_id}` }, user.id, managers as { id: string; role: string }[]);
 
   await supabase.from('audit_events').insert({
     entity_type: 'EXTRA',
@@ -150,12 +147,6 @@ export async function updateExtraStatus(input: UpdateExtraStatusInput) {
       triggered_by: user.id,
     } as never);
     if (notifErr) console.error('[notifications] insert failed', notifErr);
-    await sendPushToUser(extra.created_by, {
-      title,
-      body,
-      url: `/extras/mine`,
-      tag: `extra-status-${input.extra_id}`,
-    });
   }
 
   return { ok: true };
