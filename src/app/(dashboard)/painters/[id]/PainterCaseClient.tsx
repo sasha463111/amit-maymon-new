@@ -45,6 +45,8 @@ interface Props {
   caseKey: string | null;
   customerName: string | null;
   phone: string | null;
+  /** Pixcar photos link of the case (cases.fixcar_link) — painters view it too (Amit, 2026-10-13). */
+  fixcarLink: string | null;
   painterStatus: string | null;
   painterStatusOtherText: string | null;
   partsArrived: boolean;
@@ -184,6 +186,7 @@ export function PainterCaseClient({
   caseKey,
   customerName,
   phone,
+  fixcarLink,
   painterStatus,
   painterStatusOtherText,
   partsArrived,
@@ -442,6 +445,18 @@ export function PainterCaseClient({
             </div>
           )}
         </div>
+
+        {/* Pixcar photos of the car (Amit, 2026-10-13) — opens in a new tab. */}
+        {fixcarLink && /^https?:\/\//i.test(fixcarLink.trim()) && (
+          <a
+            href={fixcarLink.trim()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700"
+          >
+            📸 צפייה בתמונות Pixcar
+          </a>
+        )}
 
         {/* Who marked the case as entered work + when — the action that just
             triggered the notification, so it's not just "a car is ready"
