@@ -41,8 +41,8 @@ type Ctx = NonNullable<Awaited<ReturnType<typeof me>>>;
 
 /** The case row if this user may work on it. */
 async function caseFor(ctx: Ctx, id: string) {
-  const { data } = await ctx.db.from('collection_cases').select('id, assigned_to, finance_closure_id, plate').eq('id', id).maybeSingle();
-  const c = data as { id: string; assigned_to: string; finance_closure_id: string | null; plate: string } | null;
+  const { data } = await ctx.db.from('collection_cases').select('id, assigned_to, finance_closure_id, plate, case_id, referral_id').eq('id', id).maybeSingle();
+  const c = data as { id: string; assigned_to: string; finance_closure_id: string | null; plate: string; case_id: string | null; referral_id: string | null } | null;
   if (!c) return null;
   if (!ctx.supervisor && c.assigned_to !== ctx.user.id) return null;
   return c;
@@ -61,7 +61,7 @@ export type CaseEvent = {
   created_by_name: string | null;
   created_at: string;
 };
-export type CaseFile = { id: string; name: string; label: string | null; url: string | null; mime: string | null; size: number | null; by: string | null; at: string; source: 'CASE' | 'REPAIR' };
+export type CaseFile = { id: string; name: string; label: string | null; url: string | null; mime: string | null; size: number | null; by: string | null; at: string; source: 'CASE' | 'REPAIR' | 'REFERRAL' };
 
 export async function getCollectionFile(id: string): Promise<{
   c: CollectionCase | null;
@@ -93,7 +93,7 @@ export async function getCollectionFile(id: string): Promise<{
   type Fl = { id: string; file_path: string; file_name: string | null; label: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string };
   const evs = (evRes.data ?? []) as Ev[];
   const fls = (fileRes.data ?? []) as Fl[];
-  const repairCaseId = (fin.data as { case_id: string | null } | null)?.case_id ?? null;
+  const repairCaseId = row.case_id ?? (fin.data as { case_id: string | null } | null)?.case_id ?? null;
 
   // The repair case's documents (appraiser report, invoice, licences…) — shown, not copied.
   type Rd = { id: string; file_path: string; file_name: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string; document_type: string | null };
@@ -101,16 +101,29 @@ export async function getCollectionFile(id: string): Promise<{
     ? (((await db.from('case_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, document_type').eq('case_id', repairCaseId).order('created_at', { ascending: false })).data ?? []) as Rd[])
     : [];
 
-  const people = Array.from(new Set([...evs.flatMap((e) => [e.created_by, e.remind_user]), ...fls.map((f) => f.uploaded_by), ...repairDocs.map((d) => d.uploaded_by)].filter((x): x is string => !!x)));
-  const [names, ownSigned, repairSigned] = await Promise.all([
+  // …and the referral's (ID, licences, policy — scanned at intake or sent by the customer).
+  type Fd = { id: string; file_path: string; file_name: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string; doc_kind: string | null };
+  let referralIds: string[] = row.referral_id ? [row.referral_id] : [];
+  if (!referralIds.length && repairCaseId) {
+    const { data: rfs } = await db.from('referrals').select('id').eq('case_id', repairCaseId);
+    referralIds = ((rfs ?? []) as { id: string }[]).map((r) => r.id);
+  }
+  const referralDocs = referralIds.length
+    ? (((await db.from('referral_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, doc_kind').in('referral_id', referralIds).order('created_at', { ascending: false })).data ?? []) as Fd[])
+    : [];
+
+  const people = Array.from(new Set([...evs.flatMap((e) => [e.created_by, e.remind_user]), ...fls.map((f) => f.uploaded_by), ...repairDocs.map((d) => d.uploaded_by), ...referralDocs.map((d) => d.uploaded_by)].filter((x): x is string => !!x)));
+  const [names, ownSigned, repairSigned, referralSigned] = await Promise.all([
     people.length ? db.from('profiles').select('id, full_name').in('id', people) : Promise.resolve({ data: [] }),
     fls.length ? db.storage.from(BUCKET).createSignedUrls(fls.map((f) => f.file_path), 3600) : Promise.resolve({ data: [] }),
     repairDocs.length ? db.storage.from('case-documents').createSignedUrls(repairDocs.map((d) => d.file_path), 3600) : Promise.resolve({ data: [] }),
+    referralDocs.length ? db.storage.from('referral-documents').createSignedUrls(referralDocs.map((d) => d.file_path), 3600) : Promise.resolve({ data: [] }),
   ]);
   const nameById = new Map(((names.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
   const urls = (s: { data: unknown }) => new Map(((s.data ?? []) as { path: string | null; signedUrl: string }[]).map((x) => [x.path, x.signedUrl]));
   const ownUrl = urls(ownSigned);
   const repUrl = urls(repairSigned);
+  const refUrl = urls(referralSigned);
 
   return {
     c,
@@ -129,6 +142,7 @@ export async function getCollectionFile(id: string): Promise<{
     files: [
       ...fls.map((f) => ({ id: f.id, name: f.file_name ?? 'מסמך', label: f.label, url: ownUrl.get(f.file_path) ?? null, mime: f.mime_type, size: f.file_size, by: f.uploaded_by ? nameById.get(f.uploaded_by) ?? null : null, at: f.created_at, source: 'CASE' as const })),
       ...repairDocs.map((d) => ({ id: d.id, name: d.file_name ?? 'מסמך', label: d.document_type, url: repUrl.get(d.file_path) ?? null, mime: d.mime_type, size: d.file_size, by: d.uploaded_by ? nameById.get(d.uploaded_by) ?? null : null, at: d.created_at, source: 'REPAIR' as const })),
+      ...referralDocs.map((d) => ({ id: d.id, name: d.file_name ?? 'מסמך', label: d.doc_kind, url: refUrl.get(d.file_path) ?? null, mime: d.mime_type, size: d.file_size, by: d.uploaded_by ? nameById.get(d.uploaded_by) ?? null : 'הלקוח (קישור)', at: d.created_at, source: 'REFERRAL' as const })),
     ],
     repairCaseId,
     collectors: list.collectors,
@@ -241,4 +255,122 @@ export async function listMyReminders(): Promise<MyReminder[]> {
     const c = Array.isArray(r.collection_cases) ? r.collection_cases[0] : r.collection_cases;
     return { id: r.id, case_id: r.case_id, plate: c?.plate ?? '', customer_name: c?.customer_name ?? null, body: r.body, remind_at: r.remind_at };
   });
+}
+
+/** Everything we already have for a plate — for "פתיחת תיק" (Amit, 14/10): the
+ *  same customer can have several accidents, so first show the collection
+ *  cases that already exist for this car (same accident → open it), then the
+ *  repair cases with their accident dates, to pull the data that was typed. */
+export type ExistingCollection = { id: string; event_date: string | null; opened_at: string; claim_number: string | null; claim_stage: string | null; status: string; closed: boolean; assigned_name: string | null; mine: boolean };
+export type RepairMatch = {
+  case_id: string; case_key: string | null; event_date: string | null; opened_at: string | null; closed: boolean; branch_name: string | null;
+  customer_name: string | null; phone: string | null; insurer: string | null; claim_number: string | null; appraiser_name: string | null; sub_claim_type: string | null; docs: number;
+};
+export async function lookupPlateHistory(plateInput: string): Promise<{ existing: ExistingCollection[]; repairs: RepairMatch[]; error?: string }> {
+  const ctx = await me();
+  if (!ctx) return { existing: [], repairs: [], error: 'אין הרשאה' };
+  const plate = plateInput.replace(/\D/g, '');
+  if (plate.length < 5) return { existing: [], repairs: [], error: 'מספר רכב לא תקין' };
+  const { db } = ctx;
+  const [coll, cars] = await Promise.all([
+    db.from('collection_cases').select('id, event_date, opened_at, claim_number, claim_stage, status, closed_at, assigned_to').eq('plate', plate).order('opened_at', { ascending: false }),
+    db.from('cars').select('id, license_plate').ilike('license_plate', `%${plate.slice(-5)}%`),
+  ]);
+  const carIds = ((cars.data ?? []) as { id: string; license_plate: string }[]).filter((c) => c.license_plate.replace(/\D/g, '') === plate).map((c) => c.id);
+  type Cs = { id: string; case_key: string | null; event_date: string | null; opened_at: string | null; closed_at: string | null; customer_name: string | null; phone: string | null; insurance_company: string | null; claim_number: string | null; appraiser_name: string | null; sub_claim_type: string | null; branches: { name: string } | { name: string }[] | null };
+  const repairs = carIds.length
+    ? (((await db.from('cases').select('id, case_key, event_date, opened_at, closed_at, customer_name, phone, insurance_company, claim_number, appraiser_name, sub_claim_type, branches(name)').in('car_id', carIds).is('deleted_at', null).order('opened_at', { ascending: false }).limit(20)).data ?? []) as Cs[])
+    : [];
+  const docCounts = new Map<string, number>();
+  if (repairs.length) {
+    const { data: docs } = await db.from('case_documents').select('case_id').in('case_id', repairs.map((r) => r.id));
+    for (const d of (docs ?? []) as { case_id: string }[]) docCounts.set(d.case_id, (docCounts.get(d.case_id) ?? 0) + 1);
+  }
+  const collRows = (coll.data ?? []) as { id: string; event_date: string | null; opened_at: string; claim_number: string | null; claim_stage: string | null; status: string; closed_at: string | null; assigned_to: string }[];
+  const owners = Array.from(new Set(collRows.map((c) => c.assigned_to)));
+  const { data: names } = owners.length ? await db.from('profiles').select('id, full_name').in('id', owners) : { data: [] };
+  const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
+  return {
+    existing: collRows.map((c) => ({
+      id: c.id, event_date: c.event_date, opened_at: c.opened_at, claim_number: c.claim_number, claim_stage: c.claim_stage, status: c.status,
+      closed: !!c.closed_at, assigned_name: nameById.get(c.assigned_to) ?? null, mine: c.assigned_to === ctx.user.id || ctx.supervisor,
+    })),
+    repairs: repairs.map((r) => ({
+      case_id: r.id, case_key: r.case_key, event_date: r.event_date, opened_at: r.opened_at, closed: !!r.closed_at,
+      branch_name: (Array.isArray(r.branches) ? r.branches[0] : r.branches)?.name ?? null,
+      customer_name: r.customer_name, phone: r.phone, insurer: r.insurance_company, claim_number: r.claim_number, appraiser_name: r.appraiser_name,
+      sub_claim_type: r.sub_claim_type, docs: docCounts.get(r.id) ?? 0,
+    })),
+  };
+}
+
+/** Move a case to another collector (CEO / bookkeeper). */
+export async function reassignCase(caseId: string, collectorId: string): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx || !ctx.supervisor) return { error: 'אין הרשאה' };
+  const { data: who } = await ctx.db.from('profiles').select('id, role, is_active, full_name').eq('id', collectorId).maybeSingle();
+  const w = who as { role: string; is_active: boolean; full_name: string | null } | null;
+  if (!w || w.role !== 'COLLECTIONS' || !w.is_active) return { error: 'מסלקת לא תקינה' };
+  const { error } = await ctx.db.from('collection_cases').update({ assigned_to: collectorId, updated_by: ctx.user.id, updated_at: new Date().toISOString() } as never).eq('id', caseId);
+  if (error) return { error: error.message };
+  await ctx.db.from('collection_case_events').insert({ case_id: caseId, kind: 'SYSTEM', body: `התיק הועבר ל${w.full_name ?? 'מסלקת'}`, created_by: ctx.user.id } as never);
+  revalidatePath(`/collections/${caseId}`);
+  revalidatePath('/collections');
+  return { ok: true };
+}
+
+// ---- beta feedback (Amit, 14/10: "שירשמו לי כל חלום שלהם") --------------------
+
+export type FeedbackKind = 'IDEA' | 'PROBLEM' | 'DREAM';
+export type Feedback = { id: string; kind: FeedbackKind; body: string; page: string | null; status: string; reply: string | null; by: string | null; at: string; mine: boolean };
+const FEEDBACK_HE: Record<FeedbackKind, string> = { IDEA: '💡 רעיון לשיפור', PROBLEM: '⚠️ משהו לא עובד', DREAM: '✨ חלום' };
+
+export async function sendBetaFeedback(kind: FeedbackKind, body: string, page: string | null): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  if (!(kind in FEEDBACK_HE)) return { error: 'סוג לא תקין' };
+  const text = (body ?? '').trim().slice(0, 3000);
+  if (text.length < 3) return { error: 'נא לכתוב כמה מילים' };
+  const { error } = await ctx.db.from('beta_feedback').insert({ kind, body: text, page: (page ?? '').slice(0, 200) || null, created_by: ctx.user.id } as never);
+  if (error) return { error: error.message };
+  // To Amit as a personal note (push + "הודעות"), one row — DIRECT_NOTE is never fanned out.
+  const [{ data: sender }, { data: ceo }] = await Promise.all([
+    ctx.db.from('profiles').select('full_name').eq('id', ctx.user.id).maybeSingle(),
+    ctx.db.from('profiles').select('id').eq('role', 'CEO').eq('is_active', true).limit(1),
+  ]);
+  const ceoId = ((ceo ?? []) as { id: string }[])[0]?.id;
+  if (ceoId && ceoId !== ctx.user.id) {
+    await ctx.db.from('notifications').insert({
+      user_id: ceoId,
+      type: 'DIRECT_NOTE',
+      triggered_by: ctx.user.id,
+      title: `${FEEDBACK_HE[kind]} — גבייה (${(sender as { full_name: string | null } | null)?.full_name ?? ''})`,
+      body: text.slice(0, 300),
+      action_url: '/collections?tab=feedback',
+    } as never);
+  }
+  revalidatePath('/collections');
+  return { ok: true };
+}
+
+export async function listBetaFeedback(): Promise<Feedback[]> {
+  const ctx = await me();
+  if (!ctx) return [];
+  let q = ctx.db.from('beta_feedback').select('id, kind, body, page, status, reply, created_by, created_at').eq('area', 'collections').order('created_at', { ascending: false }).limit(300);
+  if (!ctx.supervisor) q = q.eq('created_by', ctx.user.id);
+  const rows = ((await q).data ?? []) as { id: string; kind: FeedbackKind; body: string; page: string | null; status: string; reply: string | null; created_by: string | null; created_at: string }[];
+  const ids = Array.from(new Set(rows.map((r) => r.created_by).filter((x): x is string => !!x)));
+  const { data: names } = ids.length ? await ctx.db.from('profiles').select('id, full_name').in('id', ids) : { data: [] };
+  const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
+  return rows.map((r) => ({ id: r.id, kind: r.kind, body: r.body, page: r.page, status: r.status, reply: r.reply, by: r.created_by ? nameById.get(r.created_by) ?? null : null, at: r.created_at, mine: r.created_by === ctx.user.id }));
+}
+
+export async function answerFeedback(id: string, status: 'NEW' | 'PLANNED' | 'DONE' | 'NO', reply: string | null): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx || !ctx.supervisor) return { error: 'אין הרשאה' };
+  if (!['NEW', 'PLANNED', 'DONE', 'NO'].includes(status)) return { error: 'סטטוס לא תקין' };
+  const { error } = await ctx.db.from('beta_feedback').update({ status, reply: (reply ?? '').trim().slice(0, 1000) || null } as never).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/collections');
+  return { ok: true };
 }

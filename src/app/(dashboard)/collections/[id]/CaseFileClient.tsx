@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
-import { addCaseEvent, finishReminder, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
+import { addCaseEvent, finishReminder, reassignCase, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
+import { FeedbackButton } from '../Feedback';
 import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
@@ -38,6 +39,7 @@ export function CaseFileClient({
   repairCaseId,
   terms,
   supervisor,
+  collectors = [],
 }: {
   c: CollectionCase;
   events: CaseEvent[];
@@ -45,6 +47,7 @@ export function CaseFileClient({
   repairCaseId: string | null;
   terms: Record<string, PaymentRule>;
   supervisor: boolean;
+  collectors?: { id: string; name: string }[];
 }) {
   const [tab, setTab] = useState<Tab>('log');
   const t0 = today();
@@ -69,7 +72,10 @@ export function CaseFileClient({
 
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
-      <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ כל תיקי הגבייה</Link>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ כל תיקי הגבייה</Link>
+        <FeedbackButton />
+      </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -85,7 +91,7 @@ export function CaseFileClient({
             <F label="סוג תביעה">{c.claim_type}</F>
             <F label="מספר תביעה">{c.claim_number}</F>
             <F label="מצב תביעה" tone="text-indigo-700 font-semibold">{c.claim_stage}</F>
-            <F label="מסלקת">{c.assigned_name}</F>
+            <F label="מסלקת">{supervisor ? <Reassign c={c} collectors={collectors} /> : c.assigned_name}</F>
           </Fields>
           <Fields>
             <F label="לגבייה" tone="text-gray-900 font-bold">{ils(toCollect(c))}</F>
@@ -101,6 +107,7 @@ export function CaseFileClient({
             )}
           </Fields>
         </div>
+        <StageChips c={c} />
       </div>
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
@@ -511,6 +518,7 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
   const [msg, setMsg] = useState<string | null>(null);
   const own = files.filter((f) => f.source === 'CASE');
   const repair = files.filter((f) => f.source === 'REPAIR');
+  const referral = files.filter((f) => f.source === 'REFERRAL');
 
   async function upload(list: FileList | null) {
     if (!list?.length) return;
@@ -576,6 +584,15 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
           <List items={repair} />
         </div>
       )}
+      {referral.length > 0 && (
+        <div className="space-y-2">
+          <p className="font-semibold text-sm">מההפניה ({referral.length}) — נסרקו בקבלת הרכב או נשלחו ע״י הלקוח</p>
+          <List items={referral} />
+        </div>
+      )}
+      {repair.length === 0 && referral.length === 0 && (
+        <p className="text-xs text-gray-500">התיק לא מקושר לתיק תיקון או להפניה במערכת, ולכן אין מסמכים שנסרקו כבר. תיקים חדשים שנפתחים לפי מספר רכב ותאריך תאונה מקושרים לבד.</p>
+      )}
     </div>
   );
 }
@@ -619,5 +636,62 @@ function StatusTab({ c }: { c: CollectionCase }) {
         </Fields>
       )}
     </div>
+  );
+}
+
+const STAGES = ['ממתין לדוח שמאי', 'ממתין לשיק חברה', 'ממתין לשיק צד שלישי', 'הוגשה דרישת תשלום', 'ממתין למסמכים מהלקוח', 'בבירור מול החברה', 'חזרה לפוליסה', 'טיפול משפטי', 'טיפול הסתיים'];
+
+/** One tap to move the claim stage (logged in "טיפול שוטף"). */
+function StageChips({ c }: { c: CollectionCase }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  async function set(stage: string) {
+    if (stage === c.claim_stage) return;
+    setBusy(stage);
+    await updateCollectionCase(c.id, { claim_stage: stage });
+    setBusy(null);
+    router.refresh();
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-gray-500">עדכון מצב תביעה בלחיצה:</p>
+      <div className="flex gap-1.5 flex-wrap">
+        {STAGES.map((st) => (
+          <button
+            key={st}
+            type="button"
+            disabled={!!busy}
+            onClick={() => void set(st)}
+            className={`h-8 px-3 rounded-full border text-xs font-semibold ${c.claim_stage === st ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'} disabled:opacity-60`}
+          >
+            {busy === st ? '…' : st}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Reassign({ c, collectors }: { c: CollectionCase; collectors: { id: string; name: string }[] }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <select
+      value={c.assigned_to}
+      disabled={busy}
+      onChange={async (e) => {
+        setBusy(true);
+        const r = await reassignCase(c.id, e.target.value);
+        setBusy(false);
+        if (r.error) alert(r.error);
+        router.refresh();
+      }}
+      className="h-8 px-2 rounded-lg border border-gray-300 text-sm bg-white"
+    >
+      {!collectors.some((x) => x.id === c.assigned_to) && <option value={c.assigned_to}>{c.assigned_name ?? '—'} (לא מסלקת)</option>}
+      {collectors.map((x) => (
+        <option key={x.id} value={x.id}>{x.name}</option>
+      ))}
+    </select>
   );
 }

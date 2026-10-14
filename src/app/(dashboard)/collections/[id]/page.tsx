@@ -21,5 +21,5 @@ export default async function CollectionCasePage({ params }: { params: { id: str
       </div>
     );
   }
-  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} />;
+  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} collectors={r.collectors} />;
 }

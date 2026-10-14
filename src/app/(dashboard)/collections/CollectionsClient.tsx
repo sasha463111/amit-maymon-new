@@ -3,7 +3,8 @@
 import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { MyReminder } from '@/app/actions/collectionFile';
+import { lookupPlateHistory, type ExistingCollection, type Feedback, type MyReminder, type RepairMatch } from '@/app/actions/collectionFile';
+import { FeedbackButton, FeedbackList } from './Feedback';
 import {
   lookupPlateForCollection,
   openCollectionCase,
@@ -18,11 +19,11 @@ import {
   type PlateMatch,
 } from '@/app/actions/collections';
 import { daysLate, expectedPayment, payDateByRule, payerOf, ruleLabel, workingDaysBetween, PAYERS_EXTRA, type PaymentRule } from '@/lib/collections';
-import { INSURERS } from '@/lib/finance';
+import { INSURERS, financeDefaultsFromSubType } from '@/lib/finance';
 import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toCollect, today } from './shared';
 import { formatDate } from '@/lib/dates';
 
-type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir';
+type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback';
 
 export function CollectionsClient({
   cases,
@@ -32,6 +33,8 @@ export function CollectionsClient({
   canEditTerms = false,
   shir = [],
   reminders = [],
+  feedback = [],
+  initialTab,
   error,
 }: {
   cases: CollectionCase[];
@@ -41,11 +44,13 @@ export function CollectionsClient({
   canEditTerms?: boolean;
   shir?: ShirInvoice[];
   reminders?: MyReminder[];
+  feedback?: Feedback[];
+  initialTab?: string;
   error: string | null;
 }) {
   const router = useRouter();
   const [who, setWho] = useState<string>('');
-  const [tab, setTab] = useState<Tab>('active');
+  const [tab, setTab] = useState<Tab>(initialTab === 'feedback' ? 'feedback' : 'active');
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -65,7 +70,7 @@ export function CollectionsClient({
 
   const shown = withExp
     .filter(inTab)
-    .filter((e) => !q || [e.c.plate, e.c.customer_name, payerOf(e.c), e.c.invoice_number, e.c.legal_lawyer].some((v) => (v ?? '').toLowerCase().includes(q)))
+    .filter((e) => !q || [e.c.plate, e.c.customer_name, payerOf(e.c), e.c.invoice_number, e.c.legal_lawyer, e.c.claim_number, e.c.tp_claim_number, e.c.claim_stage, e.c.external_ref].some((v) => (v ?? '').toLowerCase().includes(q)))
     .sort((a, b) => (tab === 'active' || tab === 'overdue' ? (a.exp.date ?? '9999').localeCompare(b.exp.date ?? '9999') : b.c.opened_at.localeCompare(a.c.opened_at)));
 
   const counts = {
@@ -87,6 +92,7 @@ export function CollectionsClient({
           <button type="button" onClick={() => setOpening(true)} className="h-11 px-5 rounded-xl bg-red-600 text-white text-sm font-bold">
             📂 פתיחת תיק
           </button>
+          <FeedbackButton />
           <button type="button" onClick={() => setShowTerms((v) => !v)} className="h-11 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
             ⚙️ הסכמי תשלום
           </button>
@@ -120,6 +126,7 @@ export function CollectionsClient({
           ['closed', `נסגרו (${counts.closed})`],
           ['all', `הכול (${counts.all})`],
           ['shir', '🧾 ש.י.ר — ריכוז חודשי'],
+          ['feedback', `💡 פידבק (${feedback.length})`],
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -132,14 +139,16 @@ export function CollectionsClient({
         ))}
       </div>
 
-      {tab === 'shir' ? (
+      {tab === 'feedback' ? (
+        <FeedbackList items={feedback} supervisor={isCeo} />
+      ) : tab === 'shir' ? (
         <ShirBatch invoices={shir} terms={terms} />
       ) : (
       <>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔎 רכב, לקוח, חברת ביטוח, מספר חשבונית, עורך דין…"
+        placeholder="🔎 רכב, לקוח, חברת ביטוח, מספר תביעה, מצב תביעה, חשבונית, עורך דין…"
         className="w-full h-11 px-3 rounded-xl border border-gray-300 text-sm"
         dir="auto"
       />
@@ -266,8 +275,14 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
   const router = useRouter();
   const [plate, setPlate] = useState('');
   const [matches, setMatches] = useState<PlateMatch[] | null>(null);
+  const [history, setHistory] = useState<{ existing: ExistingCollection[]; repairs: RepairMatch[] } | null>(null);
+  // The same car can have several accidents (Amit, 14/10): when it already has
+  // a case, ask first — same accident (open it) or a new one.
+  const [newAccident, setNewAccident] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
+  const [repair, setRepair] = useState<RepairMatch | null>(null);
   const [form, setForm] = useState<CaseInput | null>(null);
+  const [extra, setExtra] = useState({ event_date: '', claim_number: '', customer_phone: '', appraiser_name: '' });
   const [assignTo, setAssignTo] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -275,23 +290,45 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
   async function search() {
     setErr(null);
     setBusy(true);
-    const r = await lookupPlateForCollection(plate);
+    const [r, h] = await Promise.all([lookupPlateForCollection(plate), lookupPlateHistory(plate)]);
     setBusy(false);
-    if (r.error) return setErr(r.error);
+    if (r.error || h.error) return setErr(r.error ?? h.error ?? null);
     setMatches(r.matches);
-    const free = r.matches.filter((m) => !m.taken_by);
-    if (free.length === 1) choose(free[0]);
-    else if (r.matches.length === 0) manual();
+    setHistory({ existing: h.existing, repairs: h.repairs });
+    setNewAccident(h.existing.length === 0);
+    setPicked(null);
+    setRepair(null);
+    setForm(null);
   }
 
-  function choose(m: PlateMatch) {
+  /** Start from a repair case: everything typed there comes along. */
+  function chooseRepair(m: RepairMatch) {
+    setRepair(m);
+    const def = financeDefaultsFromSubType(m.sub_claim_type);
+    setForm((f) => ({
+      ...(f ?? blankCase(plate.replace(/\D/g, ''))),
+      customer_name: f?.customer_name || m.customer_name,
+      insurer: f?.insurer || m.insurer,
+      work_source: f && picked ? f.work_source : def.workSource ?? 'DIRECT',
+      claim_type: f?.claim_type || def.claimType || null,
+    }));
+    setExtra((x) => ({
+      event_date: m.event_date ?? x.event_date,
+      claim_number: m.claim_number ?? x.claim_number,
+      customer_phone: m.phone ?? x.customer_phone,
+      appraiser_name: m.appraiser_name ?? x.appraiser_name,
+    }));
+  }
+
+  /** Closure data (amounts, invoice) for the same car. */
+  function chooseClosure(m: PlateMatch) {
     setPicked(m.finance_closure_id);
-    setForm({
+    setForm((f) => ({
       plate: m.plate,
-      customer_name: m.customer_name,
+      customer_name: m.customer_name ?? f?.customer_name ?? null,
       work_source: m.work_source,
-      insurer: m.insurer,
-      claim_type: m.claim_type,
+      insurer: m.insurer ?? f?.insurer ?? null,
+      claim_type: m.claim_type ?? f?.claim_type ?? null,
       case_closed_on: m.case_closed_on,
       invoice_number: m.invoice_number,
       amount_due: m.amount_due,
@@ -299,11 +336,12 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
       reinstatement: m.reinstatement,
       claim_check_due_date: m.claim_check_due_date,
       claim_check_amount: m.claim_check_amount,
-    });
+    }));
   }
 
   function manual() {
     setPicked(null);
+    setRepair(null);
     setForm(blankCase(plate.replace(/\D/g, '')));
   }
 
@@ -311,12 +349,28 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
     if (!form) return;
     setBusy(true);
     setErr(null);
-    const r = await openCollectionCase({ ...form, finance_closure_id: picked, assign_to: isCeo ? assignTo || null : null });
+    const r = await openCollectionCase({
+      ...form,
+      finance_closure_id: picked,
+      assign_to: isCeo ? assignTo || null : null,
+      case_id: repair?.case_id ?? null,
+      event_date: extra.event_date || null,
+      claim_number: extra.claim_number || null,
+      customer_phone: extra.customer_phone || null,
+      appraiser_name: extra.appraiser_name || null,
+    });
     setBusy(false);
     if (r.error) return setErr(r.error);
     onClose();
-    router.refresh();
+    if (r.id) router.push(`/collections/${r.id}`);
+    else router.refresh();
   }
+
+  const box = 'w-full text-right rounded-lg border px-3 py-2 text-sm';
+  const inp = 'w-full h-9 px-2 rounded-lg border border-gray-300 text-sm bg-white';
+  const lab = 'block text-[11px] text-gray-500 mb-0.5';
+  const existing = history?.existing ?? [];
+  const repairs = history?.repairs ?? [];
 
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-2" onClick={onClose}>
@@ -337,35 +391,108 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
             autoFocus
           />
           <button type="button" onClick={() => void search()} disabled={busy || !plate.trim()} className="h-11 px-5 rounded-xl bg-gray-900 text-white text-sm font-bold disabled:opacity-40">
-            {busy && !form ? '…' : 'שלוף נתונים'}
+            {busy && !form ? '…' : 'חיפוש'}
           </button>
         </div>
 
-        {matches && matches.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-xs text-gray-500">נמצאו במאגר:</p>
-            {matches.map((m) => (
-              <button
-                key={m.finance_closure_id}
-                type="button"
-                disabled={!!m.taken_by}
-                onClick={() => choose(m)}
-                className={`w-full text-right rounded-lg border px-3 py-2 text-sm ${picked === m.finance_closure_id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'} disabled:opacity-50`}
-              >
-                נסגר {formatDate(m.case_closed_on)} · {m.branch_name ?? ''} · {payerOf(m) || '—'} · {m.claim_type ?? ''} · {ils(m.amount_due)}
-                {m.taken_by && <span className="text-red-700"> · כבר בטיפול של {m.taken_by}</span>}
-              </button>
+        {/* 1. The car already has a collection case: same accident or a new one? */}
+        {existing.length > 0 && !newAccident && (
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
+            <p className="font-bold text-amber-900">⚠️ לרכב הזה כבר יש {existing.length === 1 ? 'תיק גבייה' : `${existing.length} תיקי גבייה`}. זה אותו אירוע או תאונה חדשה?</p>
+            {existing.map((x) => (
+              <div key={x.id} className="rounded-lg bg-white border border-amber-200 p-2 space-y-1">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-sm">
+                  <dt className="text-gray-400">תאריך התאונה:</dt>
+                  <dd>{x.event_date ? formatDate(x.event_date) : '—'}</dd>
+                  <dt className="text-gray-400">נפתח:</dt>
+                  <dd>{formatDate(x.opened_at)}</dd>
+                  <dt className="text-gray-400">מספר תביעה:</dt>
+                  <dd>{x.claim_number ?? '—'}</dd>
+                  <dt className="text-gray-400">מצב:</dt>
+                  <dd>{x.closed ? 'נסגר' : x.claim_stage ?? STATUS_LABEL[x.status as CollectionStatus] ?? x.status}</dd>
+                  <dt className="text-gray-400">מטפלת:</dt>
+                  <dd>{x.assigned_name ?? '—'}</dd>
+                </dl>
+                {x.mine ? (
+                  <Link href={`/collections/${x.id}`} className="inline-flex items-center h-9 px-4 rounded-lg bg-gray-900 text-white text-sm font-semibold">
+                    📂 זה אותו אירוע — לפתיחת התיק
+                  </Link>
+                ) : (
+                  <p className="text-xs text-gray-600">התיק בטיפול של {x.assigned_name ?? 'מסלקת אחרת'}. אם זה אותו אירוע, אין צורך לפתוח תיק חדש.</p>
+                )}
+              </div>
             ))}
-            <button type="button" onClick={manual} className="text-xs text-indigo-700 underline">
-              התיק לא ברשימה — פתיחה ידנית
+            <button type="button" onClick={() => setNewAccident(true)} className="h-10 px-4 rounded-lg border-2 border-gray-900 bg-white text-sm font-bold">
+              ➕ זו תאונה אחרת — פתיחת תיק חדש
             </button>
           </div>
         )}
-        {matches && matches.length === 0 && <p className="text-sm text-amber-700">הרכב לא נמצא במאגר — ממלאים את הנתונים ידנית.</p>}
 
-        {form && (
+        {/* 2. Pull what we already have: the repair case (accident date) and the closure data. */}
+        {history && newAccident && (
+          <div className="space-y-3">
+            {repairs.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">מאיזו תאונה? (תיקי תיקון של הרכב — הנתונים והמסמכים הסרוקים יעברו לתיק)</p>
+                {repairs.map((m) => (
+                  <button key={m.case_id} type="button" onClick={() => chooseRepair(m)} className={`${box} ${repair?.case_id === m.case_id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}`}>
+                    <span className="font-semibold">תאונה: {m.event_date ? formatDate(m.event_date) : 'לא הוזן'}</span>
+                    <span className="text-gray-500"> · נפתח: {m.opened_at ? formatDate(m.opened_at) : '—'}</span>
+                    {m.branch_name && <span className="text-gray-500"> · {m.branch_name}</span>}
+                    {m.insurer && <span className="text-gray-500"> · {m.insurer}</span>}
+                    {m.claim_number && <span className="text-gray-500"> · תביעה {m.claim_number}</span>}
+                    <span className="text-gray-500"> · מסמכים סרוקים: {m.docs}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {matches && matches.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">נתוני סגירה (סכומים וחשבונית):</p>
+                {matches.map((m) => (
+                  <button
+                    key={m.finance_closure_id}
+                    type="button"
+                    disabled={!!m.taken_by}
+                    onClick={() => chooseClosure(m)}
+                    className={`${box} ${picked === m.finance_closure_id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'} disabled:opacity-50`}
+                  >
+                    נסגר {formatDate(m.case_closed_on)} · {m.branch_name ?? ''} · {payerOf(m) || '—'} · {m.claim_type ?? ''} · {ils(m.amount_due)}
+                    {m.taken_by && <span className="text-red-700"> · כבר בתיק גבייה של {m.taken_by}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {repairs.length === 0 && (!matches || matches.length === 0) && <p className="text-sm text-amber-700">אין לרכב הזה נתונים במערכת — ממלאים ידנית.</p>}
+            {!form && (
+              <button type="button" onClick={manual} className="text-xs text-indigo-700 underline">
+                להמשיך בלי לבחור — הקלדה ידנית
+              </button>
+            )}
+          </div>
+        )}
+
+        {form && newAccident && (
           <>
-            <p className="text-xs text-gray-500">{picked ? 'הנתונים נשלפו מהמאגר — אפשר להשלים או לתקן:' : 'הקלדה ידנית:'}</p>
+            <p className="text-xs text-gray-500">{repair || picked ? 'הנתונים נשלפו מהמערכת — אפשר להשלים או לתקן:' : 'הקלדה ידנית:'}</p>
+            <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
+              <div>
+                <label className={lab}>תאריך התאונה</label>
+                <input type="date" value={extra.event_date} onChange={(e) => setExtra({ ...extra, event_date: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lab}>מספר תביעה בחברה</label>
+                <input value={extra.claim_number} onChange={(e) => setExtra({ ...extra, claim_number: e.target.value })} className={inp} dir="ltr" />
+              </div>
+              <div>
+                <label className={lab}>טלפון הלקוח</label>
+                <input value={extra.customer_phone} onChange={(e) => setExtra({ ...extra, customer_phone: e.target.value })} className={inp} dir="ltr" inputMode="tel" />
+              </div>
+              <div>
+                <label className={lab}>שמאי</label>
+                <input value={extra.appraiser_name} onChange={(e) => setExtra({ ...extra, appraiser_name: e.target.value })} className={inp} />
+              </div>
+            </div>
             <CaseFields v={form} set={(p) => setForm({ ...form, ...p })} />
             {isCeo && (
               <label className="block text-xs text-gray-500">

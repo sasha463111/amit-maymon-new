@@ -42,7 +42,7 @@ async function me() {
 const CASE_COLS =
   'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, updated_at, updated_by, ' +
   // the case file (20261014350000)
-  'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source';
+  'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source, case_id, referral_id';
 
 export type CollectionCase = {
   id: string;
@@ -107,6 +107,9 @@ export type CaseFileFields = {
   legal_claim_number: string | null;
   external_ref?: string | null;
   source?: string;
+  /** The repair case / referral this claim belongs to (documents + data come from there). */
+  case_id?: string | null;
+  referral_id?: string | null;
 };
 const FILE_TEXT = ['claim_number', 'claim_stage', 'customer_phone', 'appraiser_name', 'appraiser_phone', 'appraiser_email', 'insurer_handler', 'insurer_handler_phone', 'insurer_handler_email', 'tp_plate', 'tp_insurer', 'tp_claim_number', 'tp_owner_name', 'tp_owner_phone', 'legal_claim_number'] as const;
 const FILE_MONEY = ['claimed_amount', 'approved_amount', 'appraiser_damage', 'appraiser_fee', 'depreciation', 'deductible', 'salvage_value', 'extra_expenses'] as const;
@@ -250,7 +253,16 @@ const txt = (v: string | null | undefined, max = 200) => (v ?? '').trim().slice(
 
 /** "פתיחת תיק" — the case is assigned to whoever opens it (the CEO may assign it to a collector). */
 export async function openCollectionCase(
-  input: CaseInput & { finance_closure_id: string | null; assign_to?: string | null },
+  input: CaseInput & {
+    finance_closure_id: string | null;
+    assign_to?: string | null;
+    /** The repair case chosen for this accident (data + scanned documents). */
+    case_id?: string | null;
+    event_date?: string | null;
+    claim_number?: string | null;
+    customer_phone?: string | null;
+    appraiser_name?: string | null;
+  },
 ): Promise<{ error?: string; ok?: true; id?: string }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
@@ -259,7 +271,12 @@ export async function openCollectionCase(
   const plate = (input.plate ?? '').replace(/\D/g, '');
   if (plate.length < 5) return { error: 'מספר רכב לא תקין' };
   if (!['DIRECT', 'SHIR', 'IDF'].includes(input.work_source)) return { error: 'מקור עבודה לא תקין' };
-  if (![input.case_closed_on, input.claim_check_due_date].every(isDate)) return { error: 'תאריך לא תקין' };
+  if (![input.case_closed_on, input.claim_check_due_date, input.event_date].every(isDate)) return { error: 'תאריך לא תקין' };
+  // The same car can have several accidents; the same accident only one case (Amit, 14/10).
+  if (input.event_date) {
+    const { data: same } = await db.from('collection_cases').select('id').eq('plate', plate).eq('event_date', input.event_date).is('closed_at', null).limit(1);
+    if ((same ?? []).length) return { error: 'כבר יש תיק גבייה פתוח לרכב הזה עם אותו תאריך תאונה — פותחים את התיק הקיים' };
+  }
   if (![input.amount_due, input.vat_offset, input.reinstatement, input.claim_check_amount].every(okMoney)) return { error: 'סכום לא תקין' };
 
   let assignee = ctx.user.id;
@@ -270,7 +287,18 @@ export async function openCollectionCase(
     assignee = input.assign_to;
   }
 
-  let branchId: string | null = null;
+  let repairCaseId: string | null = null;
+  let referralId: string | null = null;
+  let repairBranch: string | null = null;
+  if (input.case_id) {
+    const { data: rc } = await db.from('cases').select('id, branch_id').eq('id', input.case_id).is('deleted_at', null).maybeSingle();
+    if (!rc) return { error: 'תיק התיקון לא נמצא' };
+    repairCaseId = (rc as { id: string }).id;
+    repairBranch = (rc as { branch_id: string }).branch_id;
+    const { data: rf } = await db.from('referrals').select('id').eq('case_id', repairCaseId).limit(1);
+    referralId = ((rf ?? []) as { id: string }[])[0]?.id ?? null;
+  }
+  let branchId: string | null = repairBranch;
   // Appraiser + deductible come with the closure data, so the case file starts filled.
   let fromClosure: { appraiser_name: string | null; deductible: number | null; appraiser_fee: number | null } = { appraiser_name: null, deductible: null, appraiser_fee: null };
   if (input.finance_closure_id) {
@@ -302,6 +330,12 @@ export async function openCollectionCase(
       claim_check_due_date: input.claim_check_due_date || null,
       claim_check_amount: input.claim_check_amount,
       ...fromClosure,
+      ...(input.appraiser_name && !fromClosure.appraiser_name ? { appraiser_name: txt(input.appraiser_name, 120) } : {}),
+      case_id: repairCaseId,
+      referral_id: referralId,
+      event_date: input.event_date || null,
+      claim_number: txt(input.claim_number, 60),
+      customer_phone: txt(input.customer_phone, 30),
       created_by: ctx.user.id,
       updated_by: ctx.user.id,
     } as never)
@@ -313,7 +347,7 @@ export async function openCollectionCase(
   return { ok: true, id: (data as { id: string }).id };
 }
 
-export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'external_ref' | 'source'>> & {
+export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'external_ref' | 'source' | 'case_id' | 'referral_id'>> & {
   payment_approved_on?: string | null;
   status?: CollectionStatus;
   received_amount?: number | null;
@@ -373,9 +407,14 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
     patch.closed_at = closes ? cur.closed_at ?? new Date().toISOString() : null;
   }
 
-  const { data: before } = status ? await db.from('collection_cases').select('status').eq('id', id).maybeSingle() : { data: null };
+  const { data: before } = status || 'claim_stage' in u ? await db.from('collection_cases').select('status, claim_stage').eq('id', id).maybeSingle() : { data: null };
   const { error } = await db.from('collection_cases').update(patch as never).eq('id', id);
   if (error) return { error: error.message };
+  const prevStage = (before as { claim_stage: string | null } | null)?.claim_stage ?? null;
+  const newStage = 'claim_stage' in u ? txt(u.claim_stage, 120) : prevStage;
+  if (before && newStage !== prevStage) {
+    await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `מצב תביעה: ${prevStage ?? '—'} ← ${newStage ?? '—'}`, created_by: ctx.user.id } as never);
+  }
   const prev = (before as { status: CollectionStatus } | null)?.status;
   if (status && prev && prev !== status) {
     await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `סטטוס: ${STATUS_HE[prev]} ← ${STATUS_HE[status]}`, created_by: ctx.user.id } as never);
