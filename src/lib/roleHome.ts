@@ -10,6 +10,7 @@ export const ROLE_HOME: Record<UserRole, string> = {
   SERVICE_ADVISOR: '/cases',
   WAREHOUSE: '/returns',
   WAREHOUSE_MANAGER: '/returns',
+  COLLECTIONS: '/collections',
 };
 
 export function homeForRole(role: string | null | undefined, officeFunction?: string | null): string {

@@ -45,6 +45,9 @@ export function FinanceEntryCard({
   const [depositDue, setDepositDue] = useState(initial?.deposit_check_due_date ?? '');
   const [claimCheckAmount, setClaimCheckAmount] = useState(toStr(initial?.claim_check_amount));
   const [depositAmount, setDepositAmount] = useState(toStr(initial?.deposit_check_amount));
+  const [vatOffset, setVatOffset] = useState(toStr(initial?.vat_offset));
+  const [reinstatement, setReinstatement] = useState(toStr(initial?.reinstatement));
+  const [appraiserFee, setAppraiserFee] = useState(toStr(initial?.appraiser_fee));
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<FinanceDuplicate[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
@@ -68,6 +71,9 @@ export function FinanceEntryCard({
       deposit_check_due_date: hasDeposit ? depositDue || null : null,
       claim_check_amount: claimType === "צד ג'" ? toNum(claimCheckAmount) : null,
       deposit_check_amount: hasDeposit ? toNum(depositAmount) : null,
+      vat_offset: toNum(vatOffset),
+      reinstatement: toNum(reinstatement),
+      appraiser_fee: claimType === "צד ג'" ? toNum(appraiserFee) : null,
     }, confirmDuplicate);
     setSaving(false);
     if (r.duplicates?.length) {
@@ -155,6 +161,20 @@ export function FinanceEntryCard({
           <label className={label}>השתתפות עצמית</label>
           <input value={deductible} onChange={(e) => setDeductible(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
         </div>
+        <div>
+          <label className={label}>קיזוז מע״מ (אם יש)</label>
+          <input value={vatOffset} onChange={(e) => setVatOffset(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+        </div>
+        <div>
+          <label className={label}>כינון (אם יש)</label>
+          <input value={reinstatement} onChange={(e) => setReinstatement(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+        </div>
+        {claimType === "צד ג'" && (
+          <div>
+            <label className={label}>שכר טרחת שמאי</label>
+            <input value={appraiserFee} onChange={(e) => setAppraiserFee(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+          </div>
+        )}
         <div>
           <label className={label}>מספר כרטיס עבודה</label>
           <input value={jobCard} onChange={(e) => setJobCard(e.target.value)} className={input} dir="ltr" />

@@ -1454,6 +1454,7 @@ export type Database = {
         | "SERVICE_ADVISOR"
         | "WAREHOUSE"
         | "WAREHOUSE_MANAGER"
+        | "COLLECTIONS"
       workflow_run_status: "ACTIVE" | "COMPLETED"
       workflow_type: "PROFESSIONAL" | "CLOSURE"
     }
@@ -1610,6 +1611,7 @@ export const Constants = {
         "SERVICE_ADVISOR",
         "WAREHOUSE",
         "WAREHOUSE_MANAGER",
+        "COLLECTIONS",
       ],
       workflow_run_status: ["ACTIVE", "COMPLETED"],
       workflow_type: ["PROFESSIONAL", "CLOSURE"],

@@ -56,6 +56,12 @@ export type FinanceEntry = {
   deposit_check_due_date: string | null;
   claim_check_amount: number | null;
   deposit_check_amount: number | null;
+  /** קיזוז מע"מ (if any). */
+  vat_offset: number | null;
+  /** כינון (if any). */
+  reinstatement: number | null;
+  /** שכר טרחת שמאי (צד ג'). */
+  appraiser_fee: number | null;
 };
 
 export async function getFinanceEntry(caseId: string): Promise<{ entry: (FinanceEntry & { updated_at: string }) | null; error?: string }> {
@@ -65,7 +71,7 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
   if (!db) return { entry: null, error: 'שרת לא מוגדר' };
   const { data } = await db
     .from('finance_closures')
-    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, claim_check_due_date, deposit_check_due_date, claim_check_amount, deposit_check_amount, updated_at')
+    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, claim_check_due_date, deposit_check_due_date, claim_check_amount, deposit_check_amount, vat_offset, reinstatement, appraiser_fee, updated_at')
     .eq('case_id', caseId)
     .maybeSingle();
   if (!data) return { entry: null };
@@ -79,6 +85,9 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
       deductible: num(d.deductible),
       claim_check_amount: num(d.claim_check_amount),
       deposit_check_amount: num(d.deposit_check_amount),
+      vat_offset: num(d.vat_offset),
+      reinstatement: num(d.reinstatement),
+      appraiser_fee: num(d.appraiser_fee),
     },
   };
 }
@@ -105,7 +114,8 @@ export async function saveFinanceEntry(
   };
   const err =
     money(input.amount_ours, 'סכום חשבונית', true) ?? money(input.amount_shir, 'סכום ללא הנחות') ?? money(input.deductible, 'השתתפות עצמית') ??
-    money(input.claim_check_amount, 'סכום צ׳ק תביעות') ?? money(input.deposit_check_amount, 'סכום צ׳ק פיקדון');
+    money(input.claim_check_amount, 'סכום צ׳ק תביעות') ?? money(input.deposit_check_amount, 'סכום צ׳ק פיקדון') ??
+    money(input.vat_offset, 'קיזוז מע"מ') ?? money(input.reinstatement, 'כינון') ?? money(input.appraiser_fee, 'שכר טרחת שמאי');
   if (err) return { error: err };
   const date = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
   const t = (v: string | null, max = 120) => (v ?? '').trim().slice(0, max) || null;
@@ -130,6 +140,9 @@ export async function saveFinanceEntry(
     deposit_check_due_date: date(input.deposit_check_due_date),
     claim_check_amount: input.claim_check_amount,
     deposit_check_amount: input.deposit_check_amount,
+    vat_offset: input.vat_offset,
+    reinstatement: input.reinstatement,
+    appraiser_fee: input.appraiser_fee,
     updated_by: a.user.id,
     updated_at: new Date().toISOString(),
   };

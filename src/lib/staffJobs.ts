@@ -69,6 +69,13 @@ export const STAFF_JOBS: StaffJob[] = [
     notifications: 'חלק שלא נאסף 7 ימים, זיכויים, הודעות אישיות',
   },
   {
+    key: 'COLLECTIONS',
+    role: 'COLLECTIONS',
+    officeFunction: null,
+    label: 'מסלקת תביעות',
+    notifications: 'הודעות אישיות',
+  },
+  {
     key: 'CEO',
     role: 'CEO',
     officeFunction: null,

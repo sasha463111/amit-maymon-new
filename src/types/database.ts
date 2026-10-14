@@ -11,7 +11,9 @@ export type UserRole =
   | 'SERVICE_ADVISOR'
   // Parts-returns module (2026-10-12)
   | 'WAREHOUSE'
-  | 'WAREHOUSE_MANAGER';
+  | 'WAREHOUSE_MANAGER'
+  // Claims collectors — collections screen (2026-10-14)
+  | 'COLLECTIONS';
 
 export type GeneralStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED';
 

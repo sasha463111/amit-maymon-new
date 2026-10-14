@@ -46,6 +46,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'פחחים', href: '/painters' },
     { label: 'החזרות', href: '/returns' },
     { label: 'כספים', href: '/finance' },
+    { label: 'גבייה', href: '/collections' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'הגדרות', href: '/settings' },
@@ -75,6 +76,12 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],
+  // Claims collectors (2026-10-14): the collections screen only.
+  COLLECTIONS: [
+    { label: 'גבייה', href: '/collections' },
+    { label: 'הודעות', href: '/messages' },
+    { label: 'התראות', href: '/notifications' },
+  ],
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -85,6 +92,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   SERVICE_ADVISOR: 'יועצת שירות',
   WAREHOUSE: 'מחסנאי',
   WAREHOUSE_MANAGER: 'מנהל מחסן',
+  COLLECTIONS: 'מסלקת תביעות',
 };
 
 export default async function DashboardLayout({
