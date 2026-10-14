@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -70,6 +70,7 @@ export function ReturnsClient({
   const canDocs = docs !== null;
   const lines = useMemo(() => (canDocs ? docLines(docs ?? [], rows) : []), [canDocs, docs, rows]);
   const foundDocs = useMemo(() => (q ? lines.filter((l) => matchesDoc(l, q)) : []), [lines, q]);
+  const invoiceLookup = useMemo(() => makeInvoiceLookup(docs ?? []), [docs]);
 
   function done_(msg: string) {
     setToast(msg);
@@ -78,6 +79,7 @@ export function ReturnsClient({
   }
 
   return (
+    <InvoiceLookup.Provider value={invoiceLookup}>
     <div className="max-w-5xl mx-auto space-y-4" dir="rtl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
@@ -180,6 +182,64 @@ export function ReturnsClient({
         />
       )}
     </div>
+    </InvoiceLookup.Provider>
+  );
+}
+
+// ---- Which invoice a return credits (Amit, 2026-10-14) -------------------
+// The invoice number printed on the sticker → the invoice photographed in the
+// "חשבוניות / ת. משלוח" tab. Numbers are compared without spaces/case; a
+// sticker number with a line suffix ("HZM2769725-01") also matches its invoice.
+const normDoc = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/\s+/g, '');
+
+type Lookup = (r: PartReturnRow) => SupplierDocRow | null;
+const InvoiceLookup = createContext<Lookup>(() => null);
+
+function makeInvoiceLookup(docs: SupplierDocRow[]): Lookup {
+  const invoices = docs.filter((d) => d.doc_type !== 'CREDIT_INVOICE' && d.doc_number);
+  return (r) => {
+    const n = normDoc(r.document_number);
+    if (!n) return null;
+    const hits = invoices.filter((d) => {
+      const m = normDoc(d.doc_number);
+      return m === n || n.startsWith(`${m}-`) || n.startsWith(`${m}/`);
+    });
+    return hits.find((d) => d.supplier === r.supplier_label) ?? hits[0] ?? null;
+  };
+}
+
+/** "🔗 מזכה חשבונית X" — opens the photographed invoice when it is in the archive. */
+function CreditsInvoice({ r, compact = false }: { r: PartReturnRow; compact?: boolean }) {
+  const lookup = useContext(InvoiceLookup);
+  const [view, setView] = useState<string | null>(null);
+  if (!r.document_number && !r.invoice_url) return null;
+  const doc = lookup(r);
+  const url = doc?.photo_url ?? r.invoice_url;
+  const label = `🔗 מזכה חשבונית ${r.document_number ?? ''}`.trim();
+  return (
+    <span className={compact ? '' : 'inline-flex'}>
+      {url ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setView(url); }}
+          className={compact ? 'text-blue-700 underline decoration-dotted' : 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold border-blue-200 bg-blue-50 text-blue-800'}
+          title={doc ? `צולמה ${formatDate(doc.doc_date)}${doc.branch_name ? ` · ${doc.branch_name}` : ''}` : undefined}
+        >
+          {label}
+        </button>
+      ) : (
+        <span className={compact ? 'text-gray-700' : 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold border-gray-200 bg-gray-50 text-gray-700'}>
+          {label}
+          <span className="text-gray-400 font-normal"> · לא צולמה</span>
+        </span>
+      )}
+      {view && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setView(null); }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={view} alt="חשבונית" className="max-w-full max-h-full rounded-lg" />
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -235,7 +295,7 @@ function PartCard({ r, children, selected, onToggle }: { r: PartReturnRow; child
         <p className={`text-[11px] ${late ? 'text-amber-700 font-semibold' : 'text-gray-400'}`}>
           {r.created_by_name ?? ''} · {formatDateTime(r.created_at)}
           {r.status === 'WAITING_PICKUP' ? ` · ממתין ${age} ימים` : ''}
-          {r.document_number ? ` · מסמך ${r.document_number}` : ''}
+
         </p>
         {children}
       </div>
@@ -534,7 +594,6 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [stickerDate, setStickerDate] = useState('');
   // Sticker reading (Claude): 'reading' while it runs, 'done' after it filled something.
   const [reading, setReading] = useState<'idle' | 'reading' | 'done'>('idle');
-  const [invoice, setInvoice] = useState<File | null>(null);
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -601,7 +660,6 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     fd.append('reason_other', reasonOther);
     fd.append('document_number', doc);
     fd.append('sticker_date', stickerDate);
-    if (invoice) fd.append('invoice', await shrinkImage(invoice));
     fd.append('branch_id', branchId);
     const res = await createPartReturn(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }));
     setBusy(false);
@@ -696,14 +754,8 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold">חשבונית מקור <span className="text-xs text-gray-400 font-normal">(אם כבר הגיעה — אפשר להוסיף גם אחר כך)</span></p>
-          <div className="flex gap-2">
-            <input value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="מספר חשבונית / תעודת משלוח" className="flex-1 h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="auto" />
-            <label className={`${chip(!!invoice)} cursor-pointer whitespace-nowrap flex items-center`}>
-              📄 {invoice ? 'צולמה ✓' : 'צלם חשבונית'}
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => setInvoice(e.target.files?.[0] ?? null)} />
-            </label>
-          </div>
+          <p className="text-sm font-semibold">מספר חשבונית <span className="text-xs text-gray-400 font-normal">(מהמדבקה — החשבונית עצמה מצולמת בלשונית &quot;חשבוניות / ת. משלוח&quot;)</span></p>
+          <input value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="מספר חשבונית / תעודת משלוח" className="w-full h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="auto" />
         </div>
 
         {branches.length > 1 && (
@@ -757,16 +809,9 @@ function InvoiceButtons({ r, canCredit, onDone }: { r: PartReturnRow; canCredit:
   const btn = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer';
   return (
     <div className="flex flex-wrap gap-1.5 mt-1.5" onClick={(e) => e.stopPropagation()}>
-      {r.invoice_url ? (
-        <button type="button" onClick={() => setView(r.invoice_url)} className={`${btn} border-blue-200 bg-blue-50 text-blue-800`}>
-          📄 חשבונית מקור{r.document_number ? ` ${r.document_number}` : ''}
-        </button>
-      ) : (
-        <label className={`${btn} border-gray-300 bg-white text-gray-700`}>
-          {busy === 'original' ? 'שומר…' : '📷 צלם חשבונית מקור'}
-          <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void upload('original', e.target.files?.[0] ?? null)} />
-        </label>
-      )}
+      {/* The original invoice is photographed in the "חשבוניות / ת. משלוח" tab
+          (Amit, 14/10) — here only the link to it (CreditsInvoice). */}
+      <CreditsInvoice r={r} />
       {r.credit_invoice_url ? (
         <button type="button" onClick={() => setView(r.credit_invoice_url)} className={`${btn} border-green-200 bg-green-50 text-green-800`}>
           📄 חשבונית זיכוי{r.credit_invoice_number ? ` ${r.credit_invoice_number}` : ''}
@@ -839,7 +884,7 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
                 )}
                 {r.branch_name && <div className="text-[11px] text-gray-400">{r.branch_name}</div>}
               </td>
-              <td className="px-3 py-2 whitespace-nowrap">{pic(r.invoice_url, r.document_number || (r.invoice_url ? '📄 תמונה' : '—'))}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{r.document_number ? <CreditsInvoice r={r} compact /> : '—'}</td>
               <td className="px-3 py-2 whitespace-nowrap">
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
                   {PART_RETURN_STATUS_LABEL[r.status] ?? r.status}
