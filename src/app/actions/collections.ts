@@ -17,8 +17,8 @@ import type { PaymentRule } from '@/lib/collections';
 const ROLES = new Set(['COLLECTIONS', 'CEO', 'ACCOUNTANT']);
 /** See every collector's cases, assign, update any case (the bookkeeper too). */
 const SUPERVISORS = new Set(['CEO', 'ACCOUNTANT']);
-export type CollectionStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'DISPUTE' | 'LEGAL';
-const STATUSES = new Set<CollectionStatus>(['OPEN', 'PARTIAL', 'PAID', 'DISPUTE', 'LEGAL']);
+export type CollectionStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'DISPUTE' | 'LEGAL' | 'BLOCKED';
+const STATUSES = new Set<CollectionStatus>(['OPEN', 'PARTIAL', 'PAID', 'DISPUTE', 'LEGAL', 'BLOCKED']);
 /** Final statuses — the case is closed (PARTIAL = paid with an offset). LEGAL closes when the lawyer's case closes. */
 const FINAL = new Set<CollectionStatus>(['PAID', 'PARTIAL']);
 
@@ -100,7 +100,7 @@ export async function listCollectionCases(): Promise<{
     q,
     db.from('profiles').select('id, full_name, role, is_active').in('role', ['COLLECTIONS', 'CEO']),
     db.from('branches').select('id, name'),
-    db.from('insurer_payment_terms').select('insurer, agreement, mode, offset_months, pay_day, cutoff_day, notes'),
+    db.from('insurer_payment_terms').select('insurer, agreement, mode, offset_months, pay_day, cutoff_day, notes, basis'),
   ]);
   if (casesRes.error) return { ...empty, isCeo, myId: ctx.user.id, error: casesRes.error.message };
   const nameById = new Map(((people.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
@@ -361,6 +361,7 @@ export async function saveInsurerTerm(insurer: string, rule: Omit<PaymentRule, '
         pay_day: rule.mode === 'MONTHLY' ? rule.pay_day : null,
         cutoff_day: rule.mode === 'MONTHLY' ? rule.cutoff_day : null,
         notes: (rule.notes ?? '').trim().slice(0, 300) || null,
+        basis: rule.basis === 'INVOICE' ? 'INVOICE' : 'APPROVAL',
         updated_by: ctx.user.id,
         updated_at: new Date().toISOString(),
       } as never,
@@ -370,4 +371,187 @@ export async function saveInsurerTerm(insurer: string, rule: Omit<PaymentRule, '
   }
   revalidatePath('/collections');
   return { ok: true };
+}
+
+// ---- ש.י.ר monthly batch (Amit, 2026-10-14) ------------------------------
+// All ש.י.ר invoices of a month are paid together (שוטף 60, on the 7th of the
+// third month), minus offsets, without blocked invoices. The batch lists every
+// ש.י.ר closed job by invoice month; marking an offset / block / the month as
+// paid opens the collection case when there is none yet (assigned to the user).
+
+export type ShirInvoice = {
+  finance_closure_id: string;
+  closed_on: string;
+  plate: string | null;
+  customer_name: string | null;
+  invoice_number: string | null;
+  branch_name: string | null;
+  amount: number; // invoice − VAT offset − reinstatement
+  case_id: string | null;
+  status: CollectionStatus | null;
+  offset_amount: number | null;
+  offset_reason: string | null;
+  received_on: string | null;
+  assigned_name: string | null;
+};
+
+export async function listShirBatch(): Promise<{ invoices: ShirInvoice[]; error?: string }> {
+  const ctx = await me();
+  if (!ctx) return { invoices: [], error: 'אין הרשאה' };
+  const db = serviceClient();
+  if (!db) return { invoices: [], error: 'שרת לא מוגדר' };
+  const [fin, branches] = await Promise.all([
+    db
+      .from('finance_closures')
+      .select('id, closed_on, plate, customer_name, invoice_number, branch_id, amount_ours, vat_offset, reinstatement')
+      .eq('work_source', 'SHIR')
+      .order('closed_on', { ascending: false })
+      .limit(5000),
+    db.from('branches').select('id, name'),
+  ]);
+  if (fin.error) return { invoices: [], error: fin.error.message };
+  type F = { id: string; closed_on: string; plate: string | null; customer_name: string | null; invoice_number: string | null; branch_id: string; amount_ours: string | number; vat_offset: string | number | null; reinstatement: string | number | null };
+  const rows = (fin.data ?? []) as F[];
+  const ids = rows.map((r) => r.id);
+  const casesRes = ids.length
+    ? await db.from('collection_cases').select('id, finance_closure_id, status, offset_amount, partial_reason, received_on, assigned_to').in('finance_closure_id', ids)
+    : { data: [] };
+  type C = { id: string; finance_closure_id: string; status: CollectionStatus; offset_amount: string | number | null; partial_reason: string | null; received_on: string | null; assigned_to: string };
+  const cases = (casesRes.data ?? []) as C[];
+  const owners = Array.from(new Set(cases.map((c) => c.assigned_to)));
+  const { data: names } = owners.length ? await db.from('profiles').select('id, full_name').in('id', owners) : { data: [] };
+  const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
+  const byFin = new Map(cases.map((c) => [c.finance_closure_id, c]));
+  const branchById = new Map(((branches.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
+  return {
+    invoices: rows.map((r) => {
+      const c = byFin.get(r.id);
+      return {
+        finance_closure_id: r.id,
+        closed_on: r.closed_on,
+        plate: r.plate,
+        customer_name: r.customer_name,
+        invoice_number: r.invoice_number,
+        branch_name: branchById.get(r.branch_id) ?? null,
+        amount: Number(r.amount_ours) - Number(r.vat_offset ?? 0) - Number(r.reinstatement ?? 0),
+        case_id: c?.id ?? null,
+        status: c?.status ?? null,
+        offset_amount: c?.offset_amount == null ? null : Number(c.offset_amount),
+        offset_reason: c?.partial_reason ?? null,
+        received_on: c?.received_on ?? null,
+        assigned_name: c ? nameById.get(c.assigned_to) ?? null : null,
+      };
+    }),
+  };
+}
+
+type Db = NonNullable<ReturnType<typeof serviceClient>>;
+
+/** The collection case of a finance row — opened (assigned to userId) when missing. */
+async function ensureCase(db: Db, financeId: string, userId: string): Promise<{ id: string } | { error: string }> {
+  const { data: existing } = await db.from('collection_cases').select('id').eq('finance_closure_id', financeId).maybeSingle();
+  if (existing) return { id: (existing as { id: string }).id };
+  const { data: f } = await db
+    .from('finance_closures')
+    .select('id, closed_on, branch_id, plate, customer_name, work_source, insurer, claim_type, invoice_number, amount_ours, vat_offset, reinstatement, claim_check_due_date, claim_check_amount')
+    .eq('id', financeId)
+    .maybeSingle();
+  if (!f) return { error: 'הנתונים לא נמצאו' };
+  const r = f as Record<string, unknown>;
+  const { data, error } = await db
+    .from('collection_cases')
+    .insert({
+      finance_closure_id: financeId,
+      assigned_to: userId,
+      branch_id: r.branch_id,
+      plate: (r.plate as string | null) ?? '-',
+      customer_name: r.customer_name,
+      work_source: r.work_source,
+      insurer: r.insurer,
+      claim_type: r.claim_type,
+      case_closed_on: r.closed_on,
+      invoice_number: r.invoice_number,
+      amount_due: r.amount_ours,
+      vat_offset: r.vat_offset,
+      reinstatement: r.reinstatement,
+      claim_check_due_date: r.claim_check_due_date,
+      claim_check_amount: r.claim_check_amount,
+      created_by: userId,
+      updated_by: userId,
+    } as never)
+    .select('id')
+    .single();
+  if (error || !data) return { error: error?.message ?? 'שגיאה בפתיחת תיק' };
+  return { id: (data as { id: string }).id };
+}
+
+/** Offset (amount + reason) and blocked flag on one ש.י.ר invoice. */
+export async function setShirInvoice(
+  financeId: string,
+  input: { offset_amount: number | null; offset_reason: string | null; blocked: boolean },
+): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  if (!okMoney(input.offset_amount)) return { error: 'סכום לא תקין' };
+  if (input.offset_amount && !txt(input.offset_reason)) return { error: 'נא לכתוב את סיבת הקיזוז' };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const c = await ensureCase(db, financeId, ctx.user.id);
+  if ('error' in c) return { error: c.error };
+  const { data: cur } = await db.from('collection_cases').select('status').eq('id', c.id).maybeSingle();
+  const st = (cur as { status: CollectionStatus } | null)?.status ?? 'OPEN';
+  const patch: Record<string, unknown> = {
+    offset_amount: input.offset_amount,
+    partial_reason: txt(input.offset_reason, 500),
+    updated_by: ctx.user.id,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.blocked) patch.status = 'BLOCKED';
+  else if (st === 'BLOCKED') patch.status = 'OPEN';
+  const { error } = await db.from('collection_cases').update(patch as never).eq('id', c.id);
+  if (error) return { error: error.message };
+  revalidatePath('/collections');
+  return { ok: true };
+}
+
+/** "החודש שולם": every non-blocked ש.י.ר invoice of the month → paid (net of its offset). */
+export async function markShirMonthPaid(ym: string, receivedOn: string): Promise<{ error?: string; ok?: true; paid?: number }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  if (!/^\d{4}-\d{2}$/.test(ym) || !/^\d{4}-\d{2}-\d{2}$/.test(receivedOn)) return { error: 'תאריך לא תקין' };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const [y, m] = ym.split('-').map(Number);
+  const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const { data: fin } = await db
+    .from('finance_closures')
+    .select('id, amount_ours, vat_offset, reinstatement')
+    .eq('work_source', 'SHIR')
+    .gte('closed_on', `${ym}-01`)
+    .lte('closed_on', end);
+  let paid = 0;
+  for (const f of (fin ?? []) as { id: string; amount_ours: string | number; vat_offset: string | number | null; reinstatement: string | number | null }[]) {
+    const c = await ensureCase(db, f.id, ctx.user.id);
+    if ('error' in c) return { error: c.error };
+    const { data: cur } = await db.from('collection_cases').select('status, offset_amount, closed_at').eq('id', c.id).maybeSingle();
+    const k = cur as { status: CollectionStatus; offset_amount: string | number | null; closed_at: string | null } | null;
+    if (!k || ['BLOCKED', 'PAID', 'PARTIAL', 'LEGAL'].includes(k.status)) continue;
+    const offset = Number(k.offset_amount ?? 0);
+    const net = Number(f.amount_ours) - Number(f.vat_offset ?? 0) - Number(f.reinstatement ?? 0) - offset;
+    const { error } = await db
+      .from('collection_cases')
+      .update({
+        status: offset > 0 ? 'PARTIAL' : 'PAID',
+        received_amount: Math.max(0, Math.round(net * 100) / 100),
+        received_on: receivedOn,
+        closed_at: k.closed_at ?? new Date().toISOString(),
+        updated_by: ctx.user.id,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq('id', c.id);
+    if (error) return { error: error.message };
+    paid++;
+  }
+  revalidatePath('/collections');
+  return { ok: true, paid };
 }

@@ -23,6 +23,9 @@ export type PaymentRule = {
   pay_day: number | null;
   cutoff_day: number | null;
   notes: string | null;
+  /** APPROVAL = counted from the payment approval date; INVOICE = from the
+   *  invoice month (ש.י.ר: a monthly batch of all the month's invoices). */
+  basis?: 'APPROVAL' | 'INVOICE';
 };
 
 /** Who pays: ש.י.ר and צה"ל are their own payers; otherwise the insurer. */
@@ -54,15 +57,23 @@ export function ruleLabel(rule: PaymentRule): string {
   if (rule.offset_months == null || rule.pay_day == null) return rule.agreement ?? '—';
   const day = rule.pay_day >= 31 ? 'סוף החודש' : `${rule.pay_day} לחודש`;
   const cut = rule.cutoff_day != null ? `, אחרי ${rule.cutoff_day} לחודש — חודש נוסף` : '';
-  return `${rule.offset_months} חודשים אחרי חודש האישור, ב-${day}${cut}`;
+  const from = rule.basis === 'INVOICE' ? 'חודש החשבונית (ריכוז חודשי)' : 'חודש האישור';
+  return `${rule.offset_months} חודשים אחרי ${from}, ב-${day}${cut}`;
 }
 
 export type Expected = { date: string | null; basis: string };
 
 export function expectedPayment(
-  r: { work_source: string; insurer: string | null; claim_type: string | null; claim_check_due_date: string | null; payment_approved_on: string | null },
+  r: { work_source: string; insurer: string | null; claim_type: string | null; claim_check_due_date: string | null; payment_approved_on: string | null; case_closed_on?: string | null },
   rules: Record<string, PaymentRule>,
 ): Expected {
+  // Monthly batch by invoice month (ש.י.ר) — whatever the claim type.
+  const batchRule = rules[payerOf(r)];
+  if (batchRule?.basis === 'INVOICE') {
+    if (!r.case_closed_on) return { date: null, basis: 'חסר תאריך חשבונית (סגירת תיק)' };
+    const date = payDateByRule(r.case_closed_on, { ...batchRule, cutoff_day: null });
+    return date ? { date, basis: `ריכוז ${r.case_closed_on.slice(5, 7)}/${r.case_closed_on.slice(2, 4)} · ${batchRule.agreement ?? ''}`.trim() } : { date: null, basis: 'הסכם לא שלם' };
+  }
   if (r.claim_type === THIRD_PARTY) {
     if (r.claim_check_due_date) return { date: r.claim_check_due_date, basis: 'מועד פירעון הצ׳ק' };
     if (r.payment_approved_on) return { date: r.payment_approved_on, basis: 'תאריך אישור התשלום' };
@@ -97,4 +108,9 @@ export function daysLate(expectedIso: string | null, actualIso: string): number 
   if (!expectedIso) return 0;
   const d = Math.round((new Date(`${actualIso.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${expectedIso}T00:00:00Z`).getTime()) / 86_400_000);
   return Math.max(0, d);
+}
+
+/** Net amount the payer owes: invoice − VAT offset − reinstatement − offset (קיזוז). */
+export function netDue(c: { amount_due: number | null; vat_offset: number | null; reinstatement: number | null; offset_amount: number | null }): number {
+  return (c.amount_due ?? 0) - (c.vat_offset ?? 0) - (c.reinstatement ?? 0) - (c.offset_amount ?? 0);
 }

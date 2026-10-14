@@ -41,7 +41,8 @@ function inPeriod(iso: string | null, p: Period, t0: string): boolean {
 const PERIOD_LABEL: Record<Period, string> = { month: 'החודש', quarter: 'הרבעון', half: 'החציון', year: 'השנה', all: 'הכול' };
 
 const toCollect = (c: CollectionCase) => (c.amount_due ?? 0) - (c.vat_offset ?? 0) - (c.reinstatement ?? 0);
-const balance = (c: CollectionCase) => Math.max(0, toCollect(c) - (c.received_amount ?? 0));
+/** Open balance: net of the offset (קיזוז) and of what already came in. */
+const balance = (c: CollectionCase) => Math.max(0, toCollect(c) - (c.offset_amount ?? 0) - (c.received_amount ?? 0));
 const isOpen = (c: CollectionCase) => !c.closed_at;
 
 function Bar({ value, max, tone = 'bg-indigo-500' }: { value: number; max: number; tone?: string }) {
@@ -81,13 +82,14 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
   const thisMonth = t0.slice(0, 7);
 
   const rows = useMemo(() => cases.map((c) => ({ c, exp: expectedPayment(c, terms) })), [cases, terms]);
-  const open = rows.filter((r) => isOpen(r.c) && r.c.status !== 'LEGAL');
+  const open = rows.filter((r) => isOpen(r.c) && r.c.status !== 'LEGAL' && r.c.status !== 'BLOCKED');
+  const blockedCases = cases.filter((c) => c.status === 'BLOCKED');
   const overdue = open.filter((r) => r.exp.date && r.exp.date < t0);
   const legalOpen = cases.filter((c) => c.status === 'LEGAL' && !c.legal_closed_on);
   const paidInPeriod = cases.filter((c) => (c.status === 'PAID' || c.status === 'PARTIAL') && inPeriod(c.received_on, period, t0));
   const collectedInPeriod = paidInPeriod.reduce((s, c) => s + (c.received_amount ?? 0), 0)
     + cases.filter((c) => c.legal_closed_on && inPeriod(c.legal_closed_on, period, t0)).reduce((s, c) => s + (c.legal_recovered_amount ?? 0), 0);
-  const offsetsInPeriod = paidInPeriod.filter((c) => c.status === 'PARTIAL');
+  const offsetsInPeriod = paidInPeriod.filter((c) => (c.offset_amount ?? 0) > 0);
   const offsetSum = offsetsInPeriod.reduce((s, c) => s + (c.offset_amount ?? 0), 0);
   const billedInPeriod = paidInPeriod.reduce((s, c) => s + toCollect(c), 0);
   const openSum = open.reduce((s, r) => s + balance(r.c), 0);
@@ -141,7 +143,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
     for (const c of paidInPeriod) {
       const v = get(payerOf(c) || '—');
       v.collected += c.received_amount ?? 0;
-      if (c.status === 'PARTIAL') v.offsets += c.offset_amount ?? 0;
+      v.offsets += c.offset_amount ?? 0;
       if (c.case_closed_on && c.received_on) v.days.push(daysLate(c.case_closed_on, c.received_on));
     }
     for (const u of unopened) get(u.payer).unopened += u.amount;
@@ -207,6 +209,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
           <Kpi label={`קיזוזים ${PERIOD_LABEL[period]}`} value={ils(offsetSum)} hint={billedInPeriod ? `${((offsetSum / billedInPeriod) * 100).toFixed(1)}% מהסכום לגבייה · ${offsetsInPeriod.length} תיקים` : `${offsetsInPeriod.length} תיקים`} />
           <Kpi label="במחלקה משפטית" value={ils(legalOpen.reduce((s, c) => s + (c.legal_claim_amount ?? 0), 0))} hint={`${legalOpen.length} תיקים פתוחים`} tone={legalOpen.length ? 'border-purple-200 bg-purple-50' : ''} />
           <Kpi label="ממתין לפתיחת תיק גבייה" value={ils(unopenedSum)} hint={`${unopened.length} סגירות שעוד לא נפתח להן תיק (כולל היסטוריית האקסל)`} tone="border-amber-200 bg-amber-50" />
+          <Kpi label="חשבוניות חסומות" value={ils(blockedCases.reduce((s, c) => s + toCollect(c), 0))} hint={`${blockedCases.length} חשבוניות — לא ישולמו עד שישוחררו`} tone={blockedCases.length ? 'border-gray-400 bg-gray-100' : ''} />
           <Kpi label="ממוצע ימי עבודה לתיק" value={(() => { const cl = cases.filter((c) => c.closed_at); return cl.length ? (cl.reduce((s, c) => s + workingDaysBetween(c.opened_at, c.closed_at!), 0) / cl.length).toFixed(1) : '—'; })()} hint="מפתיחת תיק הגבייה עד סגירה" />
         </div>
       </Section>
@@ -356,7 +359,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
                     <td className="px-2 py-1.5">{mPaid.length}</td>
                     <td className="px-2 py-1.5 text-green-700">{ils(mPaid.reduce((s, c) => s + (c.received_amount ?? 0), 0))}</td>
                     <td className="px-2 py-1.5">{avg == null ? '—' : avg.toFixed(1)}</td>
-                    <td className="px-2 py-1.5">{ils(mPaid.filter((c) => c.status === 'PARTIAL').reduce((s, c) => s + (c.offset_amount ?? 0), 0))}</td>
+                    <td className="px-2 py-1.5">{ils(mPaid.reduce((s, c) => s + (c.offset_amount ?? 0), 0))}</td>
                   </tr>
                 );
               })}

@@ -58,7 +58,7 @@ export async function getReceivables(): Promise<ReceivablesData> {
   const [casesRes, finRes, termRows, people, viewerRows, branches] = await Promise.all([
     db.from('collection_cases').select('*').limit(10000),
     db.from('finance_closures').select('id, closed_on, work_source, insurer, claim_type, amount_ours, vat_offset, reinstatement').limit(20000),
-    db.from('insurer_payment_terms').select('insurer, agreement, mode, offset_months, pay_day, cutoff_day, notes'),
+    db.from('insurer_payment_terms').select('insurer, agreement, mode, offset_months, pay_day, cutoff_day, notes, basis'),
     db.from('profiles').select('id, full_name, role, is_active'),
     db.from('finance_viewers').select('user_id'),
     db.from('branches').select('id, name'),

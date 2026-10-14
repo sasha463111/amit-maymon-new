@@ -1,11 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   lookupPlateForCollection,
   openCollectionCase,
   saveInsurerTerm,
+  setShirInvoice,
+  markShirMonthPaid,
+  type ShirInvoice,
   updateCollectionCase,
   type CaseInput,
   type CollectionCase,
@@ -22,6 +25,7 @@ const STATUS_LABEL: Record<CollectionStatus, string> = {
   PARTIAL: 'תשלום חלקי',
   DISPUTE: 'במחלוקת',
   LEGAL: 'מחלקה משפטית',
+  BLOCKED: 'חסומה',
 };
 const STATUS_CHIP: Record<CollectionStatus, string> = {
   OPEN: 'bg-blue-100 text-blue-800',
@@ -29,6 +33,7 @@ const STATUS_CHIP: Record<CollectionStatus, string> = {
   PARTIAL: 'bg-amber-100 text-amber-800',
   DISPUTE: 'bg-red-100 text-red-800',
   LEGAL: 'bg-purple-100 text-purple-800',
+  BLOCKED: 'bg-gray-800 text-white',
 };
 
 const ils = (n: number | null | undefined) => (n == null ? '' : `₪${Math.round(n).toLocaleString('he-IL')}`);
@@ -40,10 +45,10 @@ const num = (s: string): number | null => {
 const str = (n: number | null | undefined) => (n == null ? '' : String(n));
 
 /** To collect: the invoice, minus VAT offset and reinstatement when present. */
-const toCollect = (c: CollectionCase) => (c.amount_due ?? 0) - (c.vat_offset ?? 0) - (c.reinstatement ?? 0);
+const toCollect = (c: CollectionCase) => (c.amount_due ?? 0) - (c.vat_offset ?? 0) - (c.reinstatement ?? 0) - (c.offset_amount ?? 0);
 const isClosed = (c: CollectionCase) => !!c.closed_at;
 
-type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all';
+type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir';
 
 export function CollectionsClient({
   cases,
@@ -51,6 +56,7 @@ export function CollectionsClient({
   terms,
   isCeo,
   canEditTerms = false,
+  shir = [],
   error,
 }: {
   cases: CollectionCase[];
@@ -58,6 +64,7 @@ export function CollectionsClient({
   terms: Record<string, PaymentRule>;
   isCeo: boolean;
   canEditTerms?: boolean;
+  shir?: ShirInvoice[];
   error: string | null;
 }) {
   const [who, setWho] = useState<string>('');
@@ -72,7 +79,7 @@ export function CollectionsClient({
   const scoped = useMemo(() => (who ? cases.filter((c) => c.assigned_to === who) : cases), [cases, who]);
   const withExp = useMemo(() => scoped.map((c) => ({ c, exp: expectedPayment(c, terms) })), [scoped, terms]);
   type E = (typeof withExp)[number];
-  const overdue = (e: E) => !isClosed(e.c) && e.c.status !== 'LEGAL' && !!e.exp.date && e.exp.date < t0;
+  const overdue = (e: E) => !isClosed(e.c) && e.c.status !== 'LEGAL' && e.c.status !== 'BLOCKED' && !!e.exp.date && e.exp.date < t0;
   const inTab = (e: E) =>
     tab === 'all' ? true
     : tab === 'active' ? !isClosed(e.c) && e.c.status !== 'LEGAL'
@@ -135,6 +142,7 @@ export function CollectionsClient({
           ['legal', `⚖️ משפטי (${counts.legal})`],
           ['closed', `נסגרו (${counts.closed})`],
           ['all', `הכול (${counts.all})`],
+          ['shir', '🧾 ש.י.ר — ריכוז חודשי'],
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -147,6 +155,10 @@ export function CollectionsClient({
         ))}
       </div>
 
+      {tab === 'shir' ? (
+        <ShirBatch invoices={shir} terms={terms} />
+      ) : (
+      <>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -222,9 +234,9 @@ export function CollectionsClient({
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
-                    {c.status === 'PARTIAL' && (
+                    {!!c.offset_amount && (
                       <div className="text-[11px] text-amber-800 max-w-[200px] truncate" title={c.partial_reason ?? ''}>
-                        קיזוז {ils(c.offset_amount)} · {c.partial_reason}
+                        קיזוז: {ils(c.offset_amount)} · סיבה: {c.partial_reason}
                       </div>
                     )}
                     {c.status === 'LEGAL' && (
@@ -247,6 +259,9 @@ export function CollectionsClient({
           </tbody>
         </table>
       </div>
+
+      </>
+      )}
 
       {opening && <OpenCaseDialog isCeo={isCeo} collectors={collectors} onClose={() => setOpening(false)} />}
     </div>
@@ -505,7 +520,7 @@ function CaseEditor({ c, onClose }: { c: CollectionCase; onClose: () => void }) 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const due = (data.amount_due ?? 0) - (data.vat_offset ?? 0) - (data.reinstatement ?? 0);
+  const due = (data.amount_due ?? 0) - (data.vat_offset ?? 0) - (data.reinstatement ?? 0) - (num(offset) ?? 0);
 
   async function save() {
     setBusy(true);
@@ -517,8 +532,8 @@ function CaseEditor({ c, onClose }: { c: CollectionCase; onClose: () => void }) 
       status,
       received_amount: paid ? num(received) ?? (status === 'PAID' ? due : null) : null,
       received_on: paid ? receivedOn || null : null,
-      partial_reason: status === 'PARTIAL' ? reason : null,
-      offset_amount: status === 'PARTIAL' ? num(offset) : null,
+      partial_reason: reason || null,
+      offset_amount: num(offset),
       note,
       legal_sent_on: legalSent || null,
       legal_lawyer: lawyer || null,
@@ -580,20 +595,20 @@ function CaseEditor({ c, onClose }: { c: CollectionCase; onClose: () => void }) 
               תאריך תשלום בפועל
               <input type="date" value={receivedOn} onChange={(e) => setReceivedOn(e.target.value)} className={`${input} block`} />
             </label>
-            {status === 'PARTIAL' && (
-              <>
-                <label className={lab}>
-                  סכום הקיזוז *
-                  <input value={offset} onChange={(e) => setOffset(e.target.value)} inputMode="decimal" className={`${input} block w-32`} dir="ltr" />
-                </label>
-                <label className={`${lab} flex-1 min-w-[220px]`}>
-                  סיבת הקיזוז *
-                  <input value={reason} onChange={(e) => setReason(e.target.value)} className={`${input} block w-full`} />
-                </label>
-              </>
-            )}
           </div>
         )}
+
+        {/* Offset (קיזוז) — any time, not only at payment; required for a partial payment. */}
+        <div className="flex flex-wrap items-end gap-3">
+          <label className={lab}>
+            סכום קיזוז {status === 'PARTIAL' ? '*' : '(אם יש)'}
+            <input value={offset} onChange={(e) => setOffset(e.target.value)} inputMode="decimal" className={`${input} block w-32`} dir="ltr" />
+          </label>
+          <label className={`${lab} flex-1 min-w-[220px]`}>
+            סיבת הקיזוז {status === 'PARTIAL' ? '*' : ''}
+            <input value={reason} onChange={(e) => setReason(e.target.value)} className={`${input} block w-full`} />
+          </label>
+        </div>
 
         {(status === 'LEGAL' || legalSent) && (
           <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 flex flex-wrap items-end gap-3">
@@ -639,7 +654,7 @@ function CaseEditor({ c, onClose }: { c: CollectionCase; onClose: () => void }) 
   );
 }
 
-const EMPTY_RULE = (insurer: string): PaymentRule => ({ insurer, agreement: '', mode: 'MONTHLY', offset_months: 1, pay_day: 15, cutoff_day: null, notes: '' });
+const EMPTY_RULE = (insurer: string): PaymentRule => ({ insurer, agreement: '', mode: 'MONTHLY', offset_months: 1, pay_day: 15, cutoff_day: null, notes: '', basis: 'APPROVAL' });
 const exampleDay = () => `${today().slice(0, 7)}-10`;
 
 function TermsPanel({ terms, canEdit }: { terms: Record<string, PaymentRule>; canEdit: boolean }) {
@@ -728,7 +743,7 @@ function RuleEditor({ rule, exists, onClose }: { rule: PaymentRule; exists: bool
     setErr(null);
     const res = await saveInsurerTerm(
       rule.insurer,
-      remove ? null : { agreement: r.agreement, mode: r.mode, offset_months: r.offset_months, pay_day: r.pay_day, cutoff_day: r.cutoff_day, notes: r.notes },
+      remove ? null : { agreement: r.agreement, mode: r.mode, offset_months: r.offset_months, pay_day: r.pay_day, cutoff_day: r.cutoff_day, notes: r.notes, basis: r.basis ?? 'APPROVAL' },
     );
     setBusy(false);
     if (res.error) return setErr(res.error);
@@ -758,6 +773,20 @@ function RuleEditor({ rule, exists, onClose }: { rule: PaymentRule; exists: bool
               </button>
             ))}
           </div>
+          {r.mode === 'MONTHLY' && (
+            <div className="flex gap-1">
+              {(['APPROVAL', 'INVOICE'] as const).map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setR({ ...r, basis: b })}
+                  className={`h-9 px-3 rounded-lg border text-xs font-semibold ${(r.basis ?? 'APPROVAL') === b ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}
+                >
+                  {b === 'APPROVAL' ? 'מתאריך אישור התשלום' : 'מחודש החשבונית (ריכוז חודשי)'}
+                </button>
+              ))}
+            </div>
+          )}
           {r.mode === 'MONTHLY' && (
             <>
               <label className="text-xs text-gray-500">
@@ -807,3 +836,174 @@ function RuleEditor({ rule, exists, onClose }: { rule: PaymentRule; exists: bool
     </tr>
   );
 }
+
+// ---- ש.י.ר monthly batch (Amit, 2026-10-14) -------------------------------
+// Invoices grouped by invoice month; each month is paid together on the date of
+// the ש.י.ר agreement (שוטף 60 → the 7th of the third month), minus offsets,
+// without blocked invoices.
+function ShirBatch({ invoices, terms }: { invoices: ShirInvoice[]; terms: Record<string, PaymentRule> }) {
+  const router = useRouter();
+  const rule = terms['מוקד ש.י.ר'];
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const t0 = today();
+
+  const months = useMemo(() => {
+    const m = new Map<string, ShirInvoice[]>();
+    for (const i of invoices) m.set(i.closed_on.slice(0, 7), [...(m.get(i.closed_on.slice(0, 7)) ?? []), i]);
+    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [invoices]);
+
+  async function monthPaid(ym: string) {
+    const d = window.prompt('תאריך התשלום בפועל (YYYY-MM-DD):', t0);
+    if (!d) return;
+    setBusy(ym);
+    setMsg(null);
+    const r = await markShirMonthPaid(ym, d.trim());
+    setBusy(null);
+    setMsg(r.error ? `⚠️ ${r.error}` : `✓ סומנו כשולמו ${r.paid ?? 0} חשבוניות`);
+    if (!r.error) router.refresh();
+  }
+
+  if (!invoices.length) return <p className="text-gray-400 py-8 text-center">אין חשבוניות ש.י.ר</p>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">
+        <span className="text-gray-400">ההסכם: </span>
+        {rule ? `${rule.agreement ?? ''} — ${ruleLabel(rule)}` : 'אין הסכם ש.י.ר (⚙️ הסכמי תשלום)'}
+      </p>
+      {msg && <p className="text-sm">{msg}</p>}
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="w-full text-sm min-w-[900px]">
+          <thead className="bg-gray-50 text-xs text-gray-600">
+            <tr>
+              {['חודש חשבוניות', 'מועד תשלום צפוי', 'חשבוניות', 'סכום חשבוניות', 'קיזוזים', 'חסומות', 'נטו לתשלום', 'סטטוס', ''].map((h) => (
+                <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {months.map(([ym, list]) => {
+              const due = rule ? payDateByRule(`${ym}-01`, { ...rule, cutoff_day: null }) : null;
+              const blocked = list.filter((i) => i.status === 'BLOCKED');
+              const live = list.filter((i) => i.status !== 'BLOCKED');
+              const gross = live.reduce((s, i) => s + i.amount, 0);
+              const offsets = live.reduce((s, i) => s + (i.offset_amount ?? 0), 0);
+              const paid = live.filter((i) => i.status === 'PAID' || i.status === 'PARTIAL');
+              const allPaid = live.length > 0 && paid.length === live.length;
+              const late = !allPaid && !!due && due < t0;
+              return (
+                <Fragment key={ym}>
+                  <tr className={late ? 'bg-red-50/50' : ''}>
+                    <td className="px-3 py-2 font-semibold whitespace-nowrap">{MONTH_NAMES[Number(ym.slice(5)) - 1]} {ym.slice(0, 4)}</td>
+                    <td className={`px-3 py-2 whitespace-nowrap ${late ? 'text-red-700 font-semibold' : ''}`}>{due ? formatDate(due) : '—'}{late ? ' ⏰' : ''}</td>
+                    <td className="px-3 py-2">{list.length}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{ils(gross)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-amber-800">{offsets ? ils(offsets) : ''}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{blocked.length ? `${blocked.length} · ${ils(blocked.reduce((s, i) => s + i.amount, 0))}` : ''}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-bold">{ils(gross - offsets)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {allPaid ? (
+                        <span className="text-green-700 font-semibold">שולם {paid[0]?.received_on ? formatDate(paid[0].received_on) : ''}</span>
+                      ) : paid.length ? (
+                        <span className="text-amber-700">שולמו {paid.length} מתוך {live.length}</span>
+                      ) : (
+                        <span className="text-gray-500">ממתין</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap flex gap-2">
+                      <button type="button" onClick={() => setOpen(open === ym ? null : ym)} className="px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold">
+                        {open === ym ? 'סגור' : 'פירוט'}
+                      </button>
+                      {!allPaid && (
+                        <button type="button" disabled={busy === ym} onClick={() => void monthPaid(ym)} className="px-3 h-8 rounded-lg bg-green-600 text-white text-xs font-semibold disabled:opacity-50">
+                          ✓ החודש שולם
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {open === ym && (
+                    <tr>
+                      <td colSpan={9} className="bg-gray-50 px-3 py-2">
+                        <table className="w-full text-sm">
+                          <thead className="text-[11px] text-gray-500">
+                            <tr>
+                              {['תאריך חשבונית', 'רכב', 'לקוח', 'מספר חשבונית', 'סכום', 'קיזוז', 'סיבת קיזוז', 'חסומה', 'סטטוס', ''].map((h) => (
+                                <th key={h} className="text-right font-semibold py-1 px-2 whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {list.map((i) => (
+                              <ShirRow key={i.finance_closure_id} i={i} />
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ShirRow({ i }: { i: ShirInvoice }) {
+  const router = useRouter();
+  const [offset, setOffset] = useState(str(i.offset_amount));
+  const [reason, setReason] = useState(i.offset_reason ?? '');
+  const [blocked, setBlocked] = useState(i.status === 'BLOCKED');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const done = i.status === 'PAID' || i.status === 'PARTIAL';
+  const dirty = offset !== str(i.offset_amount) || reason !== (i.offset_reason ?? '') || blocked !== (i.status === 'BLOCKED');
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const r = await setShirInvoice(i.finance_closure_id, { offset_amount: num(offset), offset_reason: reason || null, blocked });
+    setBusy(false);
+    if (r.error) return setErr(r.error);
+    router.refresh();
+  }
+
+  const input = 'h-8 px-2 rounded border border-gray-300 text-sm bg-white';
+  return (
+    <tr className="border-t border-gray-200 align-top">
+      <td className="px-2 py-1 whitespace-nowrap">{formatDate(i.closed_on)}</td>
+      <td className="px-2 py-1 whitespace-nowrap">{i.plate}</td>
+      <td className="px-2 py-1">{i.customer_name ?? ''}</td>
+      <td className="px-2 py-1 whitespace-nowrap" dir="ltr">{i.invoice_number ?? ''}</td>
+      <td className="px-2 py-1 whitespace-nowrap">{ils(i.amount)}</td>
+      <td className="px-2 py-1">
+        <input value={offset} onChange={(e) => setOffset(e.target.value)} disabled={done} inputMode="decimal" className={`${input} w-24`} dir="ltr" />
+      </td>
+      <td className="px-2 py-1">
+        <input value={reason} onChange={(e) => setReason(e.target.value)} disabled={done} className={`${input} w-48`} />
+      </td>
+      <td className="px-2 py-1 text-center">
+        <input type="checkbox" checked={blocked} onChange={(e) => setBlocked(e.target.checked)} disabled={done} className="w-4 h-4" />
+      </td>
+      <td className="px-2 py-1 whitespace-nowrap">
+        {i.status ? <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[i.status]}`}>{STATUS_LABEL[i.status]}</span> : <span className="text-[11px] text-gray-400">לא נפתח תיק</span>}
+        {i.assigned_name && <div className="text-[11px] text-gray-500">{i.assigned_name}</div>}
+      </td>
+      <td className="px-2 py-1 whitespace-nowrap">
+        {dirty && !done && (
+          <button type="button" onClick={() => void save()} disabled={busy} className="px-3 h-8 rounded bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
+            {busy ? '…' : 'שמור'}
+          </button>
+        )}
+        {err && <div className="text-[11px] text-red-600">{err}</div>}
+      </td>
+    </tr>
+  );
+}
+
+const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
