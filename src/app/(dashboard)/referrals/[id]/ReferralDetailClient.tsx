@@ -115,12 +115,15 @@ export function ReferralDetailClient({
   branches: branchOptions,
   documents: initialDocuments,
   initialStatusUpdates,
+  customerLinkSlot,
 }: {
   referral: Referral;
   branchName: string;
   branches: { id: string; name: string }[];
   documents: ReferralDocument[];
   initialStatusUpdates: ReferralStatusUpdateRow[];
+  /** "📲 קישור ללקוח" panel (customer documents link), rendered above the documents. */
+  customerLinkSlot?: React.ReactNode;
 }) {
   const router = useRouter();
   const [fields, setFields] = useState({
@@ -528,6 +531,8 @@ export function ReferralDetailClient({
           </ul>
         )}
       </div>
+
+      {customerLinkSlot}
 
       <DocumentsSection
         documents={documents}

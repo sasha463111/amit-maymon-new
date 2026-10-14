@@ -99,6 +99,7 @@ const TYPE_ICON: Record<string, string> = {
   READY_FOR_OFFICE: '🏁',
   WASH_STARTED: '🧽',
   FINAL_ESTIMATE_UPLOADED: '⭐',
+  CUSTOMER_DOCS: '📲',
   OTHER: '🔔',
 };
 

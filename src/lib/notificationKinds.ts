@@ -14,7 +14,7 @@ const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
   SERVICE_ADVISOR: ['PAINTER_REQUEST', 'CEO_REJECTED', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   // Referrals office and closure office share the role; each only ever
   // receives its own kind (notification_is_relevant in the DB).
-  OFFICE: ['READY_FOR_OFFICE', 'REFERRAL_FOLLOW_UP', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
+  OFFICE: ['READY_FOR_OFFICE', 'REFERRAL_FOLLOW_UP', 'CUSTOMER_DOCS', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   PAINTER: ['PAINTER_REQUEST', 'DIRECT_NOTE'],
   // Warehouse (2026-10-14): the monthly statements reminder and overdue returns need Roey to act.
   WAREHOUSE_MANAGER: ['SUPPLIER_STATEMENT_REMINDER', 'PART_RETURN_OVERDUE_7', 'DIRECT_NOTE'],

@@ -4,6 +4,8 @@ import { hasPermission } from '@/lib/permissions';
 import { ReferralDetailClient } from './ReferralDetailClient';
 import type { Referral, ReferralDocument } from '@/types/database';
 import { getReferralStatusUpdates } from '@/app/actions/referrals';
+import { canSendCustomerLink, whatsAppUrl } from '@/lib/customerDocs';
+import { CustomerLinkPanel, type CustomerLinkRow } from './CustomerLinkPanel';
 
 export default async function ReferralDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -66,8 +68,30 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
       ? await supabase.from('branches').select('id, name').order('name')
       : await supabase.from('branches').select('id, name').in('id', profile.branch_ids).order('name');
 
+  // Customer documents link (pilot, CEO only — see CUSTOMER_LINK_ROLES).
+  let customerLinkSlot: React.ReactNode = null;
+  if (profile && canSendCustomerLink(profile.role)) {
+    const { data: linkRows } = await supabase
+      .from('customer_doc_links')
+      .select('id, created_at, expires_at, revoked_at, opened_at, consent_at, completed_at')
+      .eq('referral_id', params.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const last = ((linkRows ?? []) as Omit<CustomerLinkRow, 'files'>[])[0] ?? null;
+    let latest: CustomerLinkRow | null = null;
+    if (last) {
+      const { count } = await supabase
+        .from('referral_documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('via_link_id', last.id);
+      latest = { ...last, files: count ?? 0 };
+    }
+    customerLinkSlot = <CustomerLinkPanel referralId={params.id} latest={latest} hasPhone={!!whatsAppUrl(row.phone, 'x')} />;
+  }
+
   return (
     <ReferralDetailClient
+      customerLinkSlot={customerLinkSlot}
       referral={row}
       branchName={branch?.name ?? '—'}
       branches={(branchesData ?? []) as { id: string; name: string }[]}
