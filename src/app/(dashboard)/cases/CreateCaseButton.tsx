@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 import { lookupPreviousVat, type PreviousVat } from '@/app/actions/customerTax';
+import { lookupCasesByPlate, type PlateCase } from '@/app/actions/plateCases';
+import { formatDate } from '@/lib/dates';
 import { VAT_SHARE_LABEL, VAT_STATUS_LABEL, looksLikeCompany, validEmail, validIsraeliId } from '@/lib/customerTax';
 import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
@@ -92,6 +94,21 @@ export function CreateCaseButton({
   const vehicleTypeRef = useRef<HTMLInputElement>(null);
   const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
   const [prevVat, setPrevVat] = useState<PreviousVat | null>(null);
+  // Amit, 14/10: a plate that already has cases → ask "existing or new?" first.
+  const [plateCases, setPlateCases] = useState<PlateCase[]>([]);
+  const [isNewEvent, setIsNewEvent] = useState(false);
+  const [checkedPlate, setCheckedPlate] = useState('');
+
+  async function checkPlateCases(plateRaw: string) {
+    const digits = plateRaw.replace(/\D/g, '');
+    if (digits === checkedPlate) return;
+    setCheckedPlate(digits);
+    setIsNewEvent(false);
+    setPlateCases([]);
+    if (digits.length < 5) return;
+    const r = await lookupCasesByPlate(digits);
+    setPlateCases(r.cases);
+  }
 
   // ID typed → what we already know (VAT file) from this customer's earlier cases.
   async function handleIdBlur() {
@@ -102,6 +119,7 @@ export function CreateCaseButton({
   }
 
   async function handlePlateBlur() {
+    void checkPlateCases(form.plate_number);
     const digits = form.plate_number.replace(/\D/g, '');
     if (!digits) {
       setVehicleLookupState('idle');
@@ -165,6 +183,7 @@ export function CreateCaseButton({
 
   async function handleOpen() {
     setOpen(true);
+    if (initialValues?.plate_number) void checkPlateCases(initialValues.plate_number);
     // Re-sync from the latest initialValues on every open, not just this
     // component's own first mount — otherwise an edit made in the referral
     // detail view (this instance stays mounted the whole time) wouldn't show
@@ -205,6 +224,10 @@ export function CreateCaseButton({
     e.preventDefault();
     e.stopPropagation();
     setError(null);
+    if (plateCases.length > 0 && !isNewEvent) {
+      setError('לרכב הזה כבר יש תיק — נא לבחור למעלה: אותו אירוע (לפתוח את התיק הקיים) או אירוע חדש');
+      return;
+    }
     setLoading(true);
     // If the request itself fails (connection cut, server timed out), the
     // case may still have been created - so say exactly that, and never leave
@@ -435,6 +458,49 @@ export function CreateCaseButton({
                   </div>
                 </div>
               </div>
+
+              {plateCases.length > 0 && (
+                <div className={`rounded-xl border-2 p-3 space-y-2 ${isNewEvent ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+                  {isNewEvent ? (
+                    <p className="text-sm font-bold text-green-800">
+                      ✓ אירוע חדש — ממלאים את הפרטים מההתחלה.{' '}
+                      <button type="button" onClick={() => setIsNewEvent(false)} className="underline font-normal">שינוי</button>
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-bold text-amber-900">
+                        ⚠️ לרכב הזה כבר יש {plateCases.length === 1 ? 'תיק' : `${plateCases.length} תיקים`} במערכת. זה אותו אירוע או אירוע חדש?
+                      </p>
+                      {plateCases.map((c) => (
+                        <div key={c.id} className="rounded-lg bg-white border border-amber-200 p-2 text-sm flex items-center justify-between gap-2 flex-wrap">
+                          <dl className="grid grid-cols-[auto_1fr] gap-x-3">
+                            <dt className="text-gray-400">תאריך אירוע:</dt>
+                            <dd>{c.event_date ? formatDate(c.event_date) : '—'}</dd>
+                            <dt className="text-gray-400">נפתח:</dt>
+                            <dd>{c.opened_at ? formatDate(c.opened_at) : '—'}{c.branch_name ? ` · ${c.branch_name}` : ''}</dd>
+                            <dt className="text-gray-400">לקוח:</dt>
+                            <dd>{c.customer_name ?? '—'}</dd>
+                            <dt className="text-gray-400">מספר תביעה:</dt>
+                            <dd>{c.claim_number ?? '—'}</dd>
+                            <dt className="text-gray-400">מצב:</dt>
+                            <dd>{c.closed ? 'נסגר' : 'פתוח'}</dd>
+                          </dl>
+                          {c.can_open ? (
+                            <a href={`/cases/${c.id}`} className="h-9 px-4 inline-flex items-center rounded-lg bg-gray-900 text-white text-sm font-semibold">
+                              📂 אותו אירוע — לתיק הקיים
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-600">התיק בסניף אחר{c.branch_name ? ` (${c.branch_name})` : ''}</span>
+                          )}
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setIsNewEvent(true)} className="h-10 px-4 rounded-lg border-2 border-gray-900 bg-white text-sm font-bold">
+                        ➕ זה אירוע חדש — פתיחת תיק חדש
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* ── פרטי לקוח ── */}
               <div>
