@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveCollection, saveInsurerTerm, type CollectionRow, type CollectionStatus } from '@/app/actions/collections';
-import { expectedPayment, payerOf, PAYERS_EXTRA, THIRD_PARTY } from '@/lib/collections';
+import { expectedPayment, payDateByRule, payerOf, ruleLabel, PAYERS_EXTRA, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
 import { INSURERS } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
 
@@ -37,7 +37,7 @@ export function CollectionsClient({
   error,
 }: {
   rows: CollectionRow[];
-  terms: Record<string, number>;
+  terms: Record<string, PaymentRule>;
   canEditTerms: boolean;
   error: string | null;
 }) {
@@ -96,7 +96,7 @@ export function CollectionsClient({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">גבייה</h1>
-          <p className="text-sm text-gray-500">פוליסה / הסדר ג׳: צפי לפי תאריך אישור התשלום + ההסכם (שוטף + X). צד ג׳: לפי מועד פירעון הצ׳ק.</p>
+          <p className="text-sm text-gray-500">פוליסה / הסדר ג׳: צפי לפי תאריך אישור התשלום + ההסכם עם החברה. צד ג׳: לפי מועד פירעון הצ׳ק.</p>
         </div>
         <button type="button" onClick={() => setShowTerms((v) => !v)} className="h-10 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
           ⚙️ הסכמי תשלום ({Object.keys(terms).length})
@@ -318,51 +318,171 @@ function EditRow({ r, onClose }: { r: CollectionRow; onClose: () => void }) {
   );
 }
 
-function TermsPanel({ terms, canEdit }: { terms: Record<string, number>; canEdit: boolean }) {
-  const router = useRouter();
-  const payers = Array.from(new Set([...INSURERS.filter((i) => i !== 'פרטי'), ...PAYERS_EXTRA, ...Object.keys(terms)]));
-  const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(payers.map((p) => [p, terms[p] != null ? String(terms[p]) : ''])));
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
+const EMPTY_RULE = (insurer: string): PaymentRule => ({ insurer, agreement: '', mode: 'MONTHLY', offset_months: 1, pay_day: 15, cutoff_day: null, notes: '' });
+const exampleDay = () => `${today().slice(0, 7)}-10`;
 
-  async function save(p: string) {
-    const v = draft[p].trim();
-    setBusy(p);
-    setMsg(null);
-    const r = await saveInsurerTerm(p, v === '' ? null : Number(v));
-    setBusy(null);
-    setMsg(r.error ? `⚠️ ${r.error}` : `נשמר ✓ ${p}`);
-    if (!r.error) router.refresh();
-  }
+function TermsPanel({ terms, canEdit }: { terms: Record<string, PaymentRule>; canEdit: boolean }) {
+  const [extra, setExtra] = useState<string[]>([]);
+  const payers = Array.from(new Set([...Object.keys(terms), ...INSURERS.filter((i) => i !== 'פרטי'), ...PAYERS_EXTRA, ...extra]));
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState('');
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
       <div>
-        <h2 className="font-bold">הסכמי תשלום — שוטף + X ימים</h2>
-        <p className="text-xs text-gray-500">צפי התשלום בפוליסה / הסדר ג׳ = סוף החודש של תאריך אישור התשלום + מספר הימים. {canEdit ? 'ריק = אין הסכם.' : 'עריכה — מנכ״ל בלבד.'}</p>
+        <h2 className="font-bold">הסכמי תשלום עם חברות הביטוח</h2>
+        <p className="text-xs text-gray-500">
+          צפי התשלום בפוליסה / הסדר ג׳ מחושב מתאריך אישור התשלום לפי ההסכם. {canEdit ? 'אפשר לערוך ולהוסיף חברה.' : 'עריכה — מנכ״ל בלבד.'}
+        </p>
       </div>
-      <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {payers.map((p) => (
-          <div key={p} className="flex items-center gap-2">
-            <span className="flex-1 text-sm">{p}</span>
-            <span className="text-xs text-gray-500">שוטף +</span>
-            <input
-              value={draft[p] ?? ''}
-              onChange={(e) => setDraft((d) => ({ ...d, [p]: e.target.value.replace(/\D/g, '') }))}
-              disabled={!canEdit}
-              inputMode="numeric"
-              className="w-16 h-9 px-2 rounded-lg border border-gray-300 text-sm text-center disabled:bg-gray-50"
-              dir="ltr"
-            />
-            {canEdit && (draft[p] ?? '') !== (terms[p] != null ? String(terms[p]) : '') && (
-              <button type="button" onClick={() => void save(p)} disabled={busy === p} className="h-9 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
-                שמור
-              </button>
-            )}
-          </div>
-        ))}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead className="text-xs text-gray-500">
+            <tr>
+              {['חברה', 'הסכם', 'חישוב', `דוגמה (אושרה ב-${formatDate(exampleDay())})`, ''].map((h) => (
+                <th key={h} className="text-right font-semibold px-2 py-1">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {payers.map((p) => {
+              const rule = terms[p];
+              const ex = rule ? payDateByRule(exampleDay(), rule) : null;
+              return editing === p ? (
+                <RuleEditor key={p} rule={rule ?? EMPTY_RULE(p)} exists={!!rule} onClose={() => setEditing(null)} />
+              ) : (
+                <tr key={p}>
+                  <td className="px-2 py-1.5 font-semibold whitespace-nowrap">{p}</td>
+                  <td className="px-2 py-1.5">{rule?.agreement ?? (rule ? '' : <span className="text-amber-700 text-xs">אין הסכם</span>)}</td>
+                  <td className="px-2 py-1.5 text-xs text-gray-600">{rule ? ruleLabel(rule) : ''}</td>
+                  <td className="px-2 py-1.5 text-xs text-gray-600 whitespace-nowrap">{ex ? `→ ${formatDate(ex)}` : ''}</td>
+                  <td className="px-2 py-1.5">
+                    {canEdit && (
+                      <button type="button" onClick={() => setEditing(p)} className="px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold">
+                        {rule ? 'ערוך' : 'הוסף הסכם'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      {msg && <p className="text-sm">{msg}</p>}
+      {canEdit && (
+        <div className="flex gap-2 items-center">
+          <input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="חברה נוספת (שם)" className="h-9 px-3 rounded-lg border border-gray-300 text-sm" />
+          <button
+            type="button"
+            disabled={!adding.trim()}
+            onClick={() => {
+              const name = adding.trim();
+              setExtra((x) => [...x, name]);
+              setEditing(name);
+              setAdding('');
+            }}
+            className="h-9 px-3 rounded-lg bg-gray-900 text-white text-xs font-semibold disabled:opacity-40"
+          >
+            + הוסף חברה
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function RuleEditor({ rule, exists, onClose }: { rule: PaymentRule; exists: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const [r, setR] = useState<PaymentRule>(rule);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const num = (v: string) => {
+    const d = v.replace(/[^0-9]/g, '');
+    return d === '' ? null : Number(d);
+  };
+  const preview = payDateByRule(exampleDay(), r);
+
+  async function save(remove = false) {
+    setBusy(true);
+    setErr(null);
+    const res = await saveInsurerTerm(
+      rule.insurer,
+      remove ? null : { agreement: r.agreement, mode: r.mode, offset_months: r.offset_months, pay_day: r.pay_day, cutoff_day: r.cutoff_day, notes: r.notes },
+    );
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    onClose();
+    router.refresh();
+  }
+
+  const input = 'h-9 px-2 rounded-lg border border-gray-300 text-sm';
+  return (
+    <tr className="bg-indigo-50/50">
+      <td colSpan={5} className="px-2 py-3 space-y-2">
+        <div className="font-semibold">{rule.insurer}</div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="text-xs text-gray-500">
+            הסכם (טקסט)
+            <input value={r.agreement ?? ''} onChange={(e) => setR({ ...r, agreement: e.target.value })} placeholder="שוטף 30" className={`${input} block w-40`} />
+          </label>
+          <div className="flex gap-1">
+            {(['MONTHLY', 'BIWEEKLY'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setR({ ...r, mode: m })}
+                className={`h-9 px-3 rounded-lg border text-xs font-semibold ${r.mode === m ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}
+              >
+                {m === 'MONTHLY' ? 'פעם בחודש' : 'כל שבועיים (15 / סוף חודש)'}
+              </button>
+            ))}
+          </div>
+          {r.mode === 'MONTHLY' && (
+            <>
+              <label className="text-xs text-gray-500">
+                חודשים אחרי חודש האישור
+                <input value={r.offset_months ?? ''} onChange={(e) => setR({ ...r, offset_months: num(e.target.value) })} inputMode="numeric" className={`${input} block w-24 text-center`} dir="ltr" />
+              </label>
+              <label className="text-xs text-gray-500">
+                יום תשלום (31 = סוף חודש)
+                <input value={r.pay_day ?? ''} onChange={(e) => setR({ ...r, pay_day: num(e.target.value) })} inputMode="numeric" className={`${input} block w-24 text-center`} dir="ltr" />
+              </label>
+              <label className="text-xs text-gray-500">
+                יום חיתוך (רשות)
+                <input value={r.cutoff_day ?? ''} onChange={(e) => setR({ ...r, cutoff_day: num(e.target.value) })} inputMode="numeric" placeholder="25" className={`${input} block w-24 text-center`} dir="ltr" />
+              </label>
+            </>
+          )}
+          <label className="text-xs text-gray-500 flex-1 min-w-[180px]">
+            הערה / דוגמה
+            <input value={r.notes ?? ''} onChange={(e) => setR({ ...r, notes: e.target.value })} className={`${input} block w-full`} />
+          </label>
+        </div>
+        <p className="text-xs text-gray-600">
+          {preview ? `בדיקה: תביעה שאושרה ב-${formatDate(exampleDay())} תשולם ב-${formatDate(preview)}` : 'מלא/י חודשים ויום תשלום'}
+        </p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void save()} disabled={busy} className="h-9 px-4 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">
+            {busy ? 'שומר…' : 'שמור'}
+          </button>
+          {exists && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('להסיר את ההסכם?')) void save(true);
+              }}
+              disabled={busy}
+              className="h-9 px-3 rounded-lg border border-red-300 text-red-700 bg-white text-sm"
+            >
+              הסר הסכם
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-sm">
+            ביטול
+          </button>
+        </div>
+        {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
+      </td>
+    </tr>
   );
 }

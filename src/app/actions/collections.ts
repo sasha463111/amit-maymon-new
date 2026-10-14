@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
+import type { PaymentRule } from '@/lib/collections';
 
 // Collections screen (Amit, 2026-10-14) — claims collectors (role COLLECTIONS:
 // ספיר, גלית, ליטל) + CEO. finance_closures is CEO-only under RLS and the
@@ -57,7 +58,7 @@ export type CollectionRow = {
   updated_by_name: string | null;
 };
 
-export async function listCollections(): Promise<{ rows: CollectionRow[]; terms: Record<string, number>; canEditTerms: boolean; error?: string }> {
+export async function listCollections(): Promise<{ rows: CollectionRow[]; terms: Record<string, PaymentRule>; canEditTerms: boolean; error?: string }> {
   const ctx = await me();
   if (!ctx) return { rows: [], terms: {}, canEditTerms: false, error: 'אין הרשאה' };
   const db = serviceClient();
@@ -70,10 +71,10 @@ export async function listCollections(): Promise<{ rows: CollectionRow[]; terms:
       .limit(5000),
     db.from('finance_collections').select('finance_closure_id, status, payment_approved_on, received_amount, received_on, note, updated_at, updated_by').limit(5000),
     db.from('branches').select('id, name'),
-    db.from('insurer_payment_terms').select('insurer, net_days'),
+    db.from('insurer_payment_terms').select('insurer, agreement, mode, offset_months, pay_day, cutoff_day, notes'),
   ]);
   if (fin.error) return { rows: [], terms: {}, canEditTerms: false, error: fin.error.message };
-  const terms = Object.fromEntries(((termRows.data ?? []) as { insurer: string; net_days: number }[]).map((t) => [t.insurer, t.net_days]));
+  const terms = Object.fromEntries(((termRows.data ?? []) as PaymentRule[]).map((t) => [t.insurer, t]));
   type F = { id: string; closed_on: string; branch_id: string; plate: string | null; customer_name: string | null; insurer: string | null; work_source: string; claim_type: string | null; invoice_number: string | null; amount_ours: string | number; claim_check_due_date: string | null; claim_check_amount: string | number | null; vat_offset: string | number | null; reinstatement: string | number | null };
   type C = { finance_closure_id: string; status: CollectionStatus; payment_approved_on: string | null; received_amount: string | number | null; received_on: string | null; note: string | null; updated_at: string; updated_by: string | null };
   const colById = new Map(((col.data ?? []) as C[]).map((c) => [c.finance_closure_id, c]));
@@ -148,22 +149,36 @@ export async function saveCollection(
   return { ok: true };
 }
 
-/** Payment terms per insurer — "שוטף + N" (CEO only). netDays null removes the agreement. */
-export async function saveInsurerTerm(insurer: string, netDays: number | null): Promise<{ error?: string; ok?: true }> {
+/** Payment agreement per payer (CEO only). rule null removes it. */
+export async function saveInsurerTerm(insurer: string, rule: Omit<PaymentRule, 'insurer'> | null): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
   if (!ctx || ctx.role !== 'CEO') return { error: 'רק המנכ"ל מעדכן הסכמי תשלום' };
   const name = insurer.trim().slice(0, 80);
   if (!name) return { error: 'חסר שם חברה' };
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
-  if (netDays == null) {
+  if (rule == null) {
     const { error } = await db.from('insurer_payment_terms').delete().eq('insurer', name);
     if (error) return { error: error.message };
   } else {
-    if (!Number.isInteger(netDays) || netDays < 0 || netDays > 365) return { error: 'מספר ימים לא תקין' };
-    const { error } = await db
-      .from('insurer_payment_terms')
-      .upsert({ insurer: name, net_days: netDays, updated_by: ctx.user.id, updated_at: new Date().toISOString() } as never, { onConflict: 'insurer' });
+    const int = (v: number | null, lo: number, hi: number) => v == null || (Number.isInteger(v) && v >= lo && v <= hi);
+    if (rule.mode !== 'MONTHLY' && rule.mode !== 'BIWEEKLY') return { error: 'אופן תשלום לא תקין' };
+    if (rule.mode === 'MONTHLY' && (rule.offset_months == null || rule.pay_day == null)) return { error: 'נא למלא חודשים ויום תשלום' };
+    if (!int(rule.offset_months, 0, 12) || !int(rule.pay_day, 1, 31) || !int(rule.cutoff_day, 1, 31)) return { error: 'ערך לא תקין' };
+    const { error } = await db.from('insurer_payment_terms').upsert(
+      {
+        insurer: name,
+        agreement: (rule.agreement ?? '').trim().slice(0, 120) || null,
+        mode: rule.mode,
+        offset_months: rule.mode === 'MONTHLY' ? rule.offset_months : null,
+        pay_day: rule.mode === 'MONTHLY' ? rule.pay_day : null,
+        cutoff_day: rule.mode === 'MONTHLY' ? rule.cutoff_day : null,
+        notes: (rule.notes ?? '').trim().slice(0, 300) || null,
+        updated_by: ctx.user.id,
+        updated_at: new Date().toISOString(),
+      } as never,
+      { onConflict: 'insurer' },
+    );
     if (error) return { error: error.message };
   }
   revalidatePath('/collections');
