@@ -96,7 +96,7 @@ export function CaseFileClient({
         <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
           <Fields>
             <F label="משלם">{payerOf(c) || '—'}</F>
-            <F label="סוג רכב">{c.vehicle_type ? shortVehicle(c.vehicle_type) : null}</F>
+            <F label="סוג / דגם רכב">{c.vehicle_type ? shortVehicle(c.vehicle_type) : null}</F>
             <F label="סוג תביעה">{c.claim_type}</F>
             <F label="מספר תביעה">{c.claim_number}</F>
             <F label="מצב תביעה" tone="text-indigo-700 font-semibold">{c.claim_stage}</F>
