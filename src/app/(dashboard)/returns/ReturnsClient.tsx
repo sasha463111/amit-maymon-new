@@ -157,8 +157,8 @@ export function ReturnsClient({
           {done.map((r) => (
             <PartCard key={r.id} r={r}>
               <p className="text-xs text-green-700 font-semibold mt-1">
-                ✓ זוכה {r.credited_at ? formatDate(r.credited_at) : ''} · חשבונית זיכוי {r.credit_invoice_number}
-                {r.credit_amount != null ? ` · ₪${r.credit_amount.toLocaleString('he-IL')}` : ''}
+                ✓ זוכה בתאריך: {r.credited_at ? formatDate(r.credited_at) : ''} · מספר חשבונית זיכוי: {r.credit_invoice_number}
+                {r.credit_amount != null ? ` · סכום הזיכוי: ₪${r.credit_amount.toLocaleString('he-IL')}` : ''}
               </p>
               <InvoiceButtons r={r} canCredit={canCredit} onDone={done_} />
             </PartCard>
@@ -273,28 +273,55 @@ function PartCard({ r, children, selected, onToggle }: { r: PartReturnRow; child
         <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="font-bold text-gray-900 text-sm truncate">{r.description || r.sku || '—'}</p>
-        <p className="text-xs text-gray-600 truncate" dir="auto">
-          {r.sku ? <span dir="ltr">{r.sku}</span> : null}
-          {r.quantity > 1 ? ` · כמות ${r.quantity}` : ''}
-          {' · '}
+        {/* Every value carries its name (Amit, 2026-10-14): "מק״ט: 19265544",
+            not a bare number people have to guess about. */}
+        <p className="font-bold text-gray-900 text-sm truncate">
+          <span className="text-gray-400 font-normal">חלק: </span>
+          {r.description || '—'}
+        </p>
+        <p className="text-xs text-gray-700 truncate" dir="auto">
+          <span className="text-gray-400">מק״ט: </span>
+          {r.sku ? <span dir="ltr">{r.sku}</span> : '—'}
+          <span className="text-gray-400"> · כמות: </span>
+          {r.quantity}
+          <span className="text-gray-400"> · סיבה: </span>
           {r.reason_label}
         </p>
-        <p className="text-xs text-gray-500 truncate">
+        <p className="text-xs text-gray-700 truncate">
+          <span className="text-gray-400">רכב: </span>
           {r.case_id ? (
             <Link href={`/go/${r.case_id}`} onClick={(e) => e.stopPropagation()} className="text-indigo-700 font-semibold">
-              🚗 {r.plate}{r.customer_name ? ` · ${r.customer_name}` : ''}
+              {r.plate}{r.customer_name ? ` (${r.customer_name})` : ''}
             </Link>
           ) : r.plate ? (
-            `🚗 ${r.plate} (ללא תיק)`
+            `${r.plate} (ללא תיק פתוח)`
           ) : (
-            'כללי (ללא רכב)'
+            'כללי — לא שייך לרכב'
           )}
-          {r.branch_name ? ` · ${r.branch_name}` : ''}
+          {r.branch_name ? (
+            <>
+              <span className="text-gray-400"> · סניף: </span>
+              {r.branch_name}
+            </>
+          ) : null}
         </p>
-        <p className={`text-[11px] ${late ? 'text-amber-700 font-semibold' : 'text-gray-400'}`}>
-          {r.created_by_name ?? ''} · {formatDateTime(r.created_at)}
-          {r.status === 'WAITING_PICKUP' ? ` · ממתין ${age} ימים` : ''}
+        <p className={`text-[11px] ${late ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>
+          <span className="text-gray-400">סומן להחזרה ע״י: </span>
+          {r.created_by_name ?? '—'}
+          <span className="text-gray-400"> · בתאריך: </span>
+          {formatDateTime(r.created_at)}
+          {r.status === 'WAITING_PICKUP' ? (
+            <>
+              <span className="text-gray-400"> · ממתין לאיסוף: </span>
+              {age} ימים
+            </>
+          ) : null}
+          {r.sticker_date ? (
+            <>
+              <span className="text-gray-400"> · תאריך על המדבקה: </span>
+              {formatDate(r.sticker_date)}
+            </>
+          ) : null}
 
         </p>
         {children}
@@ -531,8 +558,8 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
       {rows.map((r) => (
         <PartCard key={r.id} r={r}>
           <p className="text-xs text-gray-600 mt-1">
-            🚚 נמסר ל{r.driver_name ?? '—'} · {r.collected_at ? formatDate(r.collected_at) : ''} ({r.collected_at ? daysSince(r.collected_at) : 0} ימים)
-            {r.collected_by_name ? ` · ע״י ${r.collected_by_name}` : ''}
+            🚚 <span className="text-gray-400">נמסר לנהג: </span>{r.driver_name ?? '—'} <span className="text-gray-400">· בתאריך: </span>{r.collected_at ? formatDate(r.collected_at) : ''} <span className="text-gray-400">· ממתין לזיכוי: </span>{r.collected_at ? daysSince(r.collected_at) : 0} ימים
+            {r.collected_by_name ? ` · מסר: ${r.collected_by_name}` : ''}
           </p>
           {r.driver_signature_url && <SignatureThumb url={r.driver_signature_url} />}
           {r.status === 'DISPUTE' && <p className="text-xs text-amber-700 font-semibold mt-1">⚠️ בבירור: {r.dispute_note}</p>}
