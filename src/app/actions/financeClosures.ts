@@ -54,6 +54,8 @@ export type FinanceEntry = {
   claim_check_due_date: string | null;
   /** Optional: due date of a deposit cheque. */
   deposit_check_due_date: string | null;
+  claim_check_amount: number | null;
+  deposit_check_amount: number | null;
 };
 
 export async function getFinanceEntry(caseId: string): Promise<{ entry: (FinanceEntry & { updated_at: string }) | null; error?: string }> {
@@ -63,7 +65,7 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
   if (!db) return { entry: null, error: 'שרת לא מוגדר' };
   const { data } = await db
     .from('finance_closures')
-    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, claim_check_due_date, deposit_check_due_date, updated_at')
+    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, claim_check_due_date, deposit_check_due_date, claim_check_amount, deposit_check_amount, updated_at')
     .eq('case_id', caseId)
     .maybeSingle();
   if (!data) return { entry: null };
@@ -75,6 +77,8 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
       amount_ours: num(d.amount_ours),
       amount_shir: num(d.amount_shir),
       deductible: num(d.deductible),
+      claim_check_amount: num(d.claim_check_amount),
+      deposit_check_amount: num(d.deposit_check_amount),
     },
   };
 }
@@ -100,7 +104,8 @@ export async function saveFinanceEntry(
     return null;
   };
   const err =
-    money(input.amount_ours, 'סכום חשבונית', true) ?? money(input.amount_shir, 'סכום ללא הנחות') ?? money(input.deductible, 'השתתפות עצמית');
+    money(input.amount_ours, 'סכום חשבונית', true) ?? money(input.amount_shir, 'סכום ללא הנחות') ?? money(input.deductible, 'השתתפות עצמית') ??
+    money(input.claim_check_amount, 'סכום צ׳ק תביעות') ?? money(input.deposit_check_amount, 'סכום צ׳ק פיקדון');
   if (err) return { error: err };
   const date = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
   const t = (v: string | null, max = 120) => (v ?? '').trim().slice(0, max) || null;
@@ -123,6 +128,8 @@ export async function saveFinanceEntry(
     job_card_no: t(input.job_card_no, 60),
     claim_check_due_date: date(input.claim_check_due_date),
     deposit_check_due_date: date(input.deposit_check_due_date),
+    claim_check_amount: input.claim_check_amount,
+    deposit_check_amount: input.deposit_check_amount,
     updated_by: a.user.id,
     updated_at: new Date().toISOString(),
   };

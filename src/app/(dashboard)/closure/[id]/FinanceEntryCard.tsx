@@ -43,6 +43,8 @@ export function FinanceEntryCard({
   const [claimCheckDue, setClaimCheckDue] = useState(initial?.claim_check_due_date ?? '');
   const [hasDeposit, setHasDeposit] = useState(!!initial?.deposit_check_due_date);
   const [depositDue, setDepositDue] = useState(initial?.deposit_check_due_date ?? '');
+  const [claimCheckAmount, setClaimCheckAmount] = useState(toStr(initial?.claim_check_amount));
+  const [depositAmount, setDepositAmount] = useState(toStr(initial?.deposit_check_amount));
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<FinanceDuplicate[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
@@ -64,6 +66,8 @@ export function FinanceEntryCard({
       job_card_no: jobCard || null,
       claim_check_due_date: claimType === "צד ג'" ? claimCheckDue || null : null,
       deposit_check_due_date: hasDeposit ? depositDue || null : null,
+      claim_check_amount: claimType === "צד ג'" ? toNum(claimCheckAmount) : null,
+      deposit_check_amount: hasDeposit ? toNum(depositAmount) : null,
     }, confirmDuplicate);
     setSaving(false);
     if (r.duplicates?.length) {
@@ -157,8 +161,11 @@ export function FinanceEntryCard({
         </div>
         {claimType === "צד ג'" && (
           <div>
-            <label className={label}>מועד פירעון צ׳ק תביעות (צד ג׳)</label>
-            <input type="date" value={claimCheckDue} onChange={(e) => setClaimCheckDue(e.target.value)} className={input} />
+            <label className={label}>צ׳ק תביעות (צד ג׳) — מועד פירעון וסכום</label>
+            <div className="flex gap-2">
+              <input type="date" value={claimCheckDue} onChange={(e) => setClaimCheckDue(e.target.value)} className={input} aria-label="מועד פירעון צ׳ק תביעות" />
+              <input value={claimCheckAmount} onChange={(e) => setClaimCheckAmount(e.target.value)} inputMode="decimal" placeholder="סכום ₪" className={input} dir="ltr" aria-label="סכום צ׳ק תביעות" />
+            </div>
           </div>
         )}
         <div>
@@ -166,7 +173,12 @@ export function FinanceEntryCard({
             <input type="checkbox" checked={hasDeposit} onChange={(e) => setHasDeposit(e.target.checked)} className="w-4 h-4" />
             יש צ׳ק פיקדון
           </label>
-          {hasDeposit && <input type="date" value={depositDue} onChange={(e) => setDepositDue(e.target.value)} className={input} aria-label="מועד פירעון צ׳ק פיקדון" />}
+          {hasDeposit && (
+            <div className="flex gap-2">
+              <input type="date" value={depositDue} onChange={(e) => setDepositDue(e.target.value)} className={input} aria-label="מועד פירעון צ׳ק פיקדון" />
+              <input value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} inputMode="decimal" placeholder="סכום ₪" className={input} dir="ltr" aria-label="סכום צ׳ק פיקדון" />
+            </div>
+          )}
         </div>
       </div>
 
