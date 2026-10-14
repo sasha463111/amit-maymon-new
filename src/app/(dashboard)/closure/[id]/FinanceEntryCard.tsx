@@ -18,12 +18,14 @@ export function FinanceEntryCard({
   insuranceCompany,
   appraiserName,
   initial,
+  onSaved,
 }: {
   caseId: string;
   subType: string | null;
   insuranceCompany: string | null;
   appraiserName: string | null;
   initial: (FinanceEntry & { updated_at: string }) | null;
+  onSaved?: () => void;
 }) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
   const d = financeDefaultsFromSubType(subType);
@@ -65,6 +67,7 @@ export function FinanceEntryCard({
     }
     setDuplicates(null);
     setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'נשמר ✓ — מופיע בדשבורד הכספים' });
+    if (!r.error) onSaved?.();
   }
 
   const input = 'w-full h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
@@ -74,7 +77,7 @@ export function FinanceEntryCard({
     <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-800">💰 נתוני סגירה לכספים</h2>
-        {!initial && <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">טרם הוזן</span>}
+        {!initial && <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">טרם הוזן · חובה לפני סגירת התיק</span>}
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">

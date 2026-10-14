@@ -467,6 +467,19 @@ export async function completeActiveStep(caseId: string, stepId?: string) {
       return { error: 'יש תוספות בטיפול' };
     }
 
+    // Finance data must be entered before the case is closed (Amit, 2026-10-14).
+    // finance_closures is CEO-only under RLS, so the check uses the service
+    // client; if it cannot run at all, closing is not blocked.
+    if (stepKey === 'CLOSE_CASE') {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (url && key) {
+        const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { data: fin, error: finErr } = await admin.from('finance_closures').select('id').eq('case_id', caseId).maybeSingle();
+        if (!finErr && !fin) return { error: 'לא ניתן לסגור את התיק לפני הזנת "נתוני סגירה לכספים" (בתחתית המסך)' };
+      }
+    }
+
     // No CEO-approval gate here any more (Amit, 2026-10-12): the estimate is
     // approved mid-workflow (WAIT_APPRAISER_APPROVAL); requiring it again at
     // the last step blocked cars whose estimate was approved in practice but

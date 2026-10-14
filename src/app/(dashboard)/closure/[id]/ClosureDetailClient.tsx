@@ -319,7 +319,9 @@ export function ClosureDetailClient({
   // The variable is kept to satisfy the older prop, but the gate is purely on extras/estimate now.
   const allDone = normalizedSteps.length > 0 && normalizedSteps.every((s) => s.state === 'DONE');
   const isCaseClosed = allDone;
-  const closeBlocked = blockedByExtras || blockedByApprovals;
+  // Closing waits for the finance data (Amit, 2026-10-14; also enforced in completeActiveStep).
+  const [financeDone, setFinanceDone] = useState(!finance || !!finance.initial);
+  const closeBlocked = blockedByExtras || blockedByApprovals || !financeDone;
   const doneCount = normalizedSteps.filter((s) => s.state === 'DONE').length;
 
   const daysOpen = openedAt
@@ -767,6 +769,7 @@ export function ClosureDetailClient({
                   <p className="text-sm text-amber-700">
                     {blockedByExtras && 'יש תוספות בטיפול. '}
                     {blockedByApprovals && 'חסר אישור CEO לאומדן/גלגלים.'}
+                    {!financeDone && 'יש להזין קודם את "נתוני סגירה לכספים" (למטה).'}
                   </p>
                 )}
               </div>
@@ -787,6 +790,7 @@ export function ClosureDetailClient({
           insuranceCompany={insuranceCompany}
           appraiserName={appraiserName}
           initial={finance.initial}
+          onSaved={() => setFinanceDone(true)}
         />
       )}
     </div>
