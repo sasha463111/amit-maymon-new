@@ -78,3 +78,23 @@ export function expectedPayment(
 
 /** Payers that may need an agreement besides the insurers list. */
 export const PAYERS_EXTRA = ['מוקד ש.י.ר', 'צה"ל'] as const;
+
+/** Working days (Sun–Thu) from one date to another, not counting the first day. */
+export function workingDaysBetween(fromIso: string, toIso: string): number {
+  const a = new Date(`${fromIso.slice(0, 10)}T00:00:00Z`).getTime();
+  const b = new Date(`${toIso.slice(0, 10)}T00:00:00Z`).getTime();
+  if (!(b > a)) return 0;
+  let n = 0;
+  for (let t = a + 86_400_000; t <= b; t += 86_400_000) {
+    const dow = new Date(t).getUTCDay(); // 5 = Friday, 6 = Saturday
+    if (dow !== 5 && dow !== 6) n++;
+  }
+  return n;
+}
+
+/** Calendar days by which `actualIso` is after `expectedIso` (0 when on time). */
+export function daysLate(expectedIso: string | null, actualIso: string): number {
+  if (!expectedIso) return 0;
+  const d = Math.round((new Date(`${actualIso.slice(0, 10)}T00:00:00Z`).getTime() - new Date(`${expectedIso}T00:00:00Z`).getTime()) / 86_400_000);
+  return Math.max(0, d);
+}
