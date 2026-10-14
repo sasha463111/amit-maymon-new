@@ -159,7 +159,15 @@ export function ReturnsClient({
         ))}
       </div>
 
-      {tab === 'pickup' && <PickupTab rows={waiting} canHandOver={canHandOver} onDone={done_} />}
+      {tab === 'pickup' && (
+        <PickupTab
+          rows={waiting}
+          canHandOver={canHandOver}
+          onDone={done_}
+          // After the hand-over the parts are in "ממתין לזיכוי" — show them there.
+          onHandedOver={() => setTab('credit')}
+        />
+      )}
       {tab === 'credit' && <CreditTab rows={forCredit} canCredit={canCredit} onDone={done_} />}
       {tab === 'done' && (
         <div className="grid gap-3 md:grid-cols-2">
@@ -324,7 +332,7 @@ function PartCard({ r, children, selected, onToggle }: { r: PartReturnRow; child
 }
 
 /** Waiting for pickup, grouped by supplier — tap the parts, type the driver once. */
-function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHandOver: boolean; onDone: (m: string) => void }) {
+function PickupTab({ rows, canHandOver, onDone, onHandedOver }: { rows: PartReturnRow[]; canHandOver: boolean; onDone: (m: string) => void; onHandedOver?: () => void }) {
   const groups = useMemo(() => {
     const m = new Map<string, PartReturnRow[]>();
     for (const r of rows) m.set(r.supplier_label, [...(m.get(r.supplier_label) ?? []), r]);
@@ -374,7 +382,8 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
       /* storage unavailable — only a convenience */
     }
     setSelected(new Set());
-    onDone(`נמסרו לנהג ${driver.trim()}: ${'updated' in res ? res.updated : selected.size} חלקים ✓`);
+    onDone(`נמסרו לנהג ${driver.trim()}: ${'updated' in res ? res.updated : selected.size} חלקים ✓ — מופיעים עכשיו ב"ממתין לזיכוי"`);
+    onHandedOver?.();
   }
 
   return (
@@ -536,7 +545,13 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  if (rows.length === 0) return <p className="text-gray-400 py-8 text-center">אין חלקים שממתינים לזיכוי</p>;
+  if (rows.length === 0)
+    return (
+      <div className="text-center py-8 space-y-1">
+        <p className="text-gray-500 font-semibold">אין חלקים שממתינים לזיכוי</p>
+        <p className="text-sm text-gray-400">חלק מגיע לכאן אחרי שמסרו אותו לנהג של הספק והנהג חתם — בלשונית &quot;ממתין לאיסוף&quot;, בכפתור &quot;🚚 מסירה לנהג + חתימה&quot;.</p>
+      </div>
+    );
 
   async function save() {
     if (!open) return;

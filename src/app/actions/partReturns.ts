@@ -315,6 +315,8 @@ export async function handOverToDriver(ids: string[], driverName: string, signat
   if (error || !(data ?? []).length) {
     await db.storage.from(BUCKET).remove([sigPath]);
     if (error) return { error: error.message };
+    // Nothing changed (already handed over, or no access) — never report a false success.
+    return { error: 'המסירה לא נשמרה — ייתכן שהחלקים כבר נמסרו. רעננו את הדף ונסו שוב.' };
   }
   revalidatePath('/returns');
   return { ok: true, updated: (data ?? []).length };
