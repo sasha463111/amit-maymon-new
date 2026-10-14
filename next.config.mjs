@@ -3,6 +3,12 @@ import withPWA from 'next-pwa';
 
 const nextConfig = {
   reactStrictMode: true,
+  // Scanned documents (replacement cars, 2026-10-14) go through server actions;
+  // the 1 MB default is too small for a phone photo of a page. Stays under
+  // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.
+  experimental: {
+    serverActions: { bodySizeLimit: '4mb' },
+  },
 };
 
 // next-pwa is fully disabled. push-sw.js (registered explicitly by
