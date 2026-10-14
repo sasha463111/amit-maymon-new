@@ -433,6 +433,9 @@ export interface CreateCaseInput {
   event_date?: string | null;
   vehicle_type?: string | null;
   vehicle_year?: number | null;
+  // Customer ID / email (Amit, 2026-10-14) — stored only when valid.
+  customer_id_number?: string | null;
+  customer_email?: string | null;
 }
 
 export interface CompleteStepInput {

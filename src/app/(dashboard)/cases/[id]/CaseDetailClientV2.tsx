@@ -16,6 +16,7 @@ import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { DocumentsSection } from './DocumentsSection';
 import { TimelineSection } from './TimelineSection';
 import { CaseDetailsSection } from './CaseDetailsSection';
+import { CustomerTaxPanel } from './CustomerTaxPanel';
 import { WorkflowStepsSection } from './WorkflowStepsSection';
 import { PainterRequestsSection, type PainterRequestRow } from './PainterRequestsSection';
 import { shrinkImage } from '@/lib/shrinkImage';
@@ -557,6 +558,7 @@ export function CaseDetailClientV2(props: CaseDetailClientProps) {
         initialPainterStatusOtherText={initialPainterStatusOtherText}
         initialSubClaimTypeOtherText={subClaimTypeOtherText}
       />
+      {['CEO', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE', 'ACCOUNTANT'].includes(role ?? '') && <CustomerTaxPanel caseId={caseId} />}
 
       {/* ── צ'קליסט עבודה ── */}
       <WorkflowStepsSection

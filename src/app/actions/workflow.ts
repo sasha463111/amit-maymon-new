@@ -13,6 +13,7 @@ import {
   type UserRole,
   type AuditEntityType,
 } from '@/types/database';
+import { looksLikeCompany, normalizeId, validEmail, validIsraeliId } from '@/lib/customerTax';
 
 function vehicleAgeYears(firstRegistrationDate: string | null): number | null {
   if (!firstRegistrationDate) return null;
@@ -176,6 +177,11 @@ export async function createCase(input: CreateCaseInput) {
   }
 
   const caseKey = `${input.plate_number}-${input.claim_number ?? 'PRIVATE'}`;
+  // Customer ID / email (Amit, 14/10): kept only when valid — never blocks opening.
+  const idNumber = input.customer_id_number && validIsraeliId(input.customer_id_number) ? normalizeId(input.customer_id_number) : null;
+  const email = input.customer_email && validEmail(input.customer_email) ? input.customer_email.trim().toLowerCase() : null;
+  // A company number (ח.פ) is a VAT file for sure — flag it at once.
+  const autoCompany = !!idNumber && looksLikeCompany(null, idNumber);
   const openedAt = new Date().toISOString();
 
   const { data: newCase, error: caseErr } = await supabase
@@ -197,6 +203,9 @@ export async function createCase(input: CreateCaseInput) {
       ...(input.insurance_company != null ? { insurance_company: input.insurance_company } : {}),
       ...(input.appraiser_name != null ? { appraiser_name: input.appraiser_name } : {}),
       ...(input.event_date != null ? { event_date: input.event_date } : {}),
+      ...(idNumber ? { customer_id_number: idNumber } : {}),
+      ...(email ? { customer_email: email } : {}),
+      ...(autoCompany ? { vat_status: 'COMPANY', vat_checked_at: openedAt, vat_checked_by: user.id } : {}),
     } as never)
     .select('id')
     .single();

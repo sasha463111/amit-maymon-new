@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCase } from '@/app/actions/workflow';
 import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { lookupPreviousVat, type PreviousVat } from '@/app/actions/customerTax';
+import { VAT_SHARE_LABEL, VAT_STATUS_LABEL, looksLikeCompany, validEmail, validIsraeliId } from '@/lib/customerTax';
 import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2 } from 'lucide-react';
@@ -74,6 +76,8 @@ export function CreateCaseButton({
     vehicle_year: initialValues?.vehicle_year ?? '',
     customer_name: initialValues?.customer_name ?? '',
     phone: initialValues?.phone ?? '',
+    customer_id_number: '',
+    customer_email: '',
     insurance_company: initialValues?.insurance_company ?? '',
     appraiser_name: initialValues?.appraiser_name ?? '',
     event_date: '',
@@ -87,6 +91,15 @@ export function CreateCaseButton({
   const [vehicleLookupState, setVehicleLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found' | 'error'>('idle');
   const vehicleTypeRef = useRef<HTMLInputElement>(null);
   const [vehicleLookupError, setVehicleLookupError] = useState<string | null>(null);
+  const [prevVat, setPrevVat] = useState<PreviousVat | null>(null);
+
+  // ID typed → what we already know (VAT file) from this customer's earlier cases.
+  async function handleIdBlur() {
+    setPrevVat(null);
+    if (!validIsraeliId(form.customer_id_number)) return;
+    const r = await lookupPreviousVat(form.customer_id_number);
+    setPrevVat(r.previous);
+  }
 
   async function handlePlateBlur() {
     const digits = form.plate_number.replace(/\D/g, '');
@@ -207,6 +220,8 @@ export function CreateCaseButton({
       branch_id: form.branch_id,
       customer_name: form.customer_name.trim() || null,
       phone: form.phone.trim() || null,
+      customer_id_number: form.customer_id_number.trim() || null,
+      customer_email: form.customer_email.trim() || null,
       insurance_company: form.insurance_company.trim() || null,
       appraiser_name: form.appraiser_name.trim() || null,
       event_date: form.event_date || null,
@@ -257,6 +272,8 @@ export function CreateCaseButton({
       vehicle_year: '',
       customer_name: '',
       phone: '',
+      customer_id_number: '',
+      customer_email: '',
       insurance_company: '',
       appraiser_name: '',
       event_date: '',
@@ -446,7 +463,51 @@ export function CreateCaseButton({
                       autoComplete="off"
                     />
                   </div>
+                  <div>
+                    <label className={labelCls}>ת״ז / ח.פ</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.customer_id_number}
+                      onChange={(e) => set('customer_id_number', e.target.value)}
+                      onBlur={() => void handleIdBlur()}
+                      className={inputCls}
+                      dir="ltr"
+                      placeholder="9 ספרות"
+                      autoComplete="off"
+                    />
+                    {form.customer_id_number && !validIsraeliId(form.customer_id_number) && (
+                      <p className="text-xs text-red-600 mt-1">מספר לא תקין (ספרת ביקורת) — לא יישמר</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={labelCls}>מייל (רשות)</label>
+                    <input
+                      type="email"
+                      value={form.customer_email}
+                      onChange={(e) => set('customer_email', e.target.value)}
+                      className={inputCls}
+                      dir="ltr"
+                      placeholder="name@example.com"
+                      autoComplete="off"
+                    />
+                    {form.customer_email && !validEmail(form.customer_email) && (
+                      <p className="text-xs text-red-600 mt-1">כתובת לא תקינה — לא תישמר</p>
+                    )}
+                  </div>
                 </div>
+                {(prevVat || looksLikeCompany(form.customer_name, form.customer_id_number)) && (
+                  <div className="mt-3 rounded-lg border-2 border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 space-y-0.5">
+                    {looksLikeCompany(form.customer_name, form.customer_id_number) && <p className="font-bold">🧾 נראה כמו חברה (בע״מ / ח.פ) — מתקזזת במע״מ: לבקש אישור רו״ח כל עוד הרכב אצלנו</p>}
+                    {prevVat && (
+                      <p>
+                        לפי תיק קודם של הלקוח: <b>{VAT_STATUS_LABEL[prevVat.vat_status]}</b>
+                        {prevVat.vat_share ? ` · קיזוז ${VAT_SHARE_LABEL[prevVat.vat_share]}` : ''}
+                        {prevVat.cpa_received ? ' · היה אישור רו״ח' : ''}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ── פרטי ביטוח ── */}
