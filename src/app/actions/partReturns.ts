@@ -17,7 +17,7 @@ import { readSticker, type StickerFields } from '@/lib/stickerReader';
 const BUCKET = 'part-returns';
 const MARK_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'PAINTER']);
 const HANDOVER_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
-const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER']);
+const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER', 'ACCOUNTANT']);
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

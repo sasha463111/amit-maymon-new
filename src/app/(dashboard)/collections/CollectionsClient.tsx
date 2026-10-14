@@ -50,12 +50,14 @@ export function CollectionsClient({
   collectors,
   terms,
   isCeo,
+  canEditTerms = false,
   error,
 }: {
   cases: CollectionCase[];
   collectors: { id: string; name: string }[];
   terms: Record<string, PaymentRule>;
   isCeo: boolean;
+  canEditTerms?: boolean;
   error: string | null;
 }) {
   const [who, setWho] = useState<string>('');
@@ -108,7 +110,7 @@ export function CollectionsClient({
         </div>
       </div>
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
-      {showTerms && <TermsPanel terms={terms} canEdit={isCeo} />}
+      {showTerms && <TermsPanel terms={terms} canEdit={canEditTerms} />}
 
       {isCeo && (
         <div className="flex gap-2 flex-wrap">

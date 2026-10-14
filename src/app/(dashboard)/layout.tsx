@@ -77,6 +77,15 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],
+  // Bookkeeper (חני, 2026-10-14): returns, finance, collections (+ the
+  // collections dashboard through finance_viewers).
+  ACCOUNTANT: [
+    { label: 'כספים', href: '/finance' },
+    { label: 'גבייה', href: '/collections' },
+    { label: 'החזרות', href: '/returns' },
+    { label: 'הודעות', href: '/messages' },
+    { label: 'התראות', href: '/notifications' },
+  ],
   // Claims collectors (2026-10-14): the collections screen only.
   COLLECTIONS: [
     { label: 'גבייה', href: '/collections' },
@@ -94,6 +103,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   WAREHOUSE: 'מחסנאי',
   WAREHOUSE_MANAGER: 'מנהל מחסן',
   COLLECTIONS: 'מסלקת תביעות',
+  ACCOUNTANT: 'מנהלת חשבונות',
 };
 
 export default async function DashboardLayout({

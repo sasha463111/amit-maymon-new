@@ -23,7 +23,7 @@ import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocs
 type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
 
 const HANDOVER_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
-const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER']);
+const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER', 'ACCOUNTANT']);
 
 function daysSince(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);

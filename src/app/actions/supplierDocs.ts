@@ -11,7 +11,7 @@ import { canUsePartReturns } from '@/lib/partReturns';
 // and photos through the service client after the checks below.
 
 const BUCKET = 'part-returns';
-const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
+const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'ACCOUNTANT']);
 const TYPES = new Set(['INVOICE', 'DELIVERY_NOTE', 'CREDIT_INVOICE']);
 
 function serviceClient() {

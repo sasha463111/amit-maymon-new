@@ -13,7 +13,9 @@ export type UserRole =
   | 'WAREHOUSE'
   | 'WAREHOUSE_MANAGER'
   // Claims collectors — collections screen (2026-10-14)
-  | 'COLLECTIONS';
+  | 'COLLECTIONS'
+  // Bookkeeper — returns, finance, collections (2026-10-14)
+  | 'ACCOUNTANT';
 
 export type GeneralStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED';
 

@@ -1,7 +1,7 @@
 // Who sees the module. Pilot from 2026-10-13 (Tomer): Amit + the warehouse —
 // Roey (WAREHOUSE_MANAGER) and Liron (WAREHOUSE). Painters and advisors join
 // when Amit says: add their roles here (and send the staff message).
-export const PART_RETURNS_ROLES: readonly string[] = ['CEO', 'WAREHOUSE', 'WAREHOUSE_MANAGER'];
+export const PART_RETURNS_ROLES: readonly string[] = ['CEO', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'ACCOUNTANT'];
 
 export function canUsePartReturns(role: string | null | undefined): boolean {
   return PART_RETURNS_ROLES.includes(role ?? '');

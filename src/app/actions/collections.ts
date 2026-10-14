@@ -14,7 +14,9 @@ import type { PaymentRule } from '@/lib/collections';
 // service client after the role check (collectors have no branches and
 // finance_closures is CEO-only under RLS).
 
-const ROLES = new Set(['COLLECTIONS', 'CEO']);
+const ROLES = new Set(['COLLECTIONS', 'CEO', 'ACCOUNTANT']);
+/** See every collector's cases, assign, update any case (the bookkeeper too). */
+const SUPERVISORS = new Set(['CEO', 'ACCOUNTANT']);
 export type CollectionStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'DISPUTE' | 'LEGAL';
 const STATUSES = new Set<CollectionStatus>(['OPEN', 'PARTIAL', 'PAID', 'DISPUTE', 'LEGAL']);
 /** Final statuses — the case is closed (PARTIAL = paid with an offset). LEGAL closes when the lawyer's case closes. */
@@ -82,15 +84,16 @@ export async function listCollectionCases(): Promise<{
   collectors: { id: string; name: string }[];
   terms: Record<string, PaymentRule>;
   isCeo: boolean;
+  canEditTerms: boolean;
   myId: string | null;
   error?: string;
 }> {
   const ctx = await me();
-  const empty = { cases: [], collectors: [], terms: {}, isCeo: false, myId: null };
+  const empty = { cases: [], collectors: [], terms: {}, isCeo: false, canEditTerms: false, myId: null };
   if (!ctx) return { ...empty, error: 'אין הרשאה' };
   const db = serviceClient();
   if (!db) return { ...empty, error: 'שרת לא מוגדר' };
-  const isCeo = ctx.role === 'CEO';
+  const isCeo = SUPERVISORS.has(ctx.role);
   let q = db.from('collection_cases').select(CASE_COLS).order('opened_at', { ascending: false }).limit(5000);
   if (!isCeo) q = q.eq('assigned_to', ctx.user.id);
   const [casesRes, people, branches, termRows] = await Promise.all([
@@ -117,6 +120,7 @@ export async function listCollectionCases(): Promise<{
     collectors,
     terms: Object.fromEntries(((termRows.data ?? []) as PaymentRule[]).map((t) => [t.insurer, t])),
     isCeo,
+    canEditTerms: ctx.role === 'CEO',
     myId: ctx.user.id,
   };
 }
@@ -225,7 +229,7 @@ export async function openCollectionCase(
   if (![input.amount_due, input.vat_offset, input.reinstatement, input.claim_check_amount].every(okMoney)) return { error: 'סכום לא תקין' };
 
   let assignee = ctx.user.id;
-  if (ctx.role === 'CEO' && input.assign_to) {
+  if (SUPERVISORS.has(ctx.role) && input.assign_to) {
     const { data: who } = await db.from('profiles').select('id, role, is_active').eq('id', input.assign_to).maybeSingle();
     const w = who as { role: string; is_active: boolean } | null;
     if (!w || w.role !== 'COLLECTIONS' || !w.is_active) return { error: 'מסלקת לא תקינה' };
@@ -292,7 +296,7 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   const { data: row } = await db.from('collection_cases').select('id, assigned_to, closed_at').eq('id', id).maybeSingle();
   const cur = row as { assigned_to: string; closed_at: string | null } | null;
   if (!cur) return { error: 'לא נמצא' };
-  if (ctx.role !== 'CEO' && cur.assigned_to !== ctx.user.id) return { error: 'התיק משויך למסלקת אחרת' };
+  if (!SUPERVISORS.has(ctx.role) && cur.assigned_to !== ctx.user.id) return { error: 'התיק משויך למסלקת אחרת' };
 
   const status = u.status ?? undefined;
   if (status && !STATUSES.has(status)) return { error: 'סטטוס לא תקין' };

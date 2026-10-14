@@ -69,6 +69,13 @@ export const STAFF_JOBS: StaffJob[] = [
     notifications: 'חלק שלא נאסף 7 ימים, זיכויים, הודעות אישיות',
   },
   {
+    key: 'ACCOUNTANT',
+    role: 'ACCOUNTANT',
+    officeFunction: null,
+    label: 'מנהלת חשבונות',
+    notifications: 'הודעות אישיות',
+  },
+  {
     key: 'COLLECTIONS',
     role: 'COLLECTIONS',
     officeFunction: null,

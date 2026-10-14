@@ -143,7 +143,7 @@ export function FinanceClient({ rows, branches, error }: { rows: FinanceRow[]; b
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">כספים</h1>
-        <p className="text-sm text-gray-500">חשבוניות תיקים שנסגרו · סכומים כולל מע״מ ועם ההנחות · 🔒 מנכ״ל בלבד</p>
+        <p className="text-sm text-gray-500">חשבוניות תיקים שנסגרו · סכומים כולל מע״מ ועם ההנחות · 🔒 מנכ״ל ומנהלת חשבונות</p>
       </div>
       {error && <p className="text-red-600 text-sm">שגיאה בטעינה: {error}</p>}
 

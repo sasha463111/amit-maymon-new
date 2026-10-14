@@ -13,7 +13,7 @@ export default async function CollectionsPage() {
   if (!user) redirect('/login');
   const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const role = (prof as { role: string } | null)?.role;
-  if (role !== 'COLLECTIONS' && role !== 'CEO') redirect('/');
-  const { cases, collectors, terms, isCeo, error } = await listCollectionCases();
-  return <CollectionsClient cases={cases} collectors={collectors} terms={terms} isCeo={isCeo} error={error ?? null} />;
+  if (role !== 'COLLECTIONS' && role !== 'CEO' && role !== 'ACCOUNTANT') redirect('/');
+  const { cases, collectors, terms, isCeo, canEditTerms, error } = await listCollectionCases();
+  return <CollectionsClient cases={cases} collectors={collectors} terms={terms} isCeo={isCeo} canEditTerms={canEditTerms} error={error ?? null} />;
 }

@@ -14,7 +14,9 @@ export default async function FinancePage() {
   if (!user) redirect('/login');
 
   const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if ((prof as { role: string } | null)?.role !== 'CEO') redirect('/');
+  const role = (prof as { role: string } | null)?.role;
+  // CEO + the bookkeeper (read-only; RLS finance_closures_accountant_read).
+  if (role !== 'CEO' && role !== 'ACCOUNTANT') redirect('/');
 
   const [{ data, error }, { data: branchRows }] = await Promise.all([
     supabase

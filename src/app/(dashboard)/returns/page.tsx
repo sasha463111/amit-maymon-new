@@ -8,8 +8,8 @@ import { listSupplierDocs } from '@/app/actions/supplierDocs';
 export const dynamic = 'force-dynamic';
 
 // Invoices / delivery notes archive tab — everyone in the module except painters.
-const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
-const ALLOWED = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'PAINTER']);
+const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'ACCOUNTANT']);
+const ALLOWED = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'PAINTER', 'ACCOUNTANT']);
 
 // "החזרות" — parts returns & credits (Amit, 2026-10-12).
 export default async function ReturnsPage() {
