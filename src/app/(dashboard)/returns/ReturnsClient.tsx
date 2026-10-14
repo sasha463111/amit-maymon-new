@@ -48,6 +48,9 @@ export function ReturnsClient({
   const [adding, setAdding] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const canHandOver = HANDOVER_ROLES.has(role);
+  // Painters (Amit, 14/10): mark returns + photograph documents. No tracking,
+  // no table, no search — the warehouse and Roey do the rest.
+  const isPainter = role === 'PAINTER';
   const canCredit = CREDIT_ROLES.has(role);
 
   const waiting = rows.filter((r) => r.status === 'WAITING_PICKUP');
@@ -100,6 +103,7 @@ export function ReturnsClient({
       {toast && <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-4 py-2 text-sm font-semibold">{toast}</div>}
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
 
+      {!isPainter && (
       <div className="relative">
         <input
           value={query}
@@ -114,8 +118,9 @@ export function ReturnsClient({
           </button>
         )}
       </div>
+      )}
 
-      {q ? (
+      {q && !isPainter ? (
         <>
           <p className="text-sm text-gray-600">נמצאו {found.length} החזרות{canDocs ? ` · ${foundDocs.length} חשבוניות / ת. משלוח` : ''}</p>
           <ReturnsTable rows={found} onDone={done_} canCredit={canCredit} />
@@ -129,13 +134,18 @@ export function ReturnsClient({
       ) : (
       <>
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
-        {([
-          ['pickup', `ממתין לאיסוף (${waiting.length})`],
-          ['credit', `ממתין לזיכוי (${forCredit.length})`],
-          ['done', `זוכה (${done.length})`],
-          ['all', `📋 טבלה (${rows.length})`],
-          ...(canDocs ? [['docs', `🧾 חשבוניות / ת. משלוח (${lines.length})`] as [Tab, string]] : []),
-        ] as [Tab, string][]).map(([k, label]) => (
+        {(isPainter
+          ? ([
+              ['pickup', `ממתין לאיסוף (${waiting.length})`],
+              ...(canDocs ? [['docs', '🧾 צילום חשבוניות / ת. משלוח'] as [Tab, string]] : []),
+            ] as [Tab, string][])
+          : ([
+              ['pickup', `ממתין לאיסוף (${waiting.length})`],
+              ['credit', `ממתין לזיכוי (${forCredit.length})`],
+              ['done', `זוכה (${done.length})`],
+              ['all', `📋 טבלה (${rows.length})`],
+              ...(canDocs ? [['docs', `🧾 חשבוניות / ת. משלוח (${lines.length})`] as [Tab, string]] : []),
+            ] as [Tab, string][])).map(([k, label]) => (
           <button
             key={k}
             type="button"
@@ -167,7 +177,7 @@ export function ReturnsClient({
         </div>
       )}
       {tab === 'all' && <ReturnsTable rows={rows} onDone={done_} canCredit={canCredit} />}
-      {tab === 'docs' && canDocs && <SupplierDocsTab lines={lines} branches={branches} onDone={done_} />}
+      {tab === 'docs' && canDocs && <SupplierDocsTab lines={isPainter ? lines.filter((l) => l.source === 'archive') : lines} branches={branches} onDone={done_} canVerify={!isPainter} />}
       </>
       )}
 

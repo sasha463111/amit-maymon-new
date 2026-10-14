@@ -12,7 +12,8 @@ import { readInvoice, type InvoiceFields } from '@/lib/invoiceReader';
 // and photos through the service client after the checks below.
 
 const BUCKET = 'part-returns';
-const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'ACCOUNTANT']);
+// PAINTER photographs and sees only their own (RLS); never verifies (Amit, 14/10).
+const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER', 'ACCOUNTANT', 'PAINTER']);
 const TYPES = new Set(['INVOICE', 'DELIVERY_NOTE', 'CREDIT_INVOICE']);
 
 function serviceClient() {
@@ -183,7 +184,8 @@ export async function createSupplierDoc(formData: FormData): Promise<{ error?: s
 export async function verifySupplierDoc(id: string): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
-  const { supabase, user } = ctx;
+  const { supabase, user, profile } = ctx;
+  if (profile.role === 'PAINTER') return { error: 'אין הרשאה' };
   const { data } = await supabase.from('supplier_documents').select('id, created_by, verified_at').eq('id', id).maybeSingle();
   const row = data as { id: string; created_by: string; verified_at: string | null } | null;
   if (!row) return { error: 'לא נמצא' };

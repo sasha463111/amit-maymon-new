@@ -78,10 +78,13 @@ export function SupplierDocsTab({
   lines,
   branches,
   onDone,
+  canVerify = true,
 }: {
   lines: DocLine[];
   branches: { id: string; name: string }[];
   onDone: (m: string) => void;
+  /** Painters photograph only — no double-check button. */
+  canVerify?: boolean;
 }) {
   const [branch, setBranch] = useState<string>('');
   const [query, setQuery] = useState('');
@@ -126,7 +129,7 @@ export function SupplierDocsTab({
             <h3 className="text-sm font-bold text-gray-700">
               {group[0]?.branch_name ?? '—'} <span className="text-gray-400 font-normal">({group.length})</span>
             </h3>
-            <DocsTable rows={group} onDone={onDone} />
+            <DocsTable rows={group} onDone={onDone} canVerify={canVerify} />
           </section>
         );
       })}
@@ -145,7 +148,7 @@ export function SupplierDocsTab({
   );
 }
 
-export function DocsTable({ rows, onDone }: { rows: DocLine[]; onDone: (m: string) => void }) {
+export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[]; onDone: (m: string) => void; canVerify?: boolean }) {
   const [view, setView] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -182,7 +185,7 @@ export function DocsTable({ rows, onDone }: { rows: DocLine[]; onDone: (m: strin
                   <span className="text-gray-400 text-xs">בהחזרה</span>
                 ) : l.doc?.verified_at ? (
                   <span className="text-green-700 text-xs font-semibold" title={formatDate(l.doc.verified_at)}>✓ {l.doc.verified_by_name ?? 'נבדק'}</span>
-                ) : l.doc?.mine ? (
+                ) : l.doc?.mine || !canVerify ? (
                   <span className="text-amber-700 text-xs">ממתין לבדיקה</span>
                 ) : (
                   <button
