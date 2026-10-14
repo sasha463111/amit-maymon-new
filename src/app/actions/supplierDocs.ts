@@ -1,0 +1,172 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { canUsePartReturns } from '@/lib/partReturns';
+
+// Supplier invoices / delivery notes archive (Amit, 2026-10-14) — a tab in
+// "החזרות". Table public.supplier_documents (migration 20261014160000). Reads
+// go through the user's session (RLS: returns-tracking roles + branch); writes
+// and photos through the service client after the checks below.
+
+const BUCKET = 'part-returns';
+const DOC_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
+const TYPES = new Set(['INVOICE', 'DELIVERY_NOTE', 'CREDIT_INVOICE']);
+
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function me() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from('profiles').select('id, role, branch_ids, is_active, sees_all_branches').eq('id', user.id).maybeSingle();
+  const p = data as { id: string; role: string; branch_ids: string[] | null; is_active: boolean; sees_all_branches?: boolean } | null;
+  if (!p || p.is_active === false || !DOC_ROLES.has(p.role) || !canUsePartReturns(p.role)) return null;
+  return { supabase, user, profile: p };
+}
+
+const clean = (v: FormDataEntryValue | null, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+export type SupplierDocRow = {
+  id: string;
+  branch_id: string;
+  branch_name: string | null;
+  doc_type: 'INVOICE' | 'DELIVERY_NOTE' | 'CREDIT_INVOICE';
+  supplier: string;
+  doc_number: string | null;
+  doc_date: string;
+  plate: string | null;
+  amount: number | null;
+  notes: string | null;
+  photo_url: string | null;
+  created_at: string;
+  created_by: string;
+  created_by_name: string | null;
+  verified_at: string | null;
+  verified_by_name: string | null;
+  mine: boolean;
+};
+
+export async function listSupplierDocs(): Promise<{ rows: SupplierDocRow[]; error?: string }> {
+  const ctx = await me();
+  if (!ctx) return { rows: [] };
+  const { supabase, user } = ctx;
+  const { data, error } = await supabase
+    .from('supplier_documents')
+    .select('id, branch_id, doc_type, supplier, doc_number, doc_date, plate, amount, notes, photo_path, created_at, created_by, verified_at, verified_by')
+    .order('doc_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(2000);
+  if (error) return { rows: [], error: error.message };
+  type Raw = Omit<SupplierDocRow, 'branch_name' | 'photo_url' | 'created_by_name' | 'verified_by_name' | 'mine' | 'amount'> & {
+    photo_path: string; verified_by: string | null; amount: string | number | null;
+  };
+  const raw = (data ?? []) as Raw[];
+  const db = serviceClient();
+  const people = Array.from(new Set(raw.flatMap((r) => [r.created_by, r.verified_by]).filter((x): x is string => !!x)));
+  const [names, branches, signed] = await Promise.all([
+    people.length && db ? db.from('profiles').select('id, full_name').in('id', people) : Promise.resolve({ data: [] }),
+    supabase.from('branches').select('id, name'),
+    raw.length && db ? db.storage.from(BUCKET).createSignedUrls(raw.map((r) => r.photo_path), 60 * 60) : Promise.resolve({ data: [] }),
+  ]);
+  const nameById = new Map(((names.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
+  const branchById = new Map(((branches.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
+  const urlByPath = new Map(((signed.data ?? []) as { path: string | null; signedUrl: string }[]).map((s) => [s.path, s.signedUrl]));
+  return {
+    rows: raw.map((r) => ({
+      id: r.id,
+      branch_id: r.branch_id,
+      branch_name: branchById.get(r.branch_id) ?? null,
+      doc_type: r.doc_type,
+      supplier: r.supplier,
+      doc_number: r.doc_number,
+      doc_date: r.doc_date,
+      plate: r.plate,
+      amount: r.amount == null ? null : Number(r.amount),
+      notes: r.notes,
+      photo_url: urlByPath.get(r.photo_path) ?? null,
+      created_at: r.created_at,
+      created_by: r.created_by,
+      created_by_name: nameById.get(r.created_by) ?? null,
+      verified_at: r.verified_at,
+      verified_by_name: r.verified_by ? nameById.get(r.verified_by) ?? null : null,
+      mine: r.created_by === user.id,
+    })),
+  };
+}
+
+/** Photograph an invoice / delivery note into the archive. */
+export async function createSupplierDoc(formData: FormData): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const { supabase, user, profile } = ctx;
+
+  const docType = clean(formData.get('doc_type'), 20);
+  if (!TYPES.has(docType)) return { error: 'נא לבחור סוג מסמך' };
+  const supplier = clean(formData.get('supplier'), 80);
+  if (!supplier) return { error: 'נא לבחור ספק' };
+  const docDate = clean(formData.get('doc_date'), 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(docDate)) return { error: 'תאריך לא תקין' };
+  const branchId = clean(formData.get('branch_id'), 40);
+  const { data: branchRow } = await supabase.from('branches').select('id').eq('id', branchId).maybeSingle();
+  const allBranches = profile.role === 'CEO' || profile.sees_all_branches;
+  if (!branchRow || (!allBranches && !(profile.branch_ids ?? []).includes(branchId))) return { error: 'סניף לא תקין' };
+  const file = formData.get('photo');
+  if (!(file instanceof File) || file.size === 0 || !file.type.startsWith('image/')) return { error: 'נא לצלם את המסמך' };
+  if (file.size > 15 * 1024 * 1024) return { error: 'התמונה גדולה מדי' };
+  const amountRaw = clean(formData.get('amount'), 20).replace(/[,₪\s]/g, '');
+  const amount = amountRaw ? Number(amountRaw) : null;
+  if (amount != null && (!Number.isFinite(amount) || amount < 0)) return { error: 'סכום לא תקין' };
+
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const path = `docs/${branchId}/${docDate}/${crypto.randomUUID()}.${file.type === 'image/png' ? 'png' : 'jpg'}`;
+  const { error: upErr } = await db.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+  if (upErr) return { error: `שמירת התמונה נכשלה: ${upErr.message}` };
+  const { error } = await db.from('supplier_documents').insert({
+    branch_id: branchId,
+    doc_type: docType,
+    supplier,
+    doc_number: clean(formData.get('doc_number'), 80) || null,
+    doc_date: docDate,
+    plate: clean(formData.get('plate'), 12).replace(/\D/g, '') || null,
+    amount,
+    notes: clean(formData.get('notes'), 500) || null,
+    photo_path: path,
+    created_by: user.id,
+  } as never);
+  if (error) {
+    await db.storage.from(BUCKET).remove([path]);
+    return { error: error.message };
+  }
+  revalidatePath('/returns');
+  return { ok: true };
+}
+
+/** Double check: someone other than the photographer confirms the document. */
+export async function verifySupplierDoc(id: string): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const { supabase, user } = ctx;
+  const { data } = await supabase.from('supplier_documents').select('id, created_by, verified_at').eq('id', id).maybeSingle();
+  const row = data as { id: string; created_by: string; verified_at: string | null } | null;
+  if (!row) return { error: 'לא נמצא' };
+  if (row.created_by === user.id) return { error: 'הבדיקה צריכה להיעשות על ידי עובד אחר' };
+  if (row.verified_at) return { ok: true };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const { error } = await db
+    .from('supplier_documents')
+    .update({ verified_by: user.id, verified_at: new Date().toISOString() } as never)
+    .eq('id', id)
+    .is('verified_at', null);
+  if (error) return { error: error.message };
+  revalidatePath('/returns');
+  return { ok: true };
+}

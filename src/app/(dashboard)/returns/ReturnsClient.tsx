@@ -16,8 +16,10 @@ import {
 import { PART_RETURN_ALERT_DAYS, PART_RETURN_REASONS, PART_RETURN_STATUS_LABEL, PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { formatDate, formatDateTime } from '@/lib/dates';
+import type { SupplierDocRow } from '@/app/actions/supplierDocs';
+import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
 
-type Tab = 'pickup' | 'credit' | 'done' | 'all';
+type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
 
 const HANDOVER_ROLES = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE', 'WAREHOUSE_MANAGER']);
 const CREDIT_ROLES = new Set(['CEO', 'WAREHOUSE_MANAGER']);
@@ -31,11 +33,14 @@ export function ReturnsClient({
   role,
   branches,
   error,
+  docs = [],
 }: {
   rows: PartReturnRow[];
   role: string;
   branches: { id: string; name: string }[];
   error?: string;
+  /** Supplier invoices / delivery notes archive (null = no access to it). */
+  docs?: SupplierDocRow[] | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('pickup');
@@ -61,6 +66,9 @@ export function ReturnsClient({
         : rows,
     [rows, q],
   );
+  const canDocs = docs !== null;
+  const lines = useMemo(() => (canDocs ? docLines(docs ?? [], rows) : []), [canDocs, docs, rows]);
+  const foundDocs = useMemo(() => (q ? lines.filter((l) => matchesDoc(l, q)) : []), [lines, q]);
 
   function done_(msg: string) {
     setToast(msg);
@@ -93,7 +101,7 @@ export function ReturnsClient({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder='🔎 חיפוש: שם חלק, מק"ט, מספר חשבונית, מספר רכב…'
+          placeholder='🔎 חיפוש: שם חלק, מק"ט, מספר חשבונית / ת. משלוח, ספק, מספר רכב…'
           className="w-full h-11 pr-3 pl-10 rounded-xl border border-gray-300 text-sm"
           dir="auto"
         />
@@ -106,8 +114,14 @@ export function ReturnsClient({
 
       {q ? (
         <>
-          <p className="text-sm text-gray-600">נמצאו {found.length} תוצאות</p>
+          <p className="text-sm text-gray-600">נמצאו {found.length} החזרות{canDocs ? ` · ${foundDocs.length} חשבוניות / ת. משלוח` : ''}</p>
           <ReturnsTable rows={found} onDone={done_} canCredit={canCredit} />
+          {foundDocs.length > 0 && (
+            <>
+              <h3 className="text-sm font-bold text-gray-700 pt-2">🧾 חשבוניות / ת. משלוח</h3>
+              <DocsTable rows={foundDocs} onDone={done_} />
+            </>
+          )}
         </>
       ) : (
       <>
@@ -117,6 +131,7 @@ export function ReturnsClient({
           ['credit', `ממתין לזיכוי (${forCredit.length})`],
           ['done', `זוכה (${done.length})`],
           ['all', `📋 טבלה (${rows.length})`],
+          ...(canDocs ? [['docs', `🧾 חשבוניות / ת. משלוח (${lines.length})`] as [Tab, string]] : []),
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -148,6 +163,7 @@ export function ReturnsClient({
         </div>
       )}
       {tab === 'all' && <ReturnsTable rows={rows} onDone={done_} canCredit={canCredit} />}
+      {tab === 'docs' && canDocs && <SupplierDocsTab lines={lines} branches={branches} onDone={done_} />}
       </>
       )}
 
