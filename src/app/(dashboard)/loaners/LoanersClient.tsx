@@ -8,11 +8,13 @@ import {
   createHandover,
   findCaseForLoaner,
   returnHandover,
+  resendLoanerCopy,
   saveFleetCar,
+  type ShareLink,
   type FleetCar,
   type Handover,
 } from '@/app/actions/loaners';
-import { loanerDocuments, FUEL_LEVELS } from '@/lib/loaners';
+import { loanerDocuments, waiverCost, FUEL_LEVELS, MIN_DRIVER_AGE, MIN_LICENSE_YEARS, WAIVER_MAX_ILS, WAIVER_PER_DAY_ILS } from '@/lib/loaners';
 import { SignaturePad } from '@/components/SignaturePad';
 import { shrinkImage } from '@/lib/shrinkImage';
 
@@ -60,6 +62,8 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
   const [query, setQuery] = useState('');
   const [giving, setGiving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // The customer's copy of the signed documents — sent on WhatsApp (Amit, 14/10).
+  const [share, setShare] = useState<ShareLink | null>(null);
   const q = query.trim().toLowerCase().replace(/-/g, '');
 
   const out = handovers.filter((h) => !h.returned_at);
@@ -118,7 +122,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
           {shown.length === 0 && <p className="text-gray-400 py-8 text-center">{tab === 'out' ? 'אין כרגע רכבים חליפיים אצל לקוחות' : 'אין החזרות'}</p>}
           <div className="grid gap-3 md:grid-cols-2">
             {shown.map((h) => (
-              <HandoverCard key={h.id} h={h} onDone={done} />
+              <HandoverCard key={h.id} h={h} onDone={done} onShare={setShare} />
             ))}
           </div>
         </>
@@ -129,18 +133,21 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
           fleet={fleet.filter((f) => f.active && !f.busy)}
           branches={branches}
           onClose={() => setGiving(false)}
-          onSaved={(m) => {
+          onSaved={(m, sh) => {
             setGiving(false);
             setTab('out');
             done(m);
+            if (sh) setShare(sh);
           }}
         />
       )}
+
+      {share && <ShareDialog share={share} onClose={() => setShare(null)} />}
     </div>
   );
 }
 
-function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void }) {
+function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string) => void; onShare: (s: ShareLink) => void }) {
   const router = useRouter();
   const [returning, setReturning] = useState(false);
   const [view, setView] = useState<string | null>(null);
@@ -165,6 +172,7 @@ function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void 
         </F>
         <F label="לקוח">{h.customer_name || '—'}</F>
         {h.customer_phone && <F label="טלפון">{h.customer_phone}</F>}
+        {h.customer_car_model && <F label="דגם רכב הלקוח">{h.customer_car_model}</F>}
         <F label="רכב הלקוח">
           {h.case_id ? (
             <Link href={`/go/${h.case_id}`} className="text-indigo-700 font-semibold">
@@ -189,6 +197,11 @@ function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void 
             {h.returned_by_name && <F label="קיבל/ה">{h.returned_by_name}</F>}
           </>
         )}
+        {h.waiver && (
+          <F label="ביטול השתתפות עצמית" tone="text-indigo-700 font-semibold">
+            כן{h.waiver_from && h.waiver_to ? ` · ${h.waiver_from.split('-').reverse().join('/')}–${h.waiver_to.split('-').reverse().join('/')}` : ''}
+          </F>
+        )}
         {h.notes && <F label="הערות">{h.notes}</F>}
         {h.return_notes && <F label="הערות החזרה">{h.return_notes}</F>}
       </Fields>
@@ -196,7 +209,7 @@ function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void 
       <div className="flex flex-wrap gap-1.5 pt-1 border-t border-gray-100">
         {h.signature_url && (
           <a href={`/loaners/${h.id}/agreement`} target="_blank" rel="noopener" className="px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 text-green-800 text-xs font-semibold">
-            ✍️ הסכם + הצהרה חתומים
+            ✍️ המסמכים החתומים
           </a>
         )}
         {h.signed_form_url && (
@@ -221,6 +234,22 @@ function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void 
           {busy ? 'שומר…' : '📷 סריקת מסמך'}
           <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={busy} onChange={(e) => void scan(e.target.files, open ? 'OUT' : 'IN')} />
         </label>
+        {h.signature_url && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              const r = await resendLoanerCopy(h.id);
+              setBusy(false);
+              if (r.share) onShare(r.share);
+              else onDone(`⚠️ ${r.error ?? 'שגיאה'}`);
+            }}
+            className="px-2.5 py-1 rounded-lg border border-green-300 bg-white text-green-800 text-xs font-semibold"
+          >
+            📲 עותק ללקוח
+          </button>
+        )}
         {open && (
           <button type="button" onClick={() => setReturning(true)} className="px-3 py-1 rounded-lg bg-gray-900 text-white text-xs font-bold">
             ↩️ החזרת הרכב
@@ -228,7 +257,17 @@ function HandoverCard({ h, onDone }: { h: Handover; onDone: (m: string) => void 
         )}
       </div>
 
-      {returning && <ReturnDialog h={h} onClose={() => setReturning(false)} onSaved={(m) => { setReturning(false); onDone(m); }} />}
+      {returning && (
+        <ReturnDialog
+          h={h}
+          onClose={() => setReturning(false)}
+          onSaved={(m, sh) => {
+            setReturning(false);
+            onDone(m);
+            if (sh) onShare(sh);
+          }}
+        />
+      )}
       {view && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -256,7 +295,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 const input = 'w-full h-11 px-3 rounded-lg border border-gray-300 text-sm bg-white';
 const lab = 'block text-xs text-gray-500 mb-0.5';
 
-function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; branches: { id: string; name: string }[]; onClose: () => void; onSaved: (m: string) => void }) {
+function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; branches: { id: string; name: string }[]; onClose: () => void; onSaved: (m: string, share?: ShareLink) => void }) {
   const router = useRouter();
   const [fleetId, setFleetId] = useState<string>('');
   const [manualPlate, setManualPlate] = useState('');
@@ -283,6 +322,13 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
   const [dLicense, setDLicense] = useState('');
   const [dAddress, setDAddress] = useState('');
   const [dPhone, setDPhone] = useState('');
+  const [carModel, setCarModel] = useState('');
+  // ביטול השתתפות עצמית (optional; 75 ₪ + VAT a day, max 525 ₪ + VAT)
+  const [waiver, setWaiver] = useState(false);
+  const [waiverFrom, setWaiverFrom] = useState(nowLocal().slice(0, 10));
+  const [waiverTo, setWaiverTo] = useState('');
+  const [driverOk, setDriverOk] = useState(false);
+  const wCost = waiver ? waiverCost(waiverFrom, waiverTo) : null;
 
   const car = fleet.find((f) => f.id === fleetId);
   const loanerPlate = car?.plate ?? manualPlate.replace(/\D/g, '');
@@ -298,6 +344,8 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     kmOut: kmOut ? Number(kmOut.replace(/\D/g, '')) : null,
     fuelOut: fuelOut || null,
     driver: { full_name: dName || name, id_number: dId, license_number: dLicense, address: dAddress, phone: dPhone || phone },
+    customerCarModel: carModel || null,
+    waiver: waiver ? { from: waiverFrom || null, to: waiverTo || null } : null,
   });
 
   async function findCase() {
@@ -312,6 +360,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     setBranchId(m.branch_id);
     setName((v) => v || m.customer_name || '');
     setPhone((v) => v || m.phone || '');
+    setCarModel((v) => v || m.car_model || '');
   }
 
   async function save() {
@@ -321,6 +370,8 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     if (!caseId && !branchId) return setErr('נא לבחור סניף');
     if (signMode === 'screen' && (!(dName || name).trim() || dId.replace(/\D/g, '').length < 5 || !dLicense.trim() || !dAddress.trim()))
       return setErr('בהצהרת הנהג חובה: שם מלא, ת.ז., מס׳ רישיון נהיגה וכתובת');
+    if (waiver && !wCost) return setErr('בביטול השתתפות עצמית — נא לבחור מתאריך עד תאריך');
+    if (!driverOk) return setErr(`נא לאשר שהנהג בן ${MIN_DRIVER_AGE}+ עם רישיון ${MIN_LICENSE_YEARS} שנים לפחות`);
     if (signMode === 'screen' && !signature) return setErr('הלקוח צריך לחתום על המסך');
     if (signMode === 'paper' && !formPhoto) return setErr('נא לצלם את הטופס החתום');
     setBusy(true);
@@ -342,9 +393,15 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     fd.append('driver_license', dLicense);
     fd.append('driver_address', dAddress);
     fd.append('driver_phone', dPhone || phone);
+    fd.append('customer_car_model', carModel);
+    if (waiver) {
+      fd.append('waiver', 'yes');
+      fd.append('waiver_from', waiverFrom);
+      fd.append('waiver_to', waiverTo);
+    }
     if (signMode === 'screen' && signature) fd.append('signature', signature);
     if (signMode === 'paper' && formPhoto) fd.append('signed_form', await shrinkImage(formPhoto));
-    const r = await createHandover(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }) as { error: string; id?: string });
+    const r = await createHandover(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }) as { error: string; id?: string; share?: ShareLink });
     if (!('id' in r) || !r.id) {
       setBusy(false);
       return setErr(r.error ?? 'שגיאה');
@@ -352,7 +409,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     const failed = docs.length ? await uploadDocsOneByOne(r.id, 'OUT', docs) : 0;
     setBusy(false);
     router.refresh();
-    onSaved(failed ? `הרכב נמסר ✓ — אבל ${failed} מסמכים לא נשמרו (אפשר לסרוק שוב מהכרטיס)` : `הרכב ${loanerPlate} נמסר ל${name} ✓`);
+    onSaved(failed ? `הרכב נמסר ✓ — אבל ${failed} מסמכים לא נשמרו (אפשר לסרוק שוב מהכרטיס)` : `הרכב ${loanerPlate} נמסר ל${name} ✓`, r.share);
   }
 
   return (
@@ -413,8 +470,12 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
             <input value={name} onChange={(e) => setName(e.target.value)} className={input} />
           </label>
           <label>
-            <span className={lab}>טלפון</span>
+            <span className={lab}>טלפון נייד (לשליחת עותק בוואטסאפ)</span>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={input} dir="ltr" />
+          </label>
+          <label>
+            <span className={lab}>דגם רכב הלקוח</span>
+            <input value={carModel} onChange={(e) => setCarModel(e.target.value)} className={input} />
           </label>
           {!caseId && branches.length > 1 && (
             <label>
@@ -463,6 +524,41 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
       </section>
 
       <section className="space-y-2">
+        <p className="font-semibold text-sm">ביטול השתתפות עצמית (רשות)</p>
+        <div className="flex gap-2">
+          {[true, false].map((v) => (
+            <button key={String(v)} type="button" onClick={() => setWaiver(v)} className={`h-10 px-4 rounded-lg border text-sm font-semibold ${waiver === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}>
+              {v ? 'כן' : 'לא'}
+            </button>
+          ))}
+        </div>
+        {waiver && (
+          <div className="grid grid-cols-2 gap-2">
+            <label>
+              <span className={lab}>מיום</span>
+              <input type="date" value={waiverFrom} onChange={(e) => setWaiverFrom(e.target.value)} className={input} />
+            </label>
+            <label>
+              <span className={lab}>עד יום</span>
+              <input type="date" value={waiverTo} onChange={(e) => setWaiverTo(e.target.value)} className={input} />
+            </label>
+            <p className="col-span-2 text-sm text-indigo-800">
+              {wCost
+                ? `סה״כ ${wCost.days} ימים · ${wCost.beforeVat.toLocaleString('he-IL')} ₪ + מע״מ (${wCost.withVat.toLocaleString('he-IL')} ₪ כולל מע״מ)`
+                : `${WAIVER_PER_DAY_ILS} ₪ + מע״מ ליום, עד ${WAIVER_MAX_ILS} ₪ + מע״מ`}
+            </p>
+          </div>
+        )}
+      </section>
+
+      <label className="flex items-start gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 cursor-pointer">
+        <input type="checkbox" checked={driverOk} onChange={(e) => setDriverOk(e.target.checked)} className="w-5 h-5 mt-0.5 shrink-0" />
+        <span className="text-sm font-semibold text-amber-900">
+          בדקתי: הנהג בן {MIN_DRIVER_AGE} לפחות, עם רישיון נהיגה {MIN_LICENSE_YEARS} שנים לפחות (לא נהג צעיר / חדש)
+        </span>
+      </label>
+
+      <section className="space-y-2">
         <p className="font-semibold text-sm">4. חתימת הלקוח</p>
         <div className="flex gap-2">
           <button type="button" onClick={() => setSignMode('screen')} className={`flex-1 h-10 rounded-lg border text-sm font-semibold ${signMode === 'screen' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}>
@@ -500,7 +596,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
               </label>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-3 text-sm leading-6">
-              {[docsText.agreement, docsText.declaration].map((d) => (
+              {[docsText.agreement, docsText.declaration, ...(docsText.waiver ? [docsText.waiver] : [])].map((d) => (
                 <div key={d.title} className="space-y-1">
                   <p className="font-bold text-center">{d.title}</p>
                   <p>{d.intro}</p>
@@ -532,7 +628,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
   );
 }
 
-function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => void; onSaved: (m: string) => void }) {
+function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => void; onSaved: (m: string, share?: ShareLink) => void }) {
   const router = useRouter();
   const [at, setAt] = useState(nowLocal());
   const [km, setKm] = useState('');
@@ -541,17 +637,19 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
   const [docs, setDocs] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
 
   async function save() {
     setBusy(true);
     setErr(null);
     const fd = new FormData();
     fd.append('handover_id', h.id);
+    if (signature) fd.append('signature', signature);
     fd.append('returned_at', new Date(at).toISOString());
     fd.append('km_in', km);
     fd.append('fuel_in', fuel);
     fd.append('return_notes', notes);
-    const r = await returnHandover(fd).catch(() => ({ error: 'שגיאה' }));
+    const r = await returnHandover(fd).catch(() => ({ error: 'שגיאה' }) as { error: string; share?: ShareLink });
     if ('error' in r && r.error) {
       setBusy(false);
       return setErr(r.error);
@@ -559,7 +657,7 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
     const failed = docs.length ? await uploadDocsOneByOne(h.id, 'IN', docs) : 0;
     setBusy(false);
     router.refresh();
-    onSaved(failed ? `הרכב הוחזר ✓ — ${failed} מסמכים לא נשמרו` : `הרכב ${h.loaner_plate} הוחזר ✓`);
+    onSaved(failed ? `הרכב הוחזר ✓ — ${failed} מסמכים לא נשמרו` : `הרכב ${h.loaner_plate} הוחזר ✓`, 'share' in r ? r.share : undefined);
   }
 
   return (
@@ -597,6 +695,10 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
         <span className={lab}>סריקת מסמכים / צילומי הרכב בהחזרה (רשות)</span>
         <input type="file" accept="image/*,application/pdf" multiple onChange={(e) => setDocs(Array.from(e.target.files ?? []))} className="text-sm" />
       </label>
+      <div className="space-y-1">
+        <p className="text-xs text-gray-500">חתימת הלקוח על ההחזרה (מומלץ):</p>
+        <SignaturePad onChange={setSignature} height={140} />
+      </div>
       {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
       <button type="button" onClick={() => void save()} disabled={busy} className="w-full h-12 rounded-xl bg-gray-900 text-white text-base font-bold disabled:opacity-50">
         {busy ? 'שומר…' : 'אישור החזרה'}
@@ -686,5 +788,42 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Send the customer his copy of the signed documents on WhatsApp. */
+function ShareDialog({ share, onClose }: { share: ShareLink; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Modal title="📲 עותק ללקוח בוואטסאפ" onClose={onClose}>
+      <p className="text-sm text-gray-600">הלקוח מקבל קישור אישי למסמכים שחתם עליהם — כך אין מצב של &quot;לא ידעתי, לא הבנתי&quot;.</p>
+      <pre className="whitespace-pre-wrap text-sm bg-gray-50 rounded-lg p-3 font-[inherit]">{share.message}</pre>
+      <div className="flex gap-2 flex-wrap">
+        {share.whatsapp ? (
+          <a href={share.whatsapp} target="_blank" rel="noopener noreferrer" className="h-11 px-5 rounded-xl bg-green-600 text-white font-bold inline-flex items-center">
+            📲 שליחה בוואטסאפ
+          </a>
+        ) : (
+          <p className="text-sm text-amber-700">אין מספר נייד תקין — העתיקו את ההודעה ושלחו ידנית.</p>
+        )}
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(share.message);
+              setCopied(true);
+            } catch {
+              /* manual copy */
+            }
+          }}
+          className="h-11 px-4 rounded-xl border border-gray-300 text-sm"
+        >
+          {copied ? '✓ הועתק' : 'העתקת ההודעה'}
+        </button>
+        <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-gray-300 text-sm">
+          סגירה
+        </button>
+      </div>
+    </Modal>
   );
 }

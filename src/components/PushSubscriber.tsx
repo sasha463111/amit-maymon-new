@@ -8,7 +8,7 @@ export function PushSubscriber() {
   const { status, busy, error, enable, disable } = usePushSubscription();
   // Customer pages (/d/…, the documents link) are not for staff — no push banner.
   const pathname = usePathname();
-  if (pathname?.startsWith('/d/')) return null;
+  if (pathname?.startsWith('/d/') || pathname?.startsWith('/l/')) return null;
 
   if (status === 'unsupported') return null;
   if (status === 'unknown') return null;

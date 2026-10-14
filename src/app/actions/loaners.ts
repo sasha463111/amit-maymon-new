@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { AGREEMENT_VERSION, canUseLoaners, type DriverDetails } from '@/lib/loaners';
+import { AGREEMENT_VERSION, SHARE_LINK_DAYS, canUseLoaners, type DriverDetails } from '@/lib/loaners';
+import { APP_ORIGIN, hashToken, newToken } from '@/lib/customerDocLinks.server';
+import { whatsAppUrl } from '@/lib/customerDocs';
 
 // Replacement cars (Amit, 2026-10-14) — office + CEO. Tables are server-only
 // (RLS on, no grants); everything goes through here after the role check.
@@ -76,6 +78,11 @@ export type Handover = {
   notes: string | null;
   return_notes: string | null;
   driver: Partial<DriverDetails> | null;
+  customer_car_model: string | null;
+  waiver: boolean;
+  waiver_from: string | null;
+  waiver_to: string | null;
+  return_signature_url: string | null;
   created_by_name: string | null;
   returned_by_name: string | null;
   docs: LoanerDoc[];
@@ -94,11 +101,11 @@ export async function listLoaners(): Promise<{ fleet: FleetCar[]; handovers: Han
   if (hoRes.error) return { fleet: [], handovers: [], branches: [], error: hoRes.error.message };
   const branches = (branchesRes.data ?? []) as { id: string; name: string }[];
   const branchById = new Map(branches.map((b) => [b.id, b.name]));
-  type H = Record<string, unknown> & { id: string; fleet_id: string | null; returned_at: string | null; signed_form_path: string | null; signature_path: string | null; created_by: string | null; returned_by: string | null; branch_id: string | null };
+  type H = Record<string, unknown> & { id: string; fleet_id: string | null; returned_at: string | null; signed_form_path: string | null; signature_path: string | null; return_signature_path: string | null; created_by: string | null; returned_by: string | null; branch_id: string | null };
   const hos = (hoRes.data ?? []) as H[];
   type D = { id: string; handover_id: string; stage: 'OUT' | 'IN'; file_path: string; file_name: string | null; mime_type: string | null; created_at: string };
   const docs = (docsRes.data ?? []) as D[];
-  const paths = [...hos.flatMap((h) => [h.signed_form_path, h.signature_path]), ...docs.map((d) => d.file_path)].filter((p): p is string => !!p);
+  const paths = [...hos.flatMap((h) => [h.signed_form_path, h.signature_path, h.return_signature_path]), ...docs.map((d) => d.file_path)].filter((p): p is string => !!p);
   const people = Array.from(new Set(hos.flatMap((h) => [h.created_by, h.returned_by]).filter((x): x is string => !!x)));
   const [signed, names] = await Promise.all([
     paths.length ? db.storage.from(BUCKET).createSignedUrls(paths, 60 * 60) : Promise.resolve({ data: [] }),
@@ -133,6 +140,11 @@ export async function listLoaners(): Promise<{ fleet: FleetCar[]; handovers: Han
       notes: (h.notes as string | null) ?? null,
       return_notes: (h.return_notes as string | null) ?? null,
       driver: (h.driver_details as Partial<DriverDetails> | null) ?? null,
+      customer_car_model: (h.customer_car_model as string | null) ?? null,
+      waiver: !!h.waiver,
+      waiver_from: (h.waiver_from as string | null) ?? null,
+      waiver_to: (h.waiver_to as string | null) ?? null,
+      return_signature_url: h.return_signature_path ? urlByPath.get(h.return_signature_path) ?? null : null,
       created_by_name: h.created_by ? nameById.get(h.created_by) ?? null : null,
       returned_by_name: h.returned_by ? nameById.get(h.returned_by) ?? null : null,
       docs: docs
@@ -159,26 +171,31 @@ export async function saveFleetCar(input: { id?: string; plate: string; car_type
 }
 
 /** Find the customer's case by its plate (cases the user can see — RLS). */
-export async function findCaseForLoaner(plateInput: string): Promise<{ matches: { case_id: string; case_key: string | null; customer_name: string | null; phone: string | null; branch_id: string; branch_name: string | null; opened_at: string | null; closed: boolean }[]; error?: string }> {
+export async function findCaseForLoaner(plateInput: string): Promise<{ matches: { case_id: string; case_key: string | null; customer_name: string | null; phone: string | null; car_model: string | null; branch_id: string; branch_name: string | null; opened_at: string | null; closed: boolean }[]; error?: string }> {
   const ctx = await me();
   if (!ctx) return { matches: [], error: 'אין הרשאה' };
   const plate = plateInput.replace(/\D/g, '');
   if (plate.length < 5) return { matches: [], error: 'מספר רכב לא תקין' };
   const { data, error } = await ctx.supabase
     .from('cases')
-    .select('id, case_key, customer_name, phone, branch_id, opened_at, closed_at, cars!inner(license_plate), branches(name)')
+    .select('id, case_key, customer_name, phone, branch_id, opened_at, closed_at, cars!inner(license_plate, make, model, vehicle_type), branches(name)')
     .eq('cars.license_plate', plate)
     .is('deleted_at', null)
     .order('opened_at', { ascending: false })
     .limit(5);
   if (error) return { matches: [], error: error.message };
-  type C = { id: string; case_key: string | null; customer_name: string | null; phone: string | null; branch_id: string; opened_at: string | null; closed_at: string | null; branches: { name: string } | { name: string }[] | null };
+  type Car = { make: string | null; model: string | null; vehicle_type: string | null };
+  type C = { id: string; case_key: string | null; customer_name: string | null; phone: string | null; branch_id: string; opened_at: string | null; closed_at: string | null; cars: Car | Car[] | null; branches: { name: string } | { name: string }[] | null };
   return {
     matches: ((data ?? []) as unknown as C[]).map((c) => ({
       case_id: c.id,
       case_key: c.case_key,
       customer_name: c.customer_name,
       phone: c.phone,
+      car_model: (() => {
+        const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
+        return car ? car.vehicle_type || [car.make, car.model].filter(Boolean).join(' ') || null : null;
+      })(),
       branch_id: c.branch_id,
       branch_name: (Array.isArray(c.branches) ? c.branches[0] : c.branches)?.name ?? null,
       opened_at: c.opened_at,
@@ -188,7 +205,7 @@ export async function findCaseForLoaner(plateInput: string): Promise<{ matches: 
 }
 
 /** Hand a replacement car to a customer. */
-export async function createHandover(fd: FormData): Promise<{ error?: string; ok?: true; id?: string }> {
+export async function createHandover(fd: FormData): Promise<{ error?: string; ok?: true; id?: string; share?: ShareLink }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
   const { db, user } = ctx;
@@ -265,6 +282,10 @@ export async function createHandover(fd: FormData): Promise<{ error?: string; ok
       agreement_signer: signaturePath ? clean(fd.get('customer_name'), 120) || null : null,
       notes: clean(fd.get('notes'), 500) || null,
       driver_details: hasDriver ? driver : null,
+      customer_car_model: clean(fd.get('customer_car_model'), 80) || null,
+      waiver: clean(fd.get('waiver'), 4) === 'yes',
+      waiver_from: clean(fd.get('waiver'), 4) === 'yes' ? clean(fd.get('waiver_from'), 10) || null : null,
+      waiver_to: clean(fd.get('waiver'), 4) === 'yes' ? clean(fd.get('waiver_to'), 10) || null : null,
       created_by: user.id,
     } as never)
     .select('id')
@@ -276,8 +297,47 @@ export async function createHandover(fd: FormData): Promise<{ error?: string; ok
   }
   const id = (data as { id: string }).id;
   const docErr = await saveDocs(ctx, id, 'OUT', fd.getAll('docs'));
+  const share = await issueShareLink(db, id, 'OUT');
   revalidatePath('/loaners');
-  return docErr ? { ok: true, id, error: docErr } : { ok: true, id };
+  return docErr ? { ok: true, id, share: share ?? undefined, error: docErr } : { ok: true, id, share: share ?? undefined };
+}
+
+// ---- the customer's copy (Amit, 14/10: "שלא יהיה מצב שלא ידעתי לא הבנתי") ----
+// A personal link to the signed documents, opened on WhatsApp to the phone the
+// customer gave. Only the SHA-256 is stored; a new link replaces the old one.
+
+export type ShareLink = { url: string; whatsapp: string | null; message: string };
+
+async function issueShareLink(db: NonNullable<ReturnType<typeof serviceClient>>, id: string, stage: 'OUT' | 'IN'): Promise<ShareLink | null> {
+  const { data: h } = await db.from('loaner_handovers').select('customer_name, customer_phone, driver_details, loaner_plate').eq('id', id).maybeSingle();
+  if (!h) return null;
+  const row = h as { customer_name: string | null; customer_phone: string | null; driver_details: { phone?: string } | null; loaner_plate: string };
+  const token = newToken();
+  const expires = new Date(Date.now() + SHARE_LINK_DAYS * 86_400_000).toISOString();
+  const { error } = await db.from('loaner_handovers').update({ share_token_hash: hashToken(token), share_expires_at: expires } as never).eq('id', id);
+  if (error) return null;
+  const url = `${APP_ORIGIN}/l/${token}`;
+  const first = (row.customer_name ?? '').trim().split(/\s+/)[0];
+  const message = [
+    `${first ? `שלום ${first}` : 'שלום'}, כאן מרכז שירות תהילה.`,
+    stage === 'OUT'
+      ? `מצורף עותק של הסכם הרכב החליפי (${row.loaner_plate}) והצהרת הנהג שחתמת עליהם היום:`
+      : `הרכב החליפי (${row.loaner_plate}) הוחזר. מצורף עותק המסמכים, כולל אישור ההחזרה:`,
+    url,
+    `הקישור אישי ובתוקף ל-${SHARE_LINK_DAYS} יום. לכל שאלה אנחנו כאן.`,
+  ].join('\n');
+  const phone = row.driver_details?.phone || row.customer_phone;
+  return { url, message, whatsapp: whatsAppUrl(phone, message) };
+}
+
+/** A fresh link for the customer (e.g. lost the message). */
+export async function resendLoanerCopy(id: string): Promise<{ error?: string; share?: ShareLink }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const { data } = await ctx.db.from('loaner_handovers').select('id, returned_at').eq('id', id).maybeSingle();
+  if (!data) return { error: 'לא נמצא' };
+  const share = await issueShareLink(ctx.db, id, (data as { returned_at: string | null }).returned_at ? 'IN' : 'OUT');
+  return share ? { share } : { error: 'יצירת הקישור נכשלה' };
 }
 
 async function saveDocs(ctx: NonNullable<Awaited<ReturnType<typeof me>>>, handoverId: string, stage: 'OUT' | 'IN', files: FormDataEntryValue[]): Promise<string | null> {
@@ -309,7 +369,7 @@ export async function addLoanerDocs(fd: FormData): Promise<{ error?: string; ok?
 }
 
 /** The car came back. */
-export async function returnHandover(fd: FormData): Promise<{ error?: string; ok?: true }> {
+export async function returnHandover(fd: FormData): Promise<{ error?: string; ok?: true; share?: ShareLink }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
   const id = clean(fd.get('handover_id'), 40);
@@ -320,6 +380,18 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
   if (!h) return { error: 'לא נמצא' };
   if (h.returned_at) return { error: 'הרכב כבר סומן כמוחזר' };
   if (new Date(returnedAt) < new Date(h.given_at)) return { error: 'ההחזרה לפני המסירה — בדקו את התאריך' };
+  // The customer signs the return too (the paper form had it).
+  let returnSig: string | null = null;
+  const sig = clean(fd.get('signature'), 800_000);
+  const sm = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(sig);
+  if (sm) {
+    const png = Buffer.from(sm[1], 'base64');
+    if (png.length > 200 && png.length < 600_000) {
+      const p = `handovers/${id}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}-return-signature.png`;
+      const { error: e } = await ctx.db.storage.from(BUCKET).upload(p, png, { contentType: 'image/png', upsert: false });
+      if (!e) returnSig = p;
+    }
+  }
   const { error } = await ctx.db
     .from('loaner_handovers')
     .update({
@@ -327,6 +399,7 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
       km_in: int(fd.get('km_in')),
       fuel_in: clean(fd.get('fuel_in'), 20) || null,
       return_notes: clean(fd.get('return_notes'), 500) || null,
+      return_signature_path: returnSig,
       returned_by: ctx.user.id,
       updated_at: new Date().toISOString(),
     } as never)
@@ -334,6 +407,7 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
     .is('returned_at', null);
   if (error) return { error: error.message };
   const docErr = await saveDocs(ctx, id, 'IN', fd.getAll('docs'));
+  const share = await issueShareLink(ctx.db, id, 'IN');
   revalidatePath('/loaners');
-  return docErr ? { error: docErr } : { ok: true };
+  return docErr ? { error: docErr, share: share ?? undefined } : { ok: true, share: share ?? undefined };
 }
