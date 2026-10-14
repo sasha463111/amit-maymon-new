@@ -93,8 +93,8 @@ Stop and ask only for something large/risky that he hasn't approved, or a destru
 8. **Smoke check** — open `https://amit-maymon-new-psi.vercel.app` and confirm the changed
    screen shows the change. For a user-facing bug fix, run the `repro-as-user` skill.
 
-9. **Docs** — standing rule: every prod push updates the affected .md files (CLAUDE.md,
-   AGENTS.md, BUSINESS_PROCESS.md, agent docs) in the same push.
+9. **Docs** — standing rule #2: every prod push updates the affected .md files (CLAUDE.md only if a rule/process changed; new features go to docs/reference/modules-and-gotchas.md; also docs/reference/*,
+   BUSINESS_PROCESS.md, agent docs) in the same push.
 
 10. **Report — one line, always:**
     `✅ בפרודקשן – קומיט <sha> – <מה עלה> – גיבוי: <file> – מיגרציות: <none/applied>`

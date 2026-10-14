@@ -2,7 +2,7 @@
 > הפעיל היום (`yhanmyvolpeiuxspcxmk`, המוגדר ב-`.env.local`/Vercel) הוא כבר
 > פרויקט ה-eu-central-1. המדריך הזה נשאר כתיעוד היסטורי של איך זה בוצע.
 >
-> ℹ️ **עדכון 2026-09-01:** הוקם Supabase CLI מקומי מקושר לפרוד (CLAUDE.md סעיף 22).
+> ℹ️ **עדכון 2026-09-01:** הוקם Supabase CLI מקומי מקושר לפרוד (CLAUDE.md, בלוק "DB — כללים"; המקור המלא ב-docs/reference/deploy-demo-qa.md).
 > להגירת region עתידית עדיף `supabase db dump` + `supabase db push` על הפרויקט החדש
 > במקום הדבקה ידנית של `setup_fresh.sql`. הסכמה כ-baseline: `supabase/migrations/20260901180001_remote_schema.sql`.
 

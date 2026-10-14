@@ -75,7 +75,7 @@ Supabase-project-id correction above from 2026-08-28).**
 1. Add the column/type to `src/types/database.ts` (matching Postgres nullability exactly).
 2. Grep for places that SELECT that table — you may need to add the column to the SELECT list.
 3. If a blocking rule changed, update `src/app/actions/workflow.ts` (`completeActiveStep`).
-4. Update `CLAUDE.md` schema table at the top of the repo.
+4. Update the schema tables in `docs/reference/db-schema.md` (CLAUDE.md only holds the rules, not the schema).
 5. Report to the user: which migration you wrote, whether it was applied, and which code files were touched.
 
 # Do not
