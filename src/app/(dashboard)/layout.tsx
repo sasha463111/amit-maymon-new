@@ -47,6 +47,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'החזרות', href: '/returns' },
     { label: 'כספים', href: '/finance' },
     { label: 'גבייה', href: '/collections' },
+    { label: 'דשבורד גבייה', href: '/receivables' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'הגדרות', href: '/settings' },
@@ -140,15 +141,20 @@ export default async function DashboardLayout({
   // "משרד הפניות" / "משרד סגירה" instead of a bare "משרד" (staffJobs.ts).
   const roleLabel = viewAs ? ROLE_LABEL[role] : jobLabel(role, profile?.office_function);
 
-  // Unread notes/questions addressed to me — the badge on "הודעות".
-  const { count: unreadMessages } = isPreview
-    ? { count: 0 }
-    : await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('type', 'DIRECT_NOTE')
-        .eq('read', false);
+  // Unread notes/questions addressed to me — the badge on "הודעות". In
+  // parallel: may I see the collections financial dashboard (CEO approved me)?
+  const [{ count: unreadMessages }, { data: viewerRow }] = isPreview
+    ? [{ count: 0 }, { data: null }]
+    : await Promise.all([
+        supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('type', 'DIRECT_NOTE')
+          .eq('read', false),
+        role === 'CEO' ? Promise.resolve({ data: null }) : supabase.from('finance_viewers').select('user_id').eq('user_id', user.id).maybeSingle(),
+      ]);
+  if (viewerRow && !links.some((l) => l.href === '/receivables')) links.push({ label: 'דשבורד גבייה', href: '/receivables' });
 
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {

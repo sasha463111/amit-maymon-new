@@ -30,7 +30,6 @@ const STATUS_CHIP: Record<CollectionStatus, string> = {
   DISPUTE: 'bg-red-100 text-red-800',
   LEGAL: 'bg-purple-100 text-purple-800',
 };
-const MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 
 const ils = (n: number | null | undefined) => (n == null ? '' : `₪${Math.round(n).toLocaleString('he-IL')}`);
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
@@ -92,16 +91,6 @@ export function CollectionsClient({
     all: withExp.length,
   };
 
-  const byMonth = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const e of withExp) {
-      if (isClosed(e.c) || e.c.status === 'LEGAL' || !e.exp.date) continue;
-      const k = e.exp.date.slice(0, 7);
-      m.set(k, (m.get(k) ?? 0) + Math.max(0, toCollect(e.c) - (e.c.received_amount ?? 0)));
-    }
-    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [withExp]);
-
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -136,19 +125,6 @@ export function CollectionsClient({
         </div>
       )}
 
-      <Stats cases={scoped} terms={terms} />
-      {isCeo && !who && collectors.length > 0 && <PerCollector cases={cases} collectors={collectors} terms={terms} />}
-
-      {byMonth.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          {byMonth.map(([ym, sum]) => (
-            <div key={ym} className={`rounded-xl border px-3 py-2 text-sm ${ym < t0.slice(0, 7) ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
-              <div className="text-[11px] text-gray-500">צפי {MONTHS[Number(ym.slice(5)) - 1]} {ym.slice(0, 4)}</div>
-              <div className="font-bold">{ils(sum)}</div>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
         {([
@@ -270,146 +246,7 @@ export function CollectionsClient({
         </table>
       </div>
 
-      {isCeo && <OffsetsAndLawyers cases={scoped} />}
-
       {opening && <OpenCaseDialog isCeo={isCeo} collectors={collectors} onClose={() => setOpening(false)} />}
-    </div>
-  );
-}
-
-function Stats({ cases, terms }: { cases: CollectionCase[]; terms: Record<string, PaymentRule> }) {
-  const t0 = today();
-  const open = cases.filter((c) => !isClosed(c));
-  const closed = cases.filter(isClosed);
-  const closedThisMonth = closed.filter((c) => (c.closed_at ?? '').slice(0, 7) === t0.slice(0, 7));
-  const avgDays = closed.length ? closed.reduce((s, c) => s + workingDaysBetween(c.opened_at, c.closed_at!), 0) / closed.length : null;
-  const late = open.filter((c) => {
-    const e = expectedPayment(c, terms);
-    return c.status !== 'LEGAL' && !!e.date && e.date < t0;
-  });
-  const partial = cases.filter((c) => c.status === 'PARTIAL');
-  const offsets = partial.reduce((s, c) => s + (c.offset_amount ?? 0), 0);
-  const balance = open.filter((c) => c.status !== 'LEGAL').reduce((s, c) => s + Math.max(0, toCollect(c) - (c.received_amount ?? 0)), 0);
-  const box = (label: string, value: string, hint?: string, red = false) => (
-    <div className={`rounded-xl border p-3 ${red ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}>
-      <div className="text-[11px] text-gray-500">{label}</div>
-      <div className="text-lg font-bold">{value}</div>
-      {hint && <div className="text-[11px] text-gray-400">{hint}</div>}
-    </div>
-  );
-  return (
-    <div className="grid gap-2 grid-cols-2 md:grid-cols-6">
-      {box('בטיפול', String(open.length), ils(balance))}
-      {box('באיחור', String(late.length), undefined, late.length > 0)}
-      {box('נסגרו החודש', String(closedThisMonth.length), `סה״כ נסגרו ${closed.length}`)}
-      {box('ממוצע ימי עבודה לתיק', avgDays == null ? '—' : avgDays.toFixed(1), 'מפתיחה עד סגירה (א׳–ה׳)')}
-      {box('קיזוזים', ils(offsets) || '₪0', `${partial.length} תיקים`)}
-      {box('במחלקה משפטית', String(cases.filter((c) => c.status === 'LEGAL' && !c.legal_closed_on).length))}
-    </div>
-  );
-}
-
-function PerCollector({ cases, collectors, terms }: { cases: CollectionCase[]; collectors: { id: string; name: string }[]; terms: Record<string, PaymentRule> }) {
-  const t0 = today();
-  return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="w-full text-sm min-w-[720px]">
-        <thead className="bg-gray-50 text-xs text-gray-600">
-          <tr>
-            {['מסלקת', 'בטיפול', 'נסגרו', 'נסגרו החודש', 'ממוצע ימי עבודה', 'באיחור', 'קיזוזים', 'משפטי'].map((h) => (
-              <th key={h} className="px-3 py-2 text-right font-semibold">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {collectors.map((p) => {
-            const mine = cases.filter((c) => c.assigned_to === p.id);
-            const closed = mine.filter(isClosed);
-            const avg = closed.length ? closed.reduce((s, c) => s + workingDaysBetween(c.opened_at, c.closed_at!), 0) / closed.length : null;
-            const late = mine.filter((c) => {
-              const e = expectedPayment(c, terms);
-              return !isClosed(c) && c.status !== 'LEGAL' && !!e.date && e.date < t0;
-            }).length;
-            const partial = mine.filter((c) => c.status === 'PARTIAL');
-            return (
-              <tr key={p.id}>
-                <td className="px-3 py-2 font-semibold">{p.name}</td>
-                <td className="px-3 py-2">{mine.filter((c) => !isClosed(c)).length}</td>
-                <td className="px-3 py-2">{closed.length}</td>
-                <td className="px-3 py-2">{closed.filter((c) => (c.closed_at ?? '').slice(0, 7) === t0.slice(0, 7)).length}</td>
-                <td className="px-3 py-2">{avg == null ? '—' : avg.toFixed(1)}</td>
-                <td className={`px-3 py-2 ${late ? 'text-red-700 font-semibold' : ''}`}>{late}</td>
-                <td className="px-3 py-2">{partial.length ? `${partial.length} · ${ils(partial.reduce((s, c) => s + (c.offset_amount ?? 0), 0))}` : '—'}</td>
-                <td className="px-3 py-2">{mine.filter((c) => c.status === 'LEGAL' && !c.legal_closed_on).length}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function OffsetsAndLawyers({ cases }: { cases: CollectionCase[] }) {
-  const partial = cases.filter((c) => c.status === 'PARTIAL');
-  const legal = cases.filter((c) => c.status === 'LEGAL' || c.legal_sent_on);
-  const lawyers = new Map<string, { n: number; closed: number; claimed: number; recovered: number }>();
-  for (const c of legal) {
-    const k = c.legal_lawyer || 'לא צוין';
-    const v = lawyers.get(k) ?? { n: 0, closed: 0, claimed: 0, recovered: 0 };
-    v.n++;
-    if (c.legal_closed_on) {
-      v.closed++;
-      v.claimed += c.legal_claim_amount ?? 0;
-      v.recovered += c.legal_recovered_amount ?? 0;
-    }
-    lawyers.set(k, v);
-  }
-  if (!partial.length && !legal.length) return null;
-  return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <section className="rounded-xl border border-gray-200 bg-white p-3">
-        <h2 className="text-sm font-semibold mb-2">קיזוזים — סיבות וסכומים</h2>
-        {partial.length === 0 ? (
-          <p className="text-sm text-gray-400">אין</p>
-        ) : (
-          <ul className="text-sm space-y-1">
-            {partial.map((c) => (
-              <li key={c.id}>
-                <b>{ils(c.offset_amount)}</b> · {payerOf(c)} · {c.plate} — {c.partial_reason}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="rounded-xl border border-gray-200 bg-white p-3">
-        <h2 className="text-sm font-semibold mb-2">עורכי דין — תביעות שנסגרו: נתבע מול התקבל</h2>
-        {lawyers.size === 0 ? (
-          <p className="text-sm text-gray-400">אין</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="text-xs text-gray-500">
-              <tr>
-                {['עורך דין', 'תיקים', 'נסגרו', 'נתבע', 'התקבל', '%'].map((h) => (
-                  <th key={h} className="text-right font-semibold py-1">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from(lawyers.entries()).map(([k, v]) => (
-                <tr key={k} className="border-t border-gray-100">
-                  <td className="py-1">{k}</td>
-                  <td>{v.n}</td>
-                  <td>{v.closed}</td>
-                  <td>{ils(v.claimed)}</td>
-                  <td>{ils(v.recovered)}</td>
-                  <td>{v.claimed ? `${Math.round((v.recovered / v.claimed) * 100)}%` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
     </div>
   );
 }
