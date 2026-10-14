@@ -48,6 +48,8 @@ export type CollectionRow = {
   vat_offset: number | null;
   reinstatement: number | null;
   status: CollectionStatus;
+  /** The insurer's payment approval date (entered by the collector). */
+  payment_approved_on: string | null;
   received_amount: number | null;
   received_on: string | null;
   note: string | null;
@@ -55,23 +57,25 @@ export type CollectionRow = {
   updated_by_name: string | null;
 };
 
-export async function listCollections(): Promise<{ rows: CollectionRow[]; error?: string }> {
+export async function listCollections(): Promise<{ rows: CollectionRow[]; terms: Record<string, number>; canEditTerms: boolean; error?: string }> {
   const ctx = await me();
-  if (!ctx) return { rows: [], error: 'אין הרשאה' };
+  if (!ctx) return { rows: [], terms: {}, canEditTerms: false, error: 'אין הרשאה' };
   const db = serviceClient();
-  if (!db) return { rows: [], error: 'שרת לא מוגדר' };
-  const [fin, col, branches] = await Promise.all([
+  if (!db) return { rows: [], terms: {}, canEditTerms: false, error: 'שרת לא מוגדר' };
+  const [fin, col, branches, termRows] = await Promise.all([
     db
       .from('finance_closures')
       .select('id, closed_on, branch_id, plate, customer_name, insurer, work_source, claim_type, invoice_number, amount_ours, claim_check_due_date, claim_check_amount, vat_offset, reinstatement')
       .order('closed_on', { ascending: false })
       .limit(5000),
-    db.from('finance_collections').select('finance_closure_id, status, received_amount, received_on, note, updated_at, updated_by').limit(5000),
+    db.from('finance_collections').select('finance_closure_id, status, payment_approved_on, received_amount, received_on, note, updated_at, updated_by').limit(5000),
     db.from('branches').select('id, name'),
+    db.from('insurer_payment_terms').select('insurer, net_days'),
   ]);
-  if (fin.error) return { rows: [], error: fin.error.message };
+  if (fin.error) return { rows: [], terms: {}, canEditTerms: false, error: fin.error.message };
+  const terms = Object.fromEntries(((termRows.data ?? []) as { insurer: string; net_days: number }[]).map((t) => [t.insurer, t.net_days]));
   type F = { id: string; closed_on: string; branch_id: string; plate: string | null; customer_name: string | null; insurer: string | null; work_source: string; claim_type: string | null; invoice_number: string | null; amount_ours: string | number; claim_check_due_date: string | null; claim_check_amount: string | number | null; vat_offset: string | number | null; reinstatement: string | number | null };
-  type C = { finance_closure_id: string; status: CollectionStatus; received_amount: string | number | null; received_on: string | null; note: string | null; updated_at: string; updated_by: string | null };
+  type C = { finance_closure_id: string; status: CollectionStatus; payment_approved_on: string | null; received_amount: string | number | null; received_on: string | null; note: string | null; updated_at: string; updated_by: string | null };
   const colById = new Map(((col.data ?? []) as C[]).map((c) => [c.finance_closure_id, c]));
   const branchById = new Map(((branches.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
   const editors = Array.from(new Set(((col.data ?? []) as C[]).map((c) => c.updated_by).filter((x): x is string => !!x)));
@@ -79,6 +83,8 @@ export async function listCollections(): Promise<{ rows: CollectionRow[]; error?
   const nameById = new Map(((names ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
   const n = (v: string | number | null) => (v == null ? null : Number(v));
   return {
+    terms,
+    canEditTerms: ctx.role === 'CEO',
     rows: ((fin.data ?? []) as F[]).map((f) => {
       const c = colById.get(f.id);
       return {
@@ -97,6 +103,7 @@ export async function listCollections(): Promise<{ rows: CollectionRow[]; error?
         vat_offset: n(f.vat_offset),
         reinstatement: n(f.reinstatement),
         status: c?.status ?? 'OPEN',
+        payment_approved_on: c?.payment_approved_on ?? null,
         received_amount: n(c?.received_amount ?? null),
         received_on: c?.received_on ?? null,
         note: c?.note ?? null,
@@ -109,7 +116,7 @@ export async function listCollections(): Promise<{ rows: CollectionRow[]; error?
 
 export async function saveCollection(
   id: string,
-  input: { status: CollectionStatus; received_amount: number | null; received_on: string | null; note: string | null },
+  input: { status: CollectionStatus; payment_approved_on: string | null; received_amount: number | null; received_on: string | null; note: string | null },
 ): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
@@ -117,7 +124,8 @@ export async function saveCollection(
   if (input.received_amount != null && (!Number.isFinite(input.received_amount) || input.received_amount < 0 || input.received_amount > 10_000_000)) {
     return { error: 'סכום לא תקין' };
   }
-  if (input.received_on && !/^\d{4}-\d{2}-\d{2}$/.test(input.received_on)) return { error: 'תאריך לא תקין' };
+  const isDate = (v: string | null) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!isDate(input.received_on) || !isDate(input.payment_approved_on)) return { error: 'תאריך לא תקין' };
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
   const { data: fin } = await db.from('finance_closures').select('id').eq('id', id).maybeSingle();
@@ -126,6 +134,7 @@ export async function saveCollection(
     {
       finance_closure_id: id,
       status: input.status,
+      payment_approved_on: input.payment_approved_on || null,
       received_amount: input.received_amount,
       received_on: input.received_on || null,
       note: (input.note ?? '').trim().slice(0, 500) || null,
@@ -135,6 +144,28 @@ export async function saveCollection(
     { onConflict: 'finance_closure_id' },
   );
   if (error) return { error: error.message };
+  revalidatePath('/collections');
+  return { ok: true };
+}
+
+/** Payment terms per insurer — "שוטף + N" (CEO only). netDays null removes the agreement. */
+export async function saveInsurerTerm(insurer: string, netDays: number | null): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx || ctx.role !== 'CEO') return { error: 'רק המנכ"ל מעדכן הסכמי תשלום' };
+  const name = insurer.trim().slice(0, 80);
+  if (!name) return { error: 'חסר שם חברה' };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  if (netDays == null) {
+    const { error } = await db.from('insurer_payment_terms').delete().eq('insurer', name);
+    if (error) return { error: error.message };
+  } else {
+    if (!Number.isInteger(netDays) || netDays < 0 || netDays > 365) return { error: 'מספר ימים לא תקין' };
+    const { error } = await db
+      .from('insurer_payment_terms')
+      .upsert({ insurer: name, net_days: netDays, updated_by: ctx.user.id, updated_at: new Date().toISOString() } as never, { onConflict: 'insurer' });
+    if (error) return { error: error.message };
+  }
   revalidatePath('/collections');
   return { ok: true };
 }

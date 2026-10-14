@@ -14,6 +14,6 @@ export default async function CollectionsPage() {
   const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const role = (prof as { role: string } | null)?.role;
   if (role !== 'COLLECTIONS' && role !== 'CEO') redirect('/');
-  const { rows, error } = await listCollections();
-  return <CollectionsClient rows={rows} error={error ?? null} />;
+  const { rows, terms, canEditTerms, error } = await listCollections();
+  return <CollectionsClient rows={rows} terms={terms} canEditTerms={canEditTerms} error={error ?? null} />;
 }
