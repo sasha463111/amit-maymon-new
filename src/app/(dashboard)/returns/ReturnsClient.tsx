@@ -356,9 +356,10 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
 
   const shown = supplier ? groups.find(([s]) => s === supplier)?.[1] ?? [] : rows;
 
-  function pick(s: string | null) {
+  function pick(s: string | null, only?: string) {
     setSupplier(s);
-    setSelected(new Set());
+    const ofSupplier = s ? groups.find(([g]) => g === s)?.[1] ?? [] : [];
+    setSelected(new Set(only ? [only] : ofSupplier.map((r) => r.id)));
     setErr(null);
     // The driver who came last time for this supplier, so usually you only confirm.
     setDriver(s ? lastDriverFor(s) : '');
@@ -391,9 +392,18 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
 
   return (
     <div className="space-y-3">
+      {canHandOver && !supplier && (
+        <div className="rounded-xl border-2 border-dashed border-red-300 bg-red-50/50 p-3 text-sm text-gray-800">
+          <p className="font-bold text-red-800">🚚 מסירה לנהג והחתמה</p>
+          <p className="mt-0.5">
+            1. בחרו את הספק שהנהג שלו הגיע (כאן למטה, או בכפתור על החלק) · 2. סמנו את החלקים שהוא לוקח · 3. כתבו את שם הנהג · 4. לחצו &quot;✍️ החתמת נהג ומסירה&quot; — הנהג חותם באצבע.
+          </p>
+        </div>
+      )}
+
       {canHandOver && (
         <div className="flex flex-wrap gap-2">
-          <span className="text-sm text-gray-600 self-center ml-1">נהג הגיע? בחרו ספק:</span>
+          <span className="text-sm text-gray-600 self-center ml-1 font-semibold">{supplier ? 'ספק:' : 'בחרו ספק:'}</span>
           {groups.map(([s, list]) => (
             <button
               key={s}
@@ -432,8 +442,13 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
             }}
             className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-bold disabled:opacity-40"
           >
-            {busy ? 'שומר…' : `🚚 נמסר לנהג (${selected.size})`}
+            {busy ? 'שומר…' : `✍️ החתמת נהג ומסירה (${selected.size})`}
           </button>
+          {!busy && (selected.size === 0 || !driver.trim()) && (
+            <span className="text-xs text-red-700 w-full">
+              {selected.size === 0 ? 'סמנו את החלקים שהנהג לוקח' : 'כתבו את שם הנהג'} — ואז אפשר להחתים
+            </span>
+          )}
           {err && !signing && <span className="text-sm text-red-700 w-full">⚠️ {err}</span>}
         </div>
       )}
@@ -481,6 +496,19 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
             }
           >
             {!supplier && <InvoiceButtons r={r} canCredit={false} onDone={onDone} />}
+            {canHandOver && !supplier && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pick(r.supplier_label, r.id);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="mt-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-bold"
+              >
+                🚚 מסירה לנהג + חתימה
+              </button>
+            )}
             {(r.mine || canHandOver) && !supplier && (
               <button
                 type="button"
