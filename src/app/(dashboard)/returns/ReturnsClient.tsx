@@ -156,10 +156,11 @@ export function ReturnsClient({
           {done.length === 0 && <p className="text-gray-400 py-8 text-center md:col-span-2">אין עדיין זיכויים</p>}
           {done.map((r) => (
             <PartCard key={r.id} r={r}>
-              <p className="text-xs text-green-700 font-semibold mt-1">
-                ✓ זוכה בתאריך: {r.credited_at ? formatDate(r.credited_at) : ''} · מספר חשבונית זיכוי: {r.credit_invoice_number}
-                {r.credit_amount != null ? ` · סכום הזיכוי: ₪${r.credit_amount.toLocaleString('he-IL')}` : ''}
-              </p>
+              <Fields className="mt-1 pt-1 border-t border-gray-100">
+                <Field label="✓ זוכה בתאריך" tone="text-green-700 font-semibold">{r.credited_at ? formatDate(r.credited_at) : '—'}</Field>
+                <Field label="מספר חשבונית זיכוי">{r.credit_invoice_number ?? '—'}</Field>
+                {r.credit_amount != null && <Field label="סכום הזיכוי">₪{r.credit_amount.toLocaleString('he-IL')}</Field>}
+              </Fields>
               <InvoiceButtons r={r} canCredit={canCredit} onDone={done_} />
             </PartCard>
           ))}
@@ -273,57 +274,33 @@ function PartCard({ r, children, selected, onToggle }: { r: PartReturnRow; child
         <div className="w-20 h-20 rounded-lg bg-gray-100 shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        {/* Every value carries its name (Amit, 2026-10-14): "מק״ט: 19265544",
-            not a bare number people have to guess about. */}
-        <p className="font-bold text-gray-900 text-sm truncate">
-          <span className="text-gray-400 font-normal">חלק: </span>
-          {r.description || '—'}
-        </p>
-        <p className="text-xs text-gray-700 truncate" dir="auto">
-          <span className="text-gray-400">מק״ט: </span>
-          {r.sku ? <span dir="ltr">{r.sku}</span> : '—'}
-          <span className="text-gray-400"> · כמות: </span>
-          {r.quantity}
-          <span className="text-gray-400"> · סיבה: </span>
-          {r.reason_label}
-        </p>
-        <p className="text-xs text-gray-700 truncate">
-          <span className="text-gray-400">רכב: </span>
-          {r.case_id ? (
-            <Link href={`/go/${r.case_id}`} onClick={(e) => e.stopPropagation()} className="text-indigo-700 font-semibold">
-              {r.plate}{r.customer_name ? ` (${r.customer_name})` : ''}
-            </Link>
-          ) : r.plate ? (
-            `${r.plate} (ללא תיק פתוח)`
-          ) : (
-            'כללי — לא שייך לרכב'
+        {/* Every value on its own line with its name (Amit, 2026-10-14):
+            top to bottom, never a run of values one after another. */}
+        <Fields>
+          <Field label="חלק" strong>{r.description || '—'}</Field>
+          <Field label="ספק">{r.supplier_label}</Field>
+          <Field label="מק״ט"><span dir="ltr">{r.sku || '—'}</span></Field>
+          <Field label="כמות">{r.quantity}</Field>
+          <Field label="סיבה">{r.reason_label}</Field>
+          <Field label="רכב">
+            {r.case_id ? (
+              <Link href={`/go/${r.case_id}`} onClick={(e) => e.stopPropagation()} className="text-indigo-700 font-semibold">
+                {r.plate}{r.customer_name ? ` (${r.customer_name})` : ''}
+              </Link>
+            ) : r.plate ? (
+              `${r.plate} (ללא תיק פתוח)`
+            ) : (
+              'כללי — לא שייך לרכב'
+            )}
+          </Field>
+          {r.branch_name && <Field label="סניף">{r.branch_name}</Field>}
+          <Field label="סומן להחזרה ע״י">{r.created_by_name ?? '—'}</Field>
+          <Field label="תאריך סימון">{formatDateTime(r.created_at)}</Field>
+          {r.status === 'WAITING_PICKUP' && (
+            <Field label="ממתין לאיסוף" tone={late ? 'text-amber-700 font-semibold' : undefined}>{age} ימים</Field>
           )}
-          {r.branch_name ? (
-            <>
-              <span className="text-gray-400"> · סניף: </span>
-              {r.branch_name}
-            </>
-          ) : null}
-        </p>
-        <p className={`text-[11px] ${late ? 'text-amber-700 font-semibold' : 'text-gray-500'}`}>
-          <span className="text-gray-400">סומן להחזרה ע״י: </span>
-          {r.created_by_name ?? '—'}
-          <span className="text-gray-400"> · בתאריך: </span>
-          {formatDateTime(r.created_at)}
-          {r.status === 'WAITING_PICKUP' ? (
-            <>
-              <span className="text-gray-400"> · ממתין לאיסוף: </span>
-              {age} ימים
-            </>
-          ) : null}
-          {r.sticker_date ? (
-            <>
-              <span className="text-gray-400"> · תאריך על המדבקה: </span>
-              {formatDate(r.sticker_date)}
-            </>
-          ) : null}
-
-        </p>
+          {r.sticker_date && <Field label="תאריך על המדבקה">{formatDate(r.sticker_date)}</Field>}
+        </Fields>
         {children}
       </div>
       {zoom && r.photo_url && (
@@ -585,10 +562,12 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
     <div className="grid gap-3 md:grid-cols-2">
       {rows.map((r) => (
         <PartCard key={r.id} r={r}>
-          <p className="text-xs text-gray-600 mt-1">
-            🚚 <span className="text-gray-400">נמסר לנהג: </span>{r.driver_name ?? '—'} <span className="text-gray-400">· בתאריך: </span>{r.collected_at ? formatDate(r.collected_at) : ''} <span className="text-gray-400">· ממתין לזיכוי: </span>{r.collected_at ? daysSince(r.collected_at) : 0} ימים
-            {r.collected_by_name ? ` · מסר: ${r.collected_by_name}` : ''}
-          </p>
+          <Fields className="mt-1 pt-1 border-t border-gray-100">
+            <Field label="🚚 נמסר לנהג">{r.driver_name ?? '—'}</Field>
+            <Field label="תאריך מסירה">{r.collected_at ? formatDate(r.collected_at) : '—'}</Field>
+            {r.collected_by_name && <Field label="מסר">{r.collected_by_name}</Field>}
+            <Field label="ממתין לזיכוי">{r.collected_at ? daysSince(r.collected_at) : 0} ימים</Field>
+          </Fields>
           {r.driver_signature_url && <SignatureThumb url={r.driver_signature_url} />}
           {r.status === 'DISPUTE' && <p className="text-xs text-amber-700 font-semibold mt-1">⚠️ בבירור: {r.dispute_note}</p>}
           <InvoiceButtons r={r} canCredit={false} onDone={onDone} />
@@ -991,6 +970,20 @@ function SignatureThumb({ url }: { url: string }) {
           <img src={url} alt="חתימת הנהג" className="max-w-full max-h-full rounded-lg bg-white" />
         </div>
       )}
+    </>
+  );
+}
+
+/** Label / value rows, one per line (Amit, 2026-10-14). */
+function Fields({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <dl className={`grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs ${className}`}>{children}</dl>;
+}
+
+function Field({ label, children, strong = false, tone }: { label: string; children: React.ReactNode; strong?: boolean; tone?: string }) {
+  return (
+    <>
+      <dt className="text-gray-400 whitespace-nowrap">{label}:</dt>
+      <dd className={`min-w-0 break-words ${tone ?? (strong ? 'text-gray-900 font-bold text-sm' : 'text-gray-800')}`}>{children}</dd>
     </>
   );
 }
