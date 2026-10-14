@@ -113,7 +113,7 @@ export function CaseFileClient({
         <StagePicker c={c} />
         <div className="flex gap-2 flex-wrap pt-1">
           <Link href={`/collections/${c.id}/letter`} className="h-10 px-4 inline-flex items-center rounded-xl border border-gray-300 bg-white text-sm font-semibold">
-            📄 מכתב דרישת תשלום
+            📄 צור מכתב דרישת תשלום
           </Link>
           <WhatsAppDocs c={c} />
         </div>
