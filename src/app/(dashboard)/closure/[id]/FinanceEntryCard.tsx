@@ -1,0 +1,165 @@
+'use client';
+
+import { useState } from 'react';
+import { saveFinanceEntry, type FinanceEntry } from '@/app/actions/financeClosures';
+import { APPRAISERS, CLAIM_TYPES, IDF_CATEGORIES, INSURERS, WORK_SOURCE_LABEL, financeDefaultsFromSubType, normalizeAppraiser, type WorkSource } from '@/lib/finance';
+import { formatDate } from '@/lib/dates';
+
+const toNum = (s: string): number | null => {
+  const v = s.replace(/[,₪\s]/g, '');
+  return v ? Number(v) : null;
+};
+const toStr = (n: number | null | undefined) => (n == null ? '' : String(n));
+
+/** "💰 נתוני סגירה לכספים" — Ilana's Excel columns, feeding /finance (Amit, 2026-10-14). */
+export function FinanceEntryCard({
+  caseId,
+  subType,
+  insuranceCompany,
+  appraiserName,
+  initial,
+}: {
+  caseId: string;
+  subType: string | null;
+  insuranceCompany: string | null;
+  appraiserName: string | null;
+  initial: (FinanceEntry & { updated_at: string }) | null;
+}) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  const d = financeDefaultsFromSubType(subType);
+  const [closedOn, setClosedOn] = useState(initial?.closed_on ?? today);
+  const [source, setSource] = useState<WorkSource>(initial?.work_source ?? d.workSource);
+  const [insurer, setInsurer] = useState(initial?.insurer ?? insuranceCompany ?? '');
+  const [claimType, setClaimType] = useState(initial?.claim_type ?? d.claimType);
+  const [idfCategory, setIdfCategory] = useState(initial?.idf_category ?? '');
+  const [appraiser, setAppraiser] = useState(initial?.appraiser ?? normalizeAppraiser(appraiserName));
+  const [amount, setAmount] = useState(toStr(initial?.amount_ours));
+  const [amountShir, setAmountShir] = useState(toStr(initial?.amount_shir));
+  const [invoice, setInvoice] = useState(initial?.invoice_number ?? '');
+  const [deductible, setDeductible] = useState(toStr(initial?.deductible));
+  const [jobCard, setJobCard] = useState(initial?.job_card_no ?? '');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
+
+  async function save() {
+    setSaving(true);
+    setMsg(null);
+    const r = await saveFinanceEntry(caseId, {
+      closed_on: closedOn,
+      work_source: source,
+      insurer: insurer || null,
+      claim_type: claimType || null,
+      idf_category: idfCategory || null,
+      appraiser: appraiser ? normalizeAppraiser(appraiser) : null,
+      amount_ours: toNum(amount),
+      amount_shir: toNum(amountShir),
+      invoice_number: invoice || null,
+      deductible: toNum(deductible),
+      job_card_no: jobCard || null,
+    });
+    setSaving(false);
+    setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'נשמר ✓ — מופיע בדשבורד הכספים' });
+  }
+
+  const input = 'w-full h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
+  const label = 'block text-xs text-gray-500 mb-1';
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-gray-200 shadow-md p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-gray-800">💰 נתוני סגירה לכספים</h2>
+        {!initial && <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">טרם הוזן</span>}
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {(Object.keys(WORK_SOURCE_LABEL) as WorkSource[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setSource(k)}
+            className={`h-9 px-3 rounded-lg border text-sm ${source === k ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 bg-white'}`}
+          >
+            {WORK_SOURCE_LABEL[k]}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <label className={label}>תאריך סגירה</label>
+          <input type="date" value={closedOn} onChange={(e) => setClosedOn(e.target.value)} className={input} />
+        </div>
+        {source !== 'SHIR' && (
+          <div>
+            <label className={label}>חברת ביטוח (בצד ג׳ — החברה הנתבעת)</label>
+            <input list="fin-insurers" value={insurer} onChange={(e) => setInsurer(e.target.value)} className={input} />
+          </div>
+        )}
+        <div>
+          <label className={label}>סוג תביעה</label>
+          <select value={claimType} onChange={(e) => setClaimType(e.target.value)} className={input}>
+            <option value="">—</option>
+            {CLAIM_TYPES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+        {source === 'IDF' && (
+          <div>
+            <label className={label}>קטגוריית צה״ל</label>
+            <select value={idfCategory} onChange={(e) => setIdfCategory(e.target.value)} className={input}>
+              <option value="">—</option>
+              {IDF_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <label className={label}>שמאי</label>
+          <input list="fin-appraisers" value={appraiser} onChange={(e) => setAppraiser(e.target.value)} className={input} />
+        </div>
+        <div>
+          <label className={label}>{source === 'SHIR' ? 'חשבונית כולל מע״מ — עם ההנחות שלנו' : 'סכום חשבונית כולל מע״מ'} *</label>
+          <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+        </div>
+        {source === 'SHIR' && (
+          <div>
+            <label className={label}>חשבונית ש.י.ר כולל מע״מ — ללא הנחות</label>
+            <input value={amountShir} onChange={(e) => setAmountShir(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+          </div>
+        )}
+        <div>
+          <label className={label}>מספר חשבונית</label>
+          <input value={invoice} onChange={(e) => setInvoice(e.target.value)} className={input} dir="ltr" />
+        </div>
+        <div>
+          <label className={label}>השתתפות עצמית</label>
+          <input value={deductible} onChange={(e) => setDeductible(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
+        </div>
+        <div>
+          <label className={label}>מספר כרטיס עבודה</label>
+          <input value={jobCard} onChange={(e) => setJobCard(e.target.value)} className={input} dir="ltr" />
+        </div>
+      </div>
+
+      <datalist id="fin-insurers">
+        {INSURERS.map((i) => (
+          <option key={i} value={i} />
+        ))}
+      </datalist>
+      <datalist id="fin-appraisers">
+        {APPRAISERS.map((a) => (
+          <option key={a} value={a} />
+        ))}
+      </datalist>
+
+      <div className="flex items-center gap-3 mt-4">
+        <button type="button" onClick={() => void save()} disabled={saving} className="h-10 px-5 rounded-lg bg-[#1e3a5f] text-white text-sm font-semibold disabled:opacity-50">
+          {saving ? 'שומר…' : initial ? 'עדכן' : 'שמור'}
+        </button>
+        {msg && <span className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}

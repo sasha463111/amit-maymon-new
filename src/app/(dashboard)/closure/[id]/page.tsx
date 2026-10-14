@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import { ClosureDetailClient } from './ClosureDetailClient';
+import { getFinanceEntry } from '@/app/actions/financeClosures';
 
 const CLOSURE_STEPS = [
   'CLOSURE_VERIFY_DETAILS_DOCS',
@@ -35,7 +36,7 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
 
   const { data: caseRow } = await supabase
     .from('cases')
-    .select('id, case_key, customer_name, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, closure_checklist_state, cars(license_plate, make, model), branches(name)')
+    .select('id, case_key, customer_name, closed_at, branch_id, opened_at, parts_status, insurance_type, claim_number, claim_type, sub_claim_type, insurance_company, appraiser_name, closure_checklist_state, cars(license_plate, make, model), branches(name)')
     .eq('id', id)
     .single();
 
@@ -140,8 +141,13 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
     claim_type: string | null;
     sub_claim_type: string | null;
     insurance_company: string | null;
+    appraiser_name: string | null;
     closure_checklist_state: Record<string, boolean> | null;
   };
+
+  // Finance data entry (Ilana / CEO) — feeds the /finance dashboard.
+  const canEnterFinance = !isPreview && (profile?.role === 'OFFICE' || profile?.role === 'CEO');
+  const finance = canEnterFinance ? await getFinanceEntry(id) : null;
 
   return (
     <ClosureDetailClient
@@ -164,6 +170,8 @@ export default async function ClosureDetailPage({ params }: { params: Promise<{ 
       canClose={isPreview || profile?.role === 'OFFICE' || profile?.role === 'CEO'}
       isPreview={isPreview}
       initialChecklistState={row.closure_checklist_state ?? {}}
+      appraiserName={row.appraiser_name}
+      finance={finance ? { initial: finance.entry } : null}
     />
   );
 }

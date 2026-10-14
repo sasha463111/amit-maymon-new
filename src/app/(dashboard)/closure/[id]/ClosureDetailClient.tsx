@@ -6,13 +6,15 @@ import Link from 'next/link';
 import { completeActiveStep } from '@/app/actions/workflow';
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { updateCaseDetails } from '@/app/actions/caseDetails';
-import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
+import { SUB_CLAIM_LABELS, CLAIM_TYPE_LABELS, SUB_CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { ClosureStatusSection } from './ClosureStatusSection';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { CameraBatchUpload } from '@/components/CameraBatchUpload';
+import { FinanceEntryCard } from './FinanceEntryCard';
+import type { FinanceEntry } from '@/app/actions/financeClosures';
 
 // Closure-specific step keys/labels — a genuinely different domain from the
 // professional-workflow STEP_LABELS (types/database.ts's
@@ -109,6 +111,9 @@ interface ClosureDetailClientProps {
   canClose: boolean;
   isPreview?: boolean;
   initialChecklistState?: Record<string, boolean>;
+  appraiserName?: string | null;
+  /** Finance entry card (OFFICE / CEO); null = not shown. */
+  finance?: { initial: (FinanceEntry & { updated_at: string }) | null } | null;
 }
 
 export function ClosureDetailClient({
@@ -131,6 +136,8 @@ export function ClosureDetailClient({
   canClose,
   isPreview = false,
   initialChecklistState = {},
+  appraiserName = null,
+  finance = null,
 }: ClosureDetailClientProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -140,11 +147,28 @@ export function ClosureDetailClient({
   const initRef = useRef<string | null>(null);
   const [completingStepId, setCompletingStepId] = useState<string | null>(null);
 
-  // Dynamic checklist state — initialized from DB-persisted state
-  const checklistItems = subClaimType ? (CLOSURE_CHECKLIST[subClaimType] ?? []) : [];
+  // Dynamic checklist state — initialized from DB-persisted state.
+  // The claim type can be picked right here (2026-10-14): 34 cases had none,
+  // so their closure screen showed no checklist and no upload button.
+  const [subType, setSubType] = useState<string | null>(subClaimType);
+  const [subTypeSaving, setSubTypeSaving] = useState(false);
+  const checklistItems = subType ? (CLOSURE_CHECKLIST[subType] ?? []) : [];
   const [checkedItems, setCheckedItems] = useState<boolean[]>(
     () => checklistItems.map((_, i) => initialChecklistState[String(i)] === true)
   );
+
+  async function chooseSubType(value: string) {
+    const prev = subType;
+    setSubType(value);
+    setCheckedItems((CLOSURE_CHECKLIST[value] ?? []).map(() => false));
+    setSubTypeSaving(true);
+    const res = await updateCaseDetails(caseId, { sub_claim_type: value });
+    setSubTypeSaving(false);
+    if (res?.error) {
+      setSubType(prev);
+      setError(`שמירת סוג התביעה נכשלה: ${res.error}`);
+    }
+  }
 
   // Debounce timer ref for checklist save
   const checklistSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -506,13 +530,13 @@ export function ClosureDetailClient({
               <p className="text-sm font-semibold text-gray-700">{insuranceCompany}</p>
             </div>
           )}
-          {subClaimType && (
+          {subType && (
             <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
               <p className="text-xs text-gray-400 mb-1">סוג תביעה</p>
-              <p className="text-sm font-semibold text-blue-700">{SUB_CLAIM_LABELS[subClaimType] ?? subClaimType}</p>
+              <p className="text-sm font-semibold text-blue-700">{SUB_CLAIM_LABELS[subType] ?? subType}</p>
             </div>
           )}
-          {!subClaimType && claimType && (
+          {!subType && claimType && (
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
               <p className="text-xs text-gray-400 mb-1">סוג תביעה</p>
               <p className="text-sm font-semibold text-gray-700">{CLAIM_TYPE_LABELS[claimType] ?? claimType}</p>
@@ -548,6 +572,28 @@ export function ClosureDetailClient({
             <div className="text-3xl mb-1">🎉</div>
             <p className="text-green-800 font-semibold">התיק נסגר בהצלחה!</p>
             <p className="text-green-600 text-sm mt-0.5">כל שלבי הסגירה הושלמו</p>
+          </div>
+        )}
+
+        {checklistItems.length === 0 && canClose && !isCaseClosed && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm font-semibold text-amber-800 mb-2">
+              {subType ? 'לסוג התביעה של התיק אין צ׳קליסט. ' : 'לתיק לא הוגדר סוג תביעה. '}
+              בחר/י סוג תביעה כדי להציג את הצ׳קליסט ואת העלאת המסמכים:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(CLOSURE_CHECKLIST).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  disabled={subTypeSaving}
+                  onClick={() => void chooseSubType(k)}
+                  className="px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-sm font-medium hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {SUB_CLAIM_TYPE_LABELS[k as keyof typeof SUB_CLAIM_TYPE_LABELS] ?? k}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -733,6 +779,16 @@ export function ClosureDetailClient({
           </div>
         )}
       </div>
+
+      {finance && (
+        <FinanceEntryCard
+          caseId={caseId}
+          subType={subType}
+          insuranceCompany={insuranceCompany}
+          appraiserName={appraiserName}
+          initial={finance.initial}
+        />
+      )}
     </div>
   );
 }
