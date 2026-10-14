@@ -90,6 +90,21 @@ async function queryDataset(resourceId: string, plate: number): Promise<LookupOu
   return { kind: 'unreachable' };
 }
 
+/** True when the main registry resource answers with zero rows at all. */
+async function mainRegistryIsEmpty(): Promise<boolean> {
+  try {
+    const res = await fetch(`${MOT_API_URL}?resource_id=${MOT_DATASETS[0].id}&limit=0`, {
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store',
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { success?: boolean; result?: { total?: number } };
+    return !!data.success && data.result?.total === 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function lookupVehicleByPlate(
   plateNumber: string
 ): Promise<{ vehicle_type: string | null; vehicle_year: number | null; error?: string }> {
@@ -125,6 +140,18 @@ export async function lookupVehicleByPlate(
     outcomes.push(`${dataset.label}=${outcome.kind}`);
     if (outcome.kind === 'unreachable') anyDatasetUnreachable = true;
     // 'absent' → fall through to the next dataset
+  }
+
+  // The ministry reloads its registry from time to time; while it does, the
+  // main resource has 0 rows and EVERY plate looks missing (seen 2026-10-14
+  // 08:15 after a 02:37 reload). Say so instead of blaming the plate.
+  if (!anyDatasetUnreachable && (await mainRegistryIsEmpty())) {
+    console.error('[lookupVehicleByPlate] main registry empty (ministry reload)', { plate });
+    return {
+      vehicle_type: null,
+      vehicle_year: null,
+      error: 'מאגר משרד התחבורה מתעדכן כרגע ואינו זמין — אפשר להקליד סוג ושנה ידנית ולהמשיך',
+    };
   }
 
   // Only claim the vehicle doesn't exist if every dataset actually answered.
