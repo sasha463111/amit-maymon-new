@@ -64,7 +64,7 @@ export function ReturnsClient({
     () =>
       q
         ? rows.filter((r) =>
-            [r.description, r.sku, r.plate, r.customer_name, r.supplier_label, r.document_number, r.credit_invoice_number, r.driver_name, r.reason_label, r.notes]
+            [r.description, r.sku, r.plate, r.customer_name, r.supplier_label, r.document_number, r.credit_invoice_number, r.driver_name, r.reason_label, r.notes, r.external_ref, r.delivery_note_number, r.created_by_name]
               .some((v) => (v ?? '').toLowerCase().includes(q)),
           )
         : rows,
@@ -312,6 +312,8 @@ function PartCard({ r, children, selected, onToggle }: { r: PartReturnRow; child
             )}
           </Field>
           {r.branch_name && <Field label="סניף">{r.branch_name}</Field>}
+          {r.external_ref && <Field label="מספר מעקב (אקסל)"><span dir="ltr">{r.external_ref}</span></Field>}
+          {r.delivery_note_number && <Field label="תעודת משלוח"><span dir="ltr">{r.delivery_note_number}</span></Field>}
           <Field label="סומן להחזרה ע״י">{r.created_by_name ?? '—'}</Field>
           <Field label="תאריך סימון">{formatDateTime(r.created_at)}</Field>
           {r.status === 'WAITING_PICKUP' && (

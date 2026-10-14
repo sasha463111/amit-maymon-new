@@ -76,6 +76,9 @@ export type PartReturnRow = {
   /** The driver's signature at hand-over (PNG). */
   driver_signature_url: string | null;
   sticker_date: string | null;
+  /** Tracking number from the Excel history (NET-0001 / ASH-0001), imported 14/10. */
+  external_ref: string | null;
+  delivery_note_number: string | null;
   mine: boolean;
 };
 
@@ -224,7 +227,8 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
   if (error) return { rows: [], role: profile.role, error: error.message };
   type Raw = Record<string, unknown> & {
     id: string; branch_id: string; case_id: string | null; plate: string | null; supplier: string; supplier_other: string | null;
-    reason: string; reason_other: string | null; sticker_path: string; created_by: string; collected_by: string | null;
+    reason: string; reason_other: string | null; sticker_path: string | null; created_by: string; collected_by: string | null;
+    opened_by_name: string | null; handed_by_name: string | null; external_ref: string | null; delivery_note_number: string | null;
     invoice_path: string | null; credit_invoice_path: string | null; driver_signature_path: string | null;
     credit_amount: string | number | null;
   };
@@ -266,20 +270,23 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     document_number: (r.document_number as string | null) ?? null,
     status: r.status as string,
     created_at: r.created_at as string,
-    created_by_name: nameById.get(r.created_by) ?? null,
+    // Imported rows keep the name as typed in the Excel.
+    created_by_name: r.opened_by_name ?? nameById.get(r.created_by) ?? null,
     collected_at: (r.collected_at as string | null) ?? null,
-    collected_by_name: r.collected_by ? nameById.get(r.collected_by) ?? null : null,
+    collected_by_name: r.handed_by_name ?? (r.collected_by ? nameById.get(r.collected_by) ?? null : null),
     driver_name: (r.driver_name as string | null) ?? null,
     credit_invoice_number: (r.credit_invoice_number as string | null) ?? null,
     credit_amount: r.credit_amount == null ? null : Number(r.credit_amount),
     credited_at: (r.credited_at as string | null) ?? null,
     dispute_note: (r.dispute_note as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
-    photo_url: urlByPath.get(r.sticker_path) ?? null,
+    photo_url: r.sticker_path ? urlByPath.get(r.sticker_path) ?? null : null,
     invoice_url: r.invoice_path ? urlByPath.get(r.invoice_path) ?? null : null,
     credit_invoice_url: r.credit_invoice_path ? urlByPath.get(r.credit_invoice_path) ?? null : null,
     driver_signature_url: r.driver_signature_path ? urlByPath.get(r.driver_signature_path) ?? null : null,
     sticker_date: (r.sticker_date as string | null) ?? null,
+    external_ref: r.external_ref ?? null,
+    delivery_note_number: r.delivery_note_number ?? null,
     mine: r.created_by === user.id,
   }));
   return { rows, role: profile.role };
