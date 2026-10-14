@@ -45,7 +45,10 @@ export function FinanceEntryCard({
   const [depositDue, setDepositDue] = useState(initial?.deposit_check_due_date ?? '');
   const [claimCheckAmount, setClaimCheckAmount] = useState(toStr(initial?.claim_check_amount));
   const [depositAmount, setDepositAmount] = useState(toStr(initial?.deposit_check_amount));
+  // "מתקזז מע״מ" / "כינון": yes/no first, the amount only when yes (Amit, 14/10).
+  const [hasVat, setHasVat] = useState<boolean | null>(initial ? initial.vat_offset != null : null);
   const [vatOffset, setVatOffset] = useState(toStr(initial?.vat_offset));
+  const [hasReinst, setHasReinst] = useState<boolean | null>(initial ? initial.reinstatement != null : null);
   const [reinstatement, setReinstatement] = useState(toStr(initial?.reinstatement));
   const [appraiserFee, setAppraiserFee] = useState(toStr(initial?.appraiser_fee));
   const [saving, setSaving] = useState(false);
@@ -53,6 +56,10 @@ export function FinanceEntryCard({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
 
   async function save(confirmDuplicate = false) {
+    if ((hasVat && !toNum(vatOffset)) || (hasReinst && !toNum(reinstatement))) {
+      setMsg({ ok: false, text: 'סימנת "כן" — נא להזין את הסכום' });
+      return;
+    }
     setSaving(true);
     setMsg(null);
     const r = await saveFinanceEntry(caseId, {
@@ -71,8 +78,8 @@ export function FinanceEntryCard({
       deposit_check_due_date: hasDeposit ? depositDue || null : null,
       claim_check_amount: claimType === "צד ג'" ? toNum(claimCheckAmount) : null,
       deposit_check_amount: hasDeposit ? toNum(depositAmount) : null,
-      vat_offset: toNum(vatOffset),
-      reinstatement: toNum(reinstatement),
+      vat_offset: hasVat ? toNum(vatOffset) : null,
+      reinstatement: hasReinst ? toNum(reinstatement) : null,
       appraiser_fee: claimType === "צד ג'" ? toNum(appraiserFee) : null,
     }, confirmDuplicate);
     setSaving(false);
@@ -161,14 +168,8 @@ export function FinanceEntryCard({
           <label className={label}>השתתפות עצמית</label>
           <input value={deductible} onChange={(e) => setDeductible(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
         </div>
-        <div>
-          <label className={label}>קיזוז מע״מ (אם יש)</label>
-          <input value={vatOffset} onChange={(e) => setVatOffset(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
-        </div>
-        <div>
-          <label className={label}>כינון (אם יש)</label>
-          <input value={reinstatement} onChange={(e) => setReinstatement(e.target.value)} inputMode="decimal" className={input} dir="ltr" />
-        </div>
+        <YesNoAmount label="מתקזז מע״מ?" yes={hasVat} setYes={setHasVat} amount={vatOffset} setAmount={setVatOffset} input={input} labelClass={label} />
+        <YesNoAmount label="כינון?" yes={hasReinst} setYes={setHasReinst} amount={reinstatement} setAmount={setReinstatement} input={input} labelClass={label} />
         {claimType === "צד ג'" && (
           <div>
             <label className={label}>שכר טרחת שמאי</label>
@@ -242,6 +243,54 @@ export function FinanceEntryCard({
           {saving ? 'שומר…' : initial ? 'עדכן' : 'שמור'}
         </button>
         {msg && <span className={`text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`}>{msg.text}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** כן / לא, and the amount only when "כן". */
+function YesNoAmount({
+  label,
+  yes,
+  setYes,
+  amount,
+  setAmount,
+  input,
+  labelClass,
+}: {
+  label: string;
+  yes: boolean | null;
+  setYes: (v: boolean) => void;
+  amount: string;
+  setAmount: (v: string) => void;
+  input: string;
+  labelClass: string;
+}) {
+  return (
+    <div>
+      <label className={labelClass}>{label}</label>
+      <div className="flex gap-2 items-center">
+        {([true, false] as const).map((v) => (
+          <button
+            key={String(v)}
+            type="button"
+            onClick={() => setYes(v)}
+            className={`h-10 px-4 rounded-lg border text-sm font-semibold ${yes === v ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}
+          >
+            {v ? 'כן' : 'לא'}
+          </button>
+        ))}
+        {yes && (
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            placeholder="סכום ₪"
+            aria-label={`${label} סכום`}
+            className={`${input} flex-1`}
+            dir="ltr"
+          />
+        )}
       </div>
     </div>
   );
