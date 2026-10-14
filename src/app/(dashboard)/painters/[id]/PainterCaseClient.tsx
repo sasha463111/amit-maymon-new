@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus, setPainterFinished } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
-import { PAINTER_STATUS_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { CameraBatchUpload } from '@/components/CameraBatchUpload';
+import { PainterStatusPicker } from './PainterStatusPicker';
 
 type PainterRequest = {
   id: string;
@@ -407,13 +407,8 @@ export function PainterCaseClient({
             )}
             {carLabel && <p className="text-gray-500 text-sm mt-0.5">{carLabel}</p>}
           </div>
-          {painterStatus && (
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
-              {painterStatus === 'OTHER'
-                ? (painterStatusOtherText?.trim() || 'אחר')
-                : PAINTER_STATUS_LABELS[painterStatus] ?? painterStatus}
-            </span>
-          )}
+          {/* Status dropdown for the painter (Amit, 2026-10-14). */}
+          <PainterStatusPicker caseId={caseId} status={painterStatus} otherText={painterStatusOtherText} />
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm">

@@ -37,6 +37,9 @@ function carLineFor(row: Pick<PainterRow, 'car_vehicle_type' | 'car_make' | 'car
 }
 
 const PAINTER_STATUS_ICON: Record<string, string> = {
+  WAITING_TRANSPORT: '🚚',
+  WAITING_APPRAISER: '📋',
+  WRITTEN_OFF: '🚫',
   IN_WORK: '🔧',
   WAITING_PARTS: '⏳',
   PARTS_ARRIVED: '🎨',
@@ -46,6 +49,9 @@ const PAINTER_STATUS_ICON: Record<string, string> = {
 
 // Column header: colored fill + a bottom border in the deeper shade of the same hue.
 const PAINTER_STATUS_COLUMN_HEAD: Record<string, string> = {
+  WAITING_TRANSPORT: 'bg-sky-100 border-sky-400 text-sky-800',
+  WAITING_APPRAISER: 'bg-orange-100 border-orange-400 text-orange-800',
+  WRITTEN_OFF: 'bg-red-100 border-red-400 text-red-800',
   IN_WORK: 'bg-blue-100 border-blue-400 text-blue-800',
   WAITING_PARTS: 'bg-yellow-100 border-yellow-400 text-yellow-800',
   PARTS_ARRIVED: 'bg-purple-100 border-purple-400 text-purple-800',
@@ -53,7 +59,7 @@ const PAINTER_STATUS_COLUMN_HEAD: Record<string, string> = {
   OTHER: 'bg-stone-200 border-stone-400 text-stone-700',
 };
 
-const STATUS_ORDER = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', 'OTHER', ''];
+const STATUS_ORDER = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK', 'WAITING_APPRAISER', 'WAITING_TRANSPORT', 'WRITTEN_OFF', 'OTHER', ''];
 
 function PainterQuickView({ row, onClose }: { row: PainterRow; onClose: () => void }) {
   useEffect(() => {
@@ -160,7 +166,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
   );
 
   const groups: Record<string, PainterRow[]> = {
-    READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], OTHER: [], '': [],
+    READY_FOR_RELEASE: [], PARTS_ARRIVED: [], WAITING_PARTS: [], IN_WORK: [], WAITING_APPRAISER: [], WAITING_TRANSPORT: [], WRITTEN_OFF: [], OTHER: [], '': [],
   };
   for (const row of inBranch) {
     const key = row.painter_status ?? '';
@@ -170,7 +176,10 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
     groups[k].sort((a, b) => (b.opened_at ?? '').localeCompare(a.opened_at ?? '')); // newest first
   }
 
-  const statusKeys = STATUS_ORDER.filter((k) => k !== '' || groups[''].length > 0);
+  // The four core statuses always show; the others only when a car is in them
+  // (2026-10-14: nine boxes would crowd the strip).
+  const CORE = ['READY_FOR_RELEASE', 'PARTS_ARRIVED', 'WAITING_PARTS', 'IN_WORK'];
+  const statusKeys = STATUS_ORDER.filter((k) => CORE.includes(k) || groups[k].length > 0);
   const shownKeys = (statusFilter !== null ? [statusFilter] : statusKeys).filter((k) => groups[k].length > 0);
   const labelFor = (k: string) => (k ? PAINTER_STATUS_LABELS[k] : 'ללא סטטוס פחח');
   const headFor = (k: string) => (k ? PAINTER_STATUS_COLUMN_HEAD[k] : 'bg-gray-100 border-gray-300 text-gray-600');

@@ -87,15 +87,29 @@ export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export type ExtraStatus = 'IN_TREATMENT' | 'REJECTED' | 'DONE';
 
-export type PainterStatus = 'IN_WORK' | 'WAITING_PARTS' | 'PARTS_ARRIVED' | 'READY_FOR_RELEASE' | 'OTHER';
+export type PainterStatus =
+  | 'WAITING_TRANSPORT'
+  | 'WAITING_APPRAISER'
+  | 'WAITING_PARTS'
+  | 'PARTS_ARRIVED'
+  | 'IN_WORK'
+  | 'READY_FOR_RELEASE'
+  | 'WRITTEN_OFF'
+  | 'OTHER';
 
 // Record<string, ...>, same reasoning as PROFESSIONAL_STEP_LABELS above —
 // callers index with a plain string off a DB row.
+// Order = order in the dropdown (Amit, 2026-10-14: same list for painters
+// too). cases.painter_status is plain text, so adding keys needs no migration;
+// READY_FOR_RELEASE keeps its key (setPainterFinished writes it).
 export const PAINTER_STATUS_LABELS: Record<string, string> = {
-  IN_WORK: 'בעבודה',
+  WAITING_TRANSPORT: 'ממתין לשינוע',
+  WAITING_APPRAISER: 'ממתין לשמאות',
   WAITING_PARTS: 'ממתין לחלקים',
   PARTS_ARRIVED: 'הגיעו חלקים',
-  READY_FOR_RELEASE: 'מוכן לשחרור',
+  IN_WORK: 'בעבודה',
+  READY_FOR_RELEASE: 'גמר עבודה - שחרור',
+  WRITTEN_OFF: 'מושבת',
   OTHER: 'אחר',
 };
 

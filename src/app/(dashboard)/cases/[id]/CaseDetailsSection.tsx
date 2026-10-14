@@ -7,6 +7,7 @@ import type { PainterStatus } from '@/types/database';
 import { PAINTER_STATUS_LABELS, SUB_CLAIM_LABELS, INSURANCE_TYPE_LABELS, CLAIM_TYPE_LABELS } from '@/types/database';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate, formatIsoDate } from '@/lib/dates';
+import { BranchSwitcher } from './BranchSwitcher';
 
 /**
  * Extracted from CaseDetailClientV2.tsx (second step of the god-component
@@ -375,7 +376,15 @@ export function CaseDetailsSection({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-sm">
         {/* Read-only fields */}
-        <InfoRow label="סניף" value={branchName} />
+        {['CEO', 'SERVICE_MANAGER', 'SERVICE_ADVISOR', 'OFFICE'].includes(role ?? '') ? (
+          // Move the case to the branch that repairs it (Amit, 2026-10-14).
+          <div className="flex items-center gap-2 py-1.5">
+            <span className="text-gray-500 font-medium min-w-[7.5rem] flex-shrink-0">סניף:</span>
+            <span className="text-gray-800"><BranchSwitcher caseId={caseId} branchName={branchName} /></span>
+          </div>
+        ) : (
+          <InfoRow label="סניף" value={branchName} />
+        )}
         <InfoRow label="נפתח" value={openedAt ? formatDate(openedAt) : '—'} />
         <InfoRow label="גיל רכב" value={displayAge} />
 
@@ -469,7 +478,7 @@ export function CaseDetailsSection({
             ))}
           </select>
           {painterStatus === 'READY_FOR_RELEASE' && (
-            <span className="mr-3 text-sm font-medium text-green-700">✓ מוכן לשחרור</span>
+            <span className="mr-3 text-sm font-medium text-green-700">✓ גמר עבודה - שחרור</span>
           )}
           {painterStatus === 'OTHER' && (
             <div className="mt-2">
