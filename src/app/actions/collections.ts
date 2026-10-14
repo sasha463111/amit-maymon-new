@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { PaymentRule } from '@/lib/collections';
 import { defaultStageDays, israelTimeToIso, israelWorkDateIn, stageRule } from '@/lib/collectionStages';
+import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
 
 const LEGAL_STAGE = 'טיפול משפטי';
 
@@ -43,7 +44,7 @@ async function me() {
 }
 
 const CASE_COLS =
-  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, legal_reason, updated_at, updated_by, ' +
+  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, legal_reason, vehicle_type, updated_at, updated_by, ' +
   // the case file (20261014350000)
   'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source, case_id, referral_id';
 
@@ -80,6 +81,8 @@ export type CollectionCase = {
   legal_closed_on: string | null;
   legal_recovered_amount: number | null;
   legal_reason: string | null;
+  /** Car type (Ministry of Transport wording) — from the repair case's car or the MoT lookup. */
+  vehicle_type: string | null;
   updated_at: string;
 } & CaseFileFields;
 
@@ -161,7 +164,7 @@ export async function listCollectionCases(): Promise<{
     collectors,
     terms: Object.fromEntries(((termRows.data ?? []) as PaymentRule[]).map((t) => [t.insurer, t])),
     isCeo,
-    canEditTerms: ctx.role === 'CEO',
+    canEditTerms: SUPERVISORS.has(ctx.role),
     myId: ctx.user.id,
   };
 }
@@ -310,6 +313,14 @@ export async function openCollectionCase(
     referralId = ((rf ?? []) as { id: string }[])[0]?.id ?? null;
   }
   let branchId: string | null = repairBranch;
+  // Car type for the header: the repair case's car, else the Ministry of Transport.
+  let vehicleType: string | null = null;
+  if (repairCaseId) {
+    const { data: car } = await db.from('cases').select('cars(vehicle_type)').eq('id', repairCaseId).maybeSingle();
+    const cr = (car as { cars: { vehicle_type: string | null } | { vehicle_type: string | null }[] | null } | null)?.cars;
+    vehicleType = (Array.isArray(cr) ? cr[0] : cr)?.vehicle_type ?? null;
+  }
+  if (!vehicleType) vehicleType = (await lookupVehicleByPlate(plate).catch(() => null))?.vehicle_type ?? null;
   // Appraiser + deductible come with the closure data, so the case file starts filled.
   let fromClosure: { appraiser_name: string | null; deductible: number | null; appraiser_fee: number | null } = { appraiser_name: null, deductible: null, appraiser_fee: null };
   if (input.finance_closure_id) {
@@ -347,6 +358,7 @@ export async function openCollectionCase(
       event_date: input.event_date || null,
       claim_number: txt(input.claim_number, 60),
       customer_phone: txt(input.customer_phone, 30),
+      vehicle_type: vehicleType,
       ...(legal
         ? {
             status: 'LEGAL',
@@ -500,7 +512,8 @@ const STATUS_HE: Record<CollectionStatus, string> = { OPEN: 'בטיפול', PAID
 /** Payment agreement per payer (CEO only). rule null removes it. */
 export async function saveInsurerTerm(insurer: string, rule: Omit<PaymentRule, 'insurer'> | null): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
-  if (!ctx || ctx.role !== 'CEO') return { error: 'רק המנכ"ל מעדכן הסכמי תשלום' };
+  // Amit, 14/10: only he and Chani see and edit the payment agreements.
+  if (!ctx || !SUPERVISORS.has(ctx.role)) return { error: 'רק עמית וחני מעדכנים הסכמי תשלום' };
   const name = insurer.trim().slice(0, 80);
   if (!name) return { error: 'חסר שם חברה' };
   const db = serviceClient();

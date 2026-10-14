@@ -5,6 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { listCollectionCases, type CollectionCase } from '@/app/actions/collections';
 import type { PaymentRule } from '@/lib/collections';
+import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { CLAIM_STAGES } from '@/lib/collectionStages';
+
+const DEFAULT_SHORTCUTS = CLAIM_STAGES.slice(0, 6).map((s) => s.stage);
 import { loadWeeklySummary, type WeeklySummary } from '@/lib/collectionsWeekly.server';
 
 // The collection case file (Amit, 2026-10-14, after the collectors' BAFI
@@ -72,9 +76,10 @@ export async function getCollectionFile(id: string): Promise<{
   collectors: { id: string; name: string }[];
   terms: Record<string, PaymentRule>;
   supervisor: boolean;
+  shortcuts: string[];
   error?: string;
 }> {
-  const empty = { c: null, events: [], files: [], repairCaseId: null, collectors: [], terms: {}, supervisor: false };
+  const empty = { c: null, events: [], files: [], repairCaseId: null, collectors: [], terms: {}, supervisor: false, shortcuts: [] };
   const ctx = await me();
   if (!ctx) return { ...empty, error: 'אין הרשאה' };
   const row = await caseFor(ctx, id);
@@ -84,6 +89,15 @@ export async function getCollectionFile(id: string): Promise<{
   const list = await listCollectionCases();
   const c = list.cases.find((x) => x.id === id) ?? null;
   const { db } = ctx;
+  // Car type (Amit, 14/10): fetched once from the Ministry of Transport, then kept.
+  if (c && !c.vehicle_type) {
+    const v = await lookupVehicleByPlate(c.plate).catch(() => null);
+    if (v?.vehicle_type) {
+      c.vehicle_type = v.vehicle_type;
+      await db.from('collection_cases').update({ vehicle_type: v.vehicle_type } as never).eq('id', id);
+    }
+  }
+  const shortcuts = await myShortcuts(ctx);
 
   const [evRes, fileRes, fin] = await Promise.all([
     db.from('collection_case_events').select('id, kind, body, remind_at, remind_user, reminded_at, remind_done_at, created_by, created_at').eq('case_id', id).order('created_at', { ascending: false }).limit(500),
@@ -149,7 +163,41 @@ export async function getCollectionFile(id: string): Promise<{
     collectors: list.collectors,
     terms: list.terms,
     supervisor: ctx.supervisor,
+    shortcuts,
   };
+}
+
+// ---- my stage shortcuts + free-text status updates (Amit, 14/10) -------------
+
+async function myShortcuts(ctx: Ctx): Promise<string[]> {
+  const { data } = await ctx.db.from('collection_user_prefs').select('stage_shortcuts').eq('user_id', ctx.user.id).maybeSingle();
+  const list = (data as { stage_shortcuts: string[] | null } | null)?.stage_shortcuts;
+  return list ?? DEFAULT_SHORTCUTS;
+}
+
+/** Each collector edits her own one-tap stage buttons. */
+export async function saveStageShortcuts(list: string[]): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const clean = Array.from(new Set((list ?? []).map((x) => String(x).trim().slice(0, 60)).filter(Boolean))).slice(0, 20);
+  const { error } = await ctx.db.from('collection_user_prefs').upsert({ user_id: ctx.user.id, stage_shortcuts: clean, updated_at: new Date().toISOString() } as never, { onConflict: 'user_id' });
+  if (error) return { error: error.message };
+  revalidatePath('/collections', 'layout');
+  return { ok: true };
+}
+
+/** "עדכון מצב במלל חופשי" — a status line, stamped with date and time. */
+export async function addStatusUpdate(caseId: string, text: string): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  if (!(await caseFor(ctx, caseId))) return { error: 'התיק לא נמצא' };
+  const body = (text ?? '').trim().slice(0, 1000);
+  if (body.length < 2) return { error: 'נא לכתוב את העדכון' };
+  const { error } = await ctx.db.from('collection_case_events').insert({ case_id: caseId, kind: 'STATUS', body: `📝 ${body}`, created_by: ctx.user.id } as never);
+  if (error) return { error: error.message };
+  await ctx.db.from('collection_cases').update({ updated_at: new Date().toISOString(), updated_by: ctx.user.id } as never).eq('id', caseId);
+  revalidatePath(`/collections/${caseId}`);
+  return { ok: true };
 }
 
 /** A line in "טיפול שוטף", optionally with a reminder (pushed by the cron within ~30 min of its time). */

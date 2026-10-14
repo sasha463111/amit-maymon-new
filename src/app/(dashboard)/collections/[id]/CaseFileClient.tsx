@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
-import { addCaseEvent, finishReminder, reassignCase, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
+import { addCaseEvent, addStatusUpdate, finishReminder, reassignCase, saveStageShortcuts, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
 import { FeedbackButton } from '../Feedback';
 import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/dates';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStageDays, israelWorkDateIn } from '@/lib/collectionStages';
 import { WhatsAppDocs } from './WhatsAppDocs';
+import { shortVehicle } from '@/lib/vehicleLabel';
 import { STATUS_CHIP, STATUS_LABEL, StatusEditor, ils, isClosed, num, toCollect, today } from '../shared';
 
 // The collection case file (Amit, 2026-10-14). The list is the outer view;
@@ -42,6 +43,7 @@ export function CaseFileClient({
   terms,
   supervisor,
   collectors = [],
+  shortcuts = [],
 }: {
   c: CollectionCase;
   events: CaseEvent[];
@@ -50,6 +52,7 @@ export function CaseFileClient({
   terms: Record<string, PaymentRule>;
   supervisor: boolean;
   collectors?: { id: string; name: string }[];
+  shortcuts?: string[];
 }) {
   const [tab, setTab] = useState<Tab>('log');
   const t0 = today();
@@ -82,7 +85,10 @@ export function CaseFileClient({
       <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">תיק תביעה · רכב {c.plate}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              תיק תביעה · רכב {c.plate}
+              {c.vehicle_type && <span className="text-lg font-semibold text-gray-600"> · {shortVehicle(c.vehicle_type)}</span>}
+            </h1>
             <p className="text-sm text-gray-500">{c.customer_name ?? ''}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-sm font-bold ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
@@ -90,6 +96,7 @@ export function CaseFileClient({
         <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
           <Fields>
             <F label="משלם">{payerOf(c) || '—'}</F>
+            <F label="סוג רכב">{c.vehicle_type ? shortVehicle(c.vehicle_type) : null}</F>
             <F label="סוג תביעה">{c.claim_type}</F>
             <F label="מספר תביעה">{c.claim_number}</F>
             <F label="מצב תביעה" tone="text-indigo-700 font-semibold">{c.claim_stage}</F>
@@ -98,7 +105,7 @@ export function CaseFileClient({
           </Fields>
           <Fields>
             <F label="לגבייה" tone="text-gray-900 font-bold">{ils(toCollect(c))}</F>
-            <F label="צפי כניסת כסף" tone={late ? 'text-red-700 font-semibold' : undefined}>
+            <F label="מועד פירעון צ׳ק" tone={late ? 'text-red-700 font-semibold' : undefined}>
               {isClosed(c) && c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ איחור ${daysLate(exp.date, t0)} ימים` : ''}` : exp.basis}
             </F>
             <F label="נפתח">{formatDate(c.opened_at)}</F>
@@ -110,7 +117,7 @@ export function CaseFileClient({
             )}
           </Fields>
         </div>
-        <StagePicker c={c} />
+        <StagePicker c={c} shortcuts={shortcuts} events={events} />
         <div className="flex gap-2 flex-wrap pt-1">
           <Link href={`/collections/${c.id}/letter`} className="h-10 px-4 inline-flex items-center rounded-xl border border-gray-300 bg-white text-sm font-semibold">
             📄 צור מכתב דרישת תשלום
@@ -662,17 +669,22 @@ function StatusTab({ c }: { c: CollectionCase }) {
   );
 }
 
-/** Claim stage — a list of the known stages + "אחר" (free text), and the
- *  automatic reminder to the collector (Amit, 14/10). Logged in "טיפול שוטף". */
-function StagePicker({ c }: { c: CollectionCase }) {
+/** Claim stage (Amit, 14/10): her own one-tap buttons (✏️ editable), the full
+ *  list + "אחר" with the automatic reminder, and free-text status updates —
+ *  every update stamped with date and time (in "טיפול שוטף" too). */
+function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: string[]; events: CaseEvent[] }) {
   const router = useRouter();
-  const known = CLAIM_STAGES.some((x) => x.stage === c.claim_stage);
   const [sel, setSel] = useState('');
   const [other, setOther] = useState('');
   const [days, setDays] = useState<string>('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [mine, setMine] = useState<string[]>(shortcuts);
+  const [addStage, setAddStage] = useState('');
+  const [note, setNote] = useState('');
   const stage = sel === OTHER ? other.trim() : sel;
+  const updates = events.filter((e) => e.kind === 'STATUS').slice(0, 5);
 
   function pick(v: string) {
     setSel(v);
@@ -681,25 +693,99 @@ function StagePicker({ c }: { c: CollectionCase }) {
     setDays(d ? String(d) : '0');
   }
 
-  async function save() {
-    if (!stage) return setMsg('נא לבחור מצב או לכתוב');
-    setBusy(true);
-    const n = Number(days);
-    const r = await updateCollectionCase(c.id, { claim_stage: stage, stage_remind_days: n > 0 ? n : null });
-    setBusy(false);
+  async function setStage(st: string, n: number | undefined) {
+    if (!st) return setMsg('נא לבחור מצב או לכתוב');
+    setBusy(st);
+    setMsg(null);
+    const r = await updateCollectionCase(c.id, n === undefined ? { claim_stage: st } : { claim_stage: st, stage_remind_days: n > 0 ? n : null });
+    setBusy(null);
     if (r.error) return setMsg(`⚠️ ${r.error}`);
-    setMsg(n > 0 ? `✓ עודכן · ⏰ תזכורת ל-${formatDate(israelWorkDateIn(n))} 09:00` : '✓ עודכן');
+    const d = n === undefined ? defaultStageDays(st) : n;
+    setMsg(d && d > 0 ? `✓ עודכן ל"${st}" · ⏰ תזכורת ל-${formatDate(israelWorkDateIn(d))} 09:00` : `✓ עודכן ל"${st}"`);
     setSel('');
     setOther('');
     router.refresh();
   }
 
+  async function saveMine() {
+    setBusy('edit');
+    const r = await saveStageShortcuts(mine);
+    setBusy(null);
+    if (r.error) return setMsg(`⚠️ ${r.error}`);
+    setEditing(false);
+    router.refresh();
+  }
+
+  async function addNote() {
+    setBusy('note');
+    setMsg(null);
+    const r = await addStatusUpdate(c.id, note);
+    setBusy(null);
+    if (r.error) return setMsg(`⚠️ ${r.error}`);
+    setNote('');
+    router.refresh();
+  }
+
   const input = 'h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
+  const chip = 'h-9 px-3 rounded-full border text-sm font-semibold';
   return (
-    <div className="rounded-xl bg-gray-50 border border-gray-200 p-2 space-y-2">
+    <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 space-y-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">עדכון מצב תביעה בלחיצה:</p>
+          {!editing ? (
+            <button type="button" onClick={() => { setMine(shortcuts); setEditing(true); }} className="text-xs font-semibold text-indigo-700">✏️ עריכת הקיצורים שלי</button>
+          ) : (
+            <span className="flex gap-2">
+              <button type="button" disabled={!!busy} onClick={() => void saveMine()} className="text-xs font-bold text-green-700">✓ שמירה</button>
+              <button type="button" onClick={() => setEditing(false)} className="text-xs text-gray-500">ביטול</button>
+            </span>
+          )}
+        </div>
+        {!editing ? (
+          <div className="flex gap-1.5 flex-wrap">
+            {shortcuts.map((st) => (
+              <button
+                key={st}
+                type="button"
+                disabled={!!busy}
+                onClick={() => void (st !== c.claim_stage && setStage(st, undefined))}
+                className={`${chip} ${c.claim_stage === st ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'} disabled:opacity-60`}
+              >
+                {busy === st ? '…' : st}
+              </button>
+            ))}
+            {shortcuts.length === 0 && <span className="text-xs text-gray-400">אין קיצורים — ✏️ עריכה כדי להוסיף</span>}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-1.5 flex-wrap">
+              {mine.map((st, i) => (
+                <span key={st} className={`${chip} bg-white border-gray-300 inline-flex items-center gap-1`}>
+                  {i > 0 && (
+                    <button type="button" onClick={() => setMine((m) => { const x = [...m]; [x[i - 1], x[i]] = [x[i], x[i - 1]]; return x; })} className="text-gray-400" aria-label="הזזה ימינה">›</button>
+                  )}
+                  {st}
+                  <button type="button" onClick={() => setMine((m) => m.filter((x) => x !== st))} className="text-red-500 font-bold" aria-label="הסרה">✕</button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2 flex-wrap items-end">
+              <label className="text-xs text-gray-500">
+                הוספת קיצור (מהרשימה או מלל חופשי)
+                <input value={addStage} onChange={(e) => setAddStage(e.target.value)} list="stages" maxLength={60} className={`${input} block w-64`} />
+              </label>
+              <button type="button" onClick={() => { const v = addStage.trim(); if (v && !mine.includes(v)) setMine([...mine, v]); setAddStage(''); }} className="h-10 px-4 rounded-lg border border-gray-900 bg-white text-sm font-bold">
+                ➕ הוספה
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-2 items-end">
         <label className="text-xs text-gray-500">
-          עדכון מצב תביעה
+          או מהרשימה המלאה
           <select value={sel} onChange={(e) => pick(e.target.value)} className={`${input} block`}>
             <option value="">{c.claim_stage ? `כרגע: ${c.claim_stage}` : '— בחירה —'}</option>
             {CLAIM_STAGES.map((x) => (
@@ -725,13 +811,35 @@ function StagePicker({ c }: { c: CollectionCase }) {
                 ))}
               </select>
             </label>
-            <button type="button" disabled={busy} onClick={() => void save()} className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50">
+            <button type="button" disabled={!!busy} onClick={() => void setStage(stage, Number(days))} className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50">
               {busy ? 'שומר…' : 'עדכון'}
             </button>
           </>
         )}
       </div>
-      {!known && c.claim_stage && !sel && <p className="text-[11px] text-gray-500">המצב הנוכחי לא מהרשימה (נכתב כ&quot;אחר&quot; או מבאפי).</p>}
+
+      <div className="space-y-1.5">
+        <label className="text-xs text-gray-500 block">
+          עדכון מצב במלל חופשי (נשמר עם תאריך ושעה)
+          <div className="flex gap-2">
+            <input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && note.trim() && void addNote()} maxLength={1000} className={`${input} block flex-1`} placeholder="למשל: דיברתי עם השמאי, הדוח יצא מחר" />
+            <button type="button" disabled={!!busy || note.trim().length < 2} onClick={() => void addNote()} className="h-10 px-4 rounded-lg bg-gray-900 text-white text-sm font-bold disabled:opacity-40">
+              {busy === 'note' ? '…' : 'הוספת עדכון'}
+            </button>
+          </div>
+        </label>
+        {updates.length > 0 && (
+          <ul className="text-sm space-y-0.5">
+            {updates.map((e) => (
+              <li key={e.id} className="flex gap-2">
+                <span className="text-gray-400 whitespace-nowrap">{at(e.created_at)}</span>
+                <span className="text-gray-800 min-w-0 break-words">{e.body}</span>
+                {e.created_by_name && <span className="text-gray-400 whitespace-nowrap">· {e.created_by_name}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {msg && <p className="text-sm">{msg}</p>}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { lookupPlateHistory, type ExistingCollection, type Feedback, type MyReminder, type RepairMatch } from '@/app/actions/collectionFile';
@@ -24,6 +24,8 @@ import { daysLate, expectedPayment, payDateByRule, payerOf, ruleLabel, workingDa
 import { INSURERS, financeDefaultsFromSubType } from '@/lib/finance';
 import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toCollect, today } from './shared';
 import { formatDate } from '@/lib/dates';
+import { shortVehicle } from '@/lib/vehicleLabel';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 import { LEGAL_REASONS, OTHER } from '@/lib/collectionStages';
 
 type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback' | 'summary';
@@ -59,6 +61,20 @@ export function CollectionsClient({
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  // Table or cards (Amit, 14/10: "כמו עכשיו וכמו בתיקים") — remembered per device.
+  const [view, setView] = useState<'table' | 'cards'>('table');
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('collections.view');
+      if (v === 'cards' || v === 'table') setView(v);
+    } catch {}
+  }, []);
+  const chooseView = (v: 'table' | 'cards') => {
+    setView(v);
+    try {
+      localStorage.setItem('collections.view', v);
+    } catch {}
+  };
   const t0 = today();
   const q = query.trim().toLowerCase();
 
@@ -91,21 +107,23 @@ export function CollectionsClient({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">ניהול תביעות ביטוח</h1>
-          <p className="text-sm text-gray-500">תיקי תביעה לפי מסלקת. פוליסה / הסדר ג׳: צפי לפי אישור התשלום + ההסכם. צד ג׳: לפי מועד פירעון הצ׳ק.</p>
+          <p className="text-sm text-gray-500">תיקי תביעה לפי מסלקת. מועד הפירעון — צד ג׳: לפי הצ׳ק; פוליסה / הסדר ג׳: לפי אישור התשלום וההסכם.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setOpening(true)} className="h-11 px-5 rounded-xl bg-red-600 text-white text-sm font-bold">
             📂 פתיחת תיק
           </button>
           <FeedbackButton />
-          <button type="button" onClick={() => setShowTerms((v) => !v)} className="h-11 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
-            ⚙️ הסכמי תשלום
-          </button>
+          {isCeo && (
+            <button type="button" onClick={() => setShowTerms((v) => !v)} className="h-11 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
+              ⚙️ הסכמי תשלום
+            </button>
+          )}
         </div>
       </div>
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
       {reminders.length > 0 && <RemindersStrip reminders={reminders} />}
-      {showTerms && <TermsPanel terms={terms} canEdit={canEditTerms} />}
+      {showTerms && isCeo && <TermsPanel terms={terms} canEdit={canEditTerms} />}
 
       {isCeo && (
         <div className="flex gap-2 flex-wrap">
@@ -163,11 +181,27 @@ export function CollectionsClient({
         dir="auto"
       />
 
+      <div className="flex gap-1.5">
+        {([['table', '📋 טבלה'], ['cards', '🔲 כרטיסים']] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => chooseView(k)} className={`h-9 px-3 rounded-lg border text-sm font-semibold ${view === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {view === 'cards' ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {shown.length === 0 && <p className="text-gray-400 py-8 text-center col-span-full">אין תיקים בתצוגה הזו</p>}
+          {shown.map(({ c, exp }) => (
+            <ClaimCard key={c.id} c={c} exp={exp} late={overdue({ c, exp })} t0={t0} showCollector={isCeo} />
+          ))}
+        </div>
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
         <table className="min-w-[1150px] w-full text-sm">
           <thead className="bg-gray-50 text-gray-600 text-xs">
             <tr>
-              {['נפתח', 'רכב / לקוח', 'חברה', 'סוג', 'לגבייה', 'צ׳ק (צד ג׳)', 'אישור תשלום', 'צפי כניסת כסף', 'סטטוס', 'ימי עבודה', ''].map((h) => (
+              {['נפתח', 'רכב / לקוח', 'חברה', 'סוג', 'לגבייה', 'צ׳ק (צד ג׳)', 'אישור תשלום', 'מועד פירעון צ׳ק', 'סטטוס', 'ימי עבודה', ''].map((h) => (
                 <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -193,6 +227,7 @@ export function CollectionsClient({
                     <Link href={`/collections/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-indigo-700">
                       {c.plate}
                     </Link>
+                    {c.vehicle_type && <div className="text-[11px] text-gray-600">{shortVehicle(c.vehicle_type)}</div>}
                     {c.customer_name && <div className="text-[11px] text-gray-500">{c.customer_name}</div>}
                     {c.claim_number && <div className="text-[11px] text-gray-500">תביעה: {c.claim_number}</div>}
                     {c.claim_stage && <div className="text-[11px] text-indigo-700">{c.claim_stage}</div>}
@@ -257,6 +292,7 @@ export function CollectionsClient({
           </tbody>
         </table>
       </div>
+      )}
 
       </>
       )}
@@ -568,6 +604,41 @@ export function OpenCaseDialog({ isCeo, collectors, onClose, legal = false }: { 
   );
 }
 
+/** One claim as a card — the "כרטיסים" view, like the repair cases list. Every value with its label. */
+function ClaimCard({ c, exp, late, t0, showCollector }: { c: CollectionCase; exp: { date: string | null; basis: string }; late: boolean; t0: string; showCollector: boolean }) {
+  return (
+    <Link href={`/collections/${c.id}`} className={`block rounded-2xl border bg-white p-3 space-y-2 hover:shadow-md transition-shadow ${late ? 'border-red-300' : 'border-gray-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <LicensePlate plate={c.plate} size="md" />
+          {c.vehicle_type && <p className="text-xs text-gray-600 mt-1 truncate">{shortVehicle(c.vehicle_type)}</p>}
+        </div>
+        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-sm">
+        <dt className="text-gray-400">לקוח:</dt>
+        <dd className="truncate">{c.customer_name ?? '—'}</dd>
+        <dt className="text-gray-400">משלם:</dt>
+        <dd className="truncate">{payerOf(c) || '—'}</dd>
+        <dt className="text-gray-400">מצב:</dt>
+        <dd className="truncate text-indigo-700 font-semibold">{c.claim_stage ?? '—'}</dd>
+        <dt className="text-gray-400">לגבייה:</dt>
+        <dd className="font-bold">{ils(toCollect(c))}</dd>
+        <dt className="text-gray-400">מועד פירעון:</dt>
+        <dd className={late ? 'text-red-700 font-semibold' : ''}>
+          {isClosed(c) && c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ ${daysLate(exp.date, t0)} ימים` : ''}` : '—'}
+        </dd>
+        {showCollector && (
+          <>
+            <dt className="text-gray-400">מסלקת:</dt>
+            <dd className="truncate">{c.assigned_name ?? '—'}</dd>
+          </>
+        )}
+      </dl>
+    </Link>
+  );
+}
+
 type LegalForm = { reason: string; other: string; lawyer: string; sent_on: string; claim_amount: string };
 
 /** Why it goes to legal (Amit: "סיבת התביעה המשפטית — הפרשים וכדומה") + lawyer, date, amount. */
@@ -652,7 +723,7 @@ function TermsPanel({ terms, canEdit }: { terms: Record<string, PaymentRule>; ca
       <div>
         <h2 className="font-bold">הסכמי תשלום עם חברות הביטוח</h2>
         <p className="text-xs text-gray-500">
-          צפי התשלום בפוליסה / הסדר ג׳ מחושב מתאריך אישור התשלום לפי ההסכם. {canEdit ? 'אפשר לערוך ולהוסיף חברה.' : 'עריכה — מנכ״ל בלבד.'}
+          צפי התשלום בפוליסה / הסדר ג׳ מחושב מתאריך אישור התשלום לפי ההסכם. {canEdit ? 'אפשר לערוך ולהוסיף חברה.' : 'עריכה — עמית וחני בלבד.'}
         </p>
       </div>
       <div className="overflow-x-auto">
