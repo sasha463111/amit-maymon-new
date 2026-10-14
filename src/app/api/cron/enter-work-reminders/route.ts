@@ -770,6 +770,55 @@ async function runPartReturnAlerts(supabase: ServiceClient) {
   return { alerted7, alerted14 };
 }
 
+/** Round 8 — monthly supplier statements (Amit, 2026-10-14): on the first
+ *  work day of the month, from 09:00, remind the warehouse manager (Roey) to
+ *  ask every supplier for its statement (כרטסת) and reconcile it against the
+ *  returns screen, and tell the CEO that Roey was reminded. Once per month:
+ *  the key is claimed in public.sent_emails and released if nothing was sent. */
+async function runSupplierStatementReminder(supabase: ServiceClient, isoDate: string) {
+  const key = `supplier-statement/${isoDate.slice(0, 7)}`;
+  const { data: claimed, error: claimErr } = await supabase
+    .from('sent_emails')
+    .upsert({ key } as never, { onConflict: 'key', ignoreDuplicates: true })
+    .select('key');
+  if (claimErr) return { error: claimErr.message };
+  if (!claimed?.length) return { skipped: 'already sent this month' };
+
+  const { data: people } = await supabase.from('profiles').select('id, role').in('role', ['WAREHOUSE_MANAGER', 'CEO']).eq('is_active', true);
+  const list = (people ?? []) as { id: string; role: string }[];
+  const managers = list.filter((p) => p.role === 'WAREHOUSE_MANAGER').map((p) => p.id);
+  const ceo = list.find((p) => p.role === 'CEO')?.id; // the fan-out copies it to other CEOs
+  if (!managers.length) {
+    await supabase.from('sent_emails').delete().eq('key', key);
+    return { skipped: 'no active warehouse manager' };
+  }
+
+  const [y, m] = isoDate.split('-').map(Number);
+  const prev = m === 1 ? `12/${y - 1}` : `${String(m - 1).padStart(2, '0')}/${y}`;
+  const rows = managers.map((id) => ({
+    user_id: id,
+    type: 'SUPPLIER_STATEMENT_REMINDER',
+    title: '📋 תזכורת חודשית: כרטסות מהספקים',
+    body: `לבקש מכל ספק כרטסת לחודש ${prev} ולהשוות מול מסך ההחזרות — זיכויים שחסרים או פערים בסכום יקפצו מיד.`,
+    action_url: '/returns',
+  }));
+  if (ceo) {
+    rows.push({
+      user_id: ceo,
+      type: 'SUPPLIER_STATEMENT_FYI',
+      title: '📋 רועי קיבל תזכורת לבקש כרטסות מהספקים',
+      body: `התזכורת החודשית נשלחה (כרטסות לחודש ${prev}).`,
+      action_url: '/returns',
+    });
+  }
+  const { error } = await supabase.from('notifications').insert(rows as never);
+  if (error) {
+    await supabase.from('sent_emails').delete().eq('key', key);
+    return { error: error.message };
+  }
+  return { sent: rows.length };
+}
+
 export async function GET(req: NextRequest) {
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
@@ -815,5 +864,11 @@ export async function GET(req: NextRequest) {
   // 7. Parts returns not collected for 7 / 14 days.
   const partReturns = await runPartReturnAlerts(supabase).catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns });
+  // 8. Monthly supplier statements — first work day of the month, from 09:00.
+  // Only in the month's first week, so it never fires mid-month (first run: Nov).
+  const supplierStatements = (isWeekend || isHoliday || hour < 9 || Number(isoDate.slice(8, 10)) > 7)
+    ? { skipped: true as const }
+    : await runSupplierStatementReminder(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements });
 }

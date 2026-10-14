@@ -57,7 +57,34 @@ export async function buildDailyReport(db: SupabaseClient, isoDate: string) {
     { title: 'תיקים פתוחים', counts: count((openCasesRes.data ?? []) as { branch_id: string }[]) },
     { title: 'תיקים שנסגרו היום', counts: count((closedRes.data ?? []) as { branch_id: string }[]) },
   ];
-  return { branches, sections };
+  // The plates themselves (Amit, 2026-10-14) — staff compare the report with
+  // their own list of cars that came in, instead of only a count.
+  const { data: openedData, error: openedErr } = await db
+    .from('cases')
+    .select('branch_id, customer_name, created_at, cars(license_plate)')
+    .is('deleted_at', null)
+    .gte('created_at', start)
+    .lt('created_at', end)
+    .order('created_at');
+  if (openedErr) throw new Error(openedErr.message);
+  const opened = ((openedData ?? []) as { branch_id: string; customer_name: string | null; cars: { license_plate: string | null } | { license_plate: string | null }[] | null }[])
+    .map((c) => ({
+      branchId: c.branch_id,
+      plate: (Array.isArray(c.cars) ? c.cars[0]?.license_plate : c.cars?.license_plate) ?? '—',
+      customer: c.customer_name,
+    }));
+  return { branches, sections, opened };
+}
+
+/** 12345678 → 123-45-678, 1234567 → 12-345-67 (as on the plate). */
+function plateLabel(p: string): string {
+  if (/^\d{8}$/.test(p)) return `${p.slice(0, 3)}-${p.slice(3, 5)}-${p.slice(5)}`;
+  if (/^\d{7}$/.test(p)) return `${p.slice(0, 2)}-${p.slice(2, 5)}-${p.slice(5)}`;
+  return p;
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
 }
 
 function buildHtml(dateLabel: string, report: Awaited<ReturnType<typeof buildDailyReport>>, appUrl: string): string {
@@ -88,6 +115,19 @@ function buildHtml(dateLabel: string, report: Awaited<ReturnType<typeof buildDai
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
+    <h3 style="margin:22px 0 8px;font-size:16px;color:#1c1917;">רכבים שנפתחו היום (${report.opened.length})</h3>
+    ${report.opened.length === 0
+      ? '<p style="margin:0;font-size:14px;color:#78716c;">לא נפתחו תיקים היום.</p>'
+      : report.branches
+          .map((b) => {
+            const list = report.opened.filter((o) => o.branchId === b.id);
+            if (!list.length) return '';
+            return `<p style="margin:10px 0 4px;font-size:14px;font-weight:bold;color:#57534e;">${esc(b.name)} (${list.length})</p>
+              <ul style="margin:0;padding-right:18px;font-size:14px;color:#1c1917;line-height:1.7;">${list
+                .map((o) => `<li><span dir="ltr" style="font-weight:bold;">${esc(plateLabel(o.plate))}</span>${o.customer ? ` · ${esc(o.customer)}` : ''}</li>`)
+                .join('')}</ul>`;
+          })
+          .join('')}
     <p style="margin:20px 0 0;"><a href="${appUrl}" style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:bold;font-size:14px;">כניסה למערכת</a></p>
   </div>
 </body>

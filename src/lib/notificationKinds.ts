@@ -16,6 +16,9 @@ const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
   // receives its own kind (notification_is_relevant in the DB).
   OFFICE: ['READY_FOR_OFFICE', 'REFERRAL_FOLLOW_UP', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   PAINTER: ['PAINTER_REQUEST', 'DIRECT_NOTE'],
+  // Warehouse (2026-10-14): the monthly statements reminder and overdue returns need Roey to act.
+  WAREHOUSE_MANAGER: ['SUPPLIER_STATEMENT_REMINDER', 'PART_RETURN_OVERDUE_7', 'DIRECT_NOTE'],
+  WAREHOUSE: ['PART_RETURN_NEW', 'DIRECT_NOTE'],
 };
 
 /** Types that need this role to act. Unknown role: only personal notes. */
