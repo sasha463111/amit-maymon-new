@@ -15,6 +15,7 @@ import {
 } from '@/app/actions/partReturns';
 import { PART_RETURN_ALERT_DAYS, PART_RETURN_REASONS, PART_RETURN_STATUS_LABEL, PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { SignaturePad } from '@/components/SignaturePad';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import type { SupplierDocRow } from '@/app/actions/supplierDocs';
 import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
@@ -260,6 +261,9 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
   const [driver, setDriver] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Driver's signature (Amit, 2026-10-14): signed on the screen at hand-over.
+  const [signing, setSigning] = useState(false);
+  const [signature, setSignature] = useState<string | null>(null);
 
   if (rows.length === 0) return <p className="text-gray-400 py-8 text-center">אין חלקים שממתינים לאיסוף 👍</p>;
 
@@ -276,12 +280,19 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
   async function confirm() {
     setBusy(true);
     setErr(null);
-    const res = await handOverToDriver(Array.from(selected), driver);
+    if (!signature) {
+      setBusy(false);
+      setErr('חסרה חתימת הנהג');
+      return;
+    }
+    const res = await handOverToDriver(Array.from(selected), driver, signature);
     setBusy(false);
     if ('error' in res && res.error) {
       setErr(res.error);
       return;
     }
+    setSigning(false);
+    setSignature(null);
     try {
       if (supplier) localStorage.setItem(`returns-driver:${supplier}`, driver.trim());
     } catch {
@@ -327,12 +338,40 @@ function PickupTab({ rows, canHandOver, onDone }: { rows: PartReturnRow[]; canHa
           <button
             type="button"
             disabled={busy || selected.size === 0 || !driver.trim()}
-            onClick={() => void confirm()}
+            onClick={() => {
+              setErr(null);
+              setSignature(null);
+              setSigning(true);
+            }}
             className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-bold disabled:opacity-40"
           >
             {busy ? 'שומר…' : `🚚 נמסר לנהג (${selected.size})`}
           </button>
-          {err && <span className="text-sm text-red-700 w-full">⚠️ {err}</span>}
+          {err && !signing && <span className="text-sm text-red-700 w-full">⚠️ {err}</span>}
+        </div>
+      )}
+
+      {signing && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-2" onClick={() => !busy && setSigning(false)}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-lg">✍️ חתימת הנהג</h2>
+              <button type="button" onClick={() => setSigning(false)} disabled={busy} className="text-gray-400 text-xl" aria-label="סגור">✕</button>
+            </div>
+            <p className="text-sm text-gray-700">
+              אני, <b>{driver.trim()}</b>, מאשר/ת שקיבלתי {selected.size} {selected.size === 1 ? 'חלק' : 'חלקים'} להחזרה לספק <b>{supplier}</b>.
+            </p>
+            <SignaturePad onChange={setSignature} />
+            {err && <p className="text-sm text-red-700">⚠️ {err}</p>}
+            <button
+              type="button"
+              disabled={busy || !signature}
+              onClick={() => void confirm()}
+              className="w-full h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-40"
+            >
+              {busy ? 'שומר…' : `אישור מסירה (${selected.size})`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -435,6 +474,7 @@ function CreditTab({ rows, canCredit, onDone }: { rows: PartReturnRow[]; canCred
             🚚 נמסר ל{r.driver_name ?? '—'} · {r.collected_at ? formatDate(r.collected_at) : ''} ({r.collected_at ? daysSince(r.collected_at) : 0} ימים)
             {r.collected_by_name ? ` · ע״י ${r.collected_by_name}` : ''}
           </p>
+          {r.driver_signature_url && <SignatureThumb url={r.driver_signature_url} />}
           {r.status === 'DISPUTE' && <p className="text-xs text-amber-700 font-semibold mt-1">⚠️ בבירור: {r.dispute_note}</p>}
           <InvoiceButtons r={r} canCredit={false} onDone={onDone} />
           {canCredit && open?.id !== r.id && (
@@ -811,6 +851,7 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
                   <>
                     {r.driver_name}
                     <div className="text-[11px] text-gray-400">{formatDate(r.collected_at)}</div>
+                    {r.driver_signature_url && <SignatureThumb url={r.driver_signature_url} />}
                   </>
                 ) : (
                   '—'
@@ -832,5 +873,24 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
         </div>
       )}
     </div>
+  );
+}
+
+/** The driver's signature from the hand-over — tap to enlarge. */
+function SignatureThumb({ url }: { url: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(true); }} className="mt-1 block" title="חתימת הנהג">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="חתימת הנהג" className="h-10 w-auto rounded border border-gray-200 bg-white" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="חתימת הנהג" className="max-w-full max-h-full rounded-lg bg-white" />
+        </div>
+      )}
+    </>
   );
 }

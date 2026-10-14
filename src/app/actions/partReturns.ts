@@ -73,6 +73,8 @@ export type PartReturnRow = {
   /** Photo of the supplier's original invoice / of the credit invoice. */
   invoice_url: string | null;
   credit_invoice_url: string | null;
+  /** The driver's signature at hand-over (PNG). */
+  driver_signature_url: string | null;
   sticker_date: string | null;
   mine: boolean;
 };
@@ -223,7 +225,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
   type Raw = Record<string, unknown> & {
     id: string; branch_id: string; case_id: string | null; plate: string | null; supplier: string; supplier_other: string | null;
     reason: string; reason_other: string | null; sticker_path: string; created_by: string; collected_by: string | null;
-    invoice_path: string | null; credit_invoice_path: string | null;
+    invoice_path: string | null; credit_invoice_path: string | null; driver_signature_path: string | null;
     credit_amount: string | number | null;
   };
   const raw = (data ?? []) as Raw[];
@@ -237,7 +239,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     caseIds.length ? supabase.from('cases').select('id, customer_name').in('id', caseIds) : Promise.resolve({ data: [] }),
     raw.length && db
       ? db.storage.from(BUCKET).createSignedUrls(
-          raw.flatMap((r) => [r.sticker_path, r.invoice_path, r.credit_invoice_path]).filter((x): x is string => !!x),
+          raw.flatMap((r) => [r.sticker_path, r.invoice_path, r.credit_invoice_path, r.driver_signature_path]).filter((x): x is string => !!x),
           60 * 60,
         )
       : Promise.resolve({ data: [] }),
@@ -276,6 +278,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     photo_url: urlByPath.get(r.sticker_path) ?? null,
     invoice_url: r.invoice_path ? urlByPath.get(r.invoice_path) ?? null : null,
     credit_invoice_url: r.credit_invoice_path ? urlByPath.get(r.credit_invoice_path) ?? null : null,
+    driver_signature_url: r.driver_signature_path ? urlByPath.get(r.driver_signature_path) ?? null : null,
     sticker_date: (r.sticker_date as string | null) ?? null,
     mine: r.created_by === user.id,
   }));
@@ -283,7 +286,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
 }
 
 /** Parts handed to a supplier's driver — several at once. */
-export async function handOverToDriver(ids: string[], driverName: string) {
+export async function handOverToDriver(ids: string[], driverName: string, signaturePng: string) {
   const ctx = await me();
   if (!ctx) return { error: 'לא מחובר' };
   if (!HANDOVER_ROLES.has(ctx.profile.role) || !canUsePartReturns(ctx.profile.role)) return { error: 'אין הרשאה לעדכן מסירה' };
@@ -292,13 +295,27 @@ export async function handOverToDriver(ids: string[], driverName: string) {
   const list = Array.from(new Set(ids)).slice(0, 200);
   if (!list.length) return { error: 'לא נבחרו חלקים' };
 
+  // Driver's signature (Amit, 2026-10-14) — one PNG for the whole hand-over.
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(signaturePng ?? '');
+  if (!m) return { error: 'חסרה חתימת הנהג' };
+  const png = Buffer.from(m[1], 'base64');
+  if (png.length < 200 || png.length > 600_000) return { error: 'חתימה לא תקינה' };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const sigPath = `signatures/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.png`;
+  const { error: sigErr } = await db.storage.from(BUCKET).upload(sigPath, png, { contentType: 'image/png', upsert: false });
+  if (sigErr) return { error: `שמירת החתימה נכשלה: ${sigErr.message}` };
+
   const { data, error } = await ctx.supabase
     .from('part_returns')
-    .update({ status: 'COLLECTED', collected_at: new Date().toISOString(), collected_by: ctx.user.id, driver_name: driver, updated_at: new Date().toISOString() } as never)
+    .update({ status: 'COLLECTED', collected_at: new Date().toISOString(), collected_by: ctx.user.id, driver_name: driver, driver_signature_path: sigPath, updated_at: new Date().toISOString() } as never)
     .in('id', list)
     .eq('status', 'WAITING_PICKUP')
     .select('id');
-  if (error) return { error: error.message };
+  if (error || !(data ?? []).length) {
+    await db.storage.from(BUCKET).remove([sigPath]);
+    if (error) return { error: error.message };
+  }
   revalidatePath('/returns');
   return { ok: true, updated: (data ?? []).length };
 }
