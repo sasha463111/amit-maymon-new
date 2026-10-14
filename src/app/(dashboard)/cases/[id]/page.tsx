@@ -247,7 +247,7 @@ async function CaseDetailData({
       ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
       : Promise.resolve({ data: null })) as Promise<AuditResult>,
     supabase.from('profiles').select('id, full_name').eq('is_bodywork_advisor', true).eq('is_active', true).order('full_name'),
-    supabase.from('painter_requests').select('id, description, request_type, status, response_note, created_at').eq('case_id', id).order('created_at', { ascending: false }),
+    supabase.from('painter_requests').select('id, description, request_type, status, response_note, created_at, received_at').eq('case_id', id).order('created_at', { ascending: false }),
   ]);
 
   const painterRequests = (painterRequestsData ?? []) as {

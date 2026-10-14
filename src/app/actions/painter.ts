@@ -347,3 +347,34 @@ export async function setPainterFinished(caseId: string, finished: boolean) {
   revalidatePath(`/cases/${caseId}`);
   return { ok: true, at: finished ? now : null };
 }
+
+/** "קיבלתי את תוספת החלקים" (Amit, 2026-10-14): the painter confirms that the
+ *  extra parts of a PARTS request (already marked done by an advisor) reached
+ *  him. painter_requests UPDATE is for advisors under RLS, so the write goes
+ *  through the service client — after checking the caller can see the request. */
+export async function confirmPartsReceived(requestId: string, received: boolean): Promise<{ error?: string; ok?: true }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'לא מחובר' };
+  const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const role = (prof as { role: string } | null)?.role;
+  if (!role || !['PAINTER', 'CEO', 'SERVICE_MANAGER'].includes(role)) return { error: 'אין הרשאה' };
+  const { data: row } = await supabase.from('painter_requests').select('id, case_id, request_type, status').eq('id', requestId).maybeSingle();
+  const req = row as { id: string; case_id: string; request_type: string; status: string } | null;
+  if (!req) return { error: 'הבקשה לא נמצאה' };
+  if (req.request_type !== 'PARTS') return { error: 'רק בבקשת חלקים' };
+  if (req.status !== 'DONE') return { error: 'אפשר לאשר קבלה אחרי שהיועץ סימן שהחלקים טופלו' };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: 'שרת לא מוגדר' };
+  const { createClient: createServiceClient } = await import('@supabase/supabase-js');
+  const db = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await db
+    .from('painter_requests')
+    .update({ received_at: received ? new Date().toISOString() : null, received_by: received ? user.id : null } as never)
+    .eq('id', requestId);
+  if (error) return { error: error.message };
+  revalidatePath(`/painters/${req.case_id}`);
+  revalidatePath(`/cases/${req.case_id}`);
+  return { ok: true };
+}

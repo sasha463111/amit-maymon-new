@@ -24,6 +24,8 @@ export interface PainterRequestRow {
   status: string;
   response_note: string | null;
   created_at: string;
+  /** PARTS: the painter confirmed the extra parts reached him. */
+  received_at?: string | null;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -112,6 +114,11 @@ export function PainterRequestsSection({
                   <p className="text-sm text-gray-800 mt-0.5">{r.description}</p>
                   {r.response_note && (
                     <p className="text-xs text-gray-500 mt-1">💬 {r.response_note}</p>
+                  )}
+                  {r.request_type === 'PARTS' && r.status === 'DONE' && (
+                    <p className={`text-xs font-semibold mt-1 ${r.received_at ? 'text-green-700' : 'text-amber-700'}`}>
+                      {r.received_at ? `✓ הפחח אישר שתוספת החלקים התקבלה · ${formatDateTime(r.received_at)}` : '⏳ ממתין לאישור הפחח שתוספת החלקים התקבלה'}
+                    </p>
                   )}
                   <p className="text-[11px] text-gray-400 mt-1">{formatDateTime(r.created_at)}</p>
                 </div>

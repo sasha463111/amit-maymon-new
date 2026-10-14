@@ -101,7 +101,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
   // Load existing painter requests + their images
   const { data: requestsData } = await supabase
     .from('painter_requests')
-    .select('id, description, request_type, status, response_note, created_at')
+    .select('id, description, request_type, status, response_note, created_at, received_at')
     .eq('case_id', params.id)
     .order('created_at', { ascending: false });
 
@@ -112,6 +112,7 @@ export default async function PainterCasePage({ params }: { params: { id: string
     status: string;
     response_note: string | null;
     created_at: string;
+    received_at: string | null;
   }[];
 
   // Fetch images for all requests + build signed URLs for inline display.

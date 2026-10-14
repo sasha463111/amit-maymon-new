@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus, setPainterFinished } from '@/app/actions/painter';
+import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus, setPainterFinished, confirmPartsReceived } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
@@ -19,6 +19,8 @@ type PainterRequest = {
   response_note?: string | null;
   created_at: string;
   image_urls?: string[];
+  /** PARTS request: the painter confirmed the extra parts reached him (Amit, 14/10). */
+  received_at?: string | null;
 };
 
 const REQUEST_STATUS_LABELS: Record<string, string> = {
@@ -74,16 +76,34 @@ interface Props {
 function PainterRequestItem({
   req,
   canManage,
+  canConfirmReceipt,
   isHighlighted,
   onStatusUpdate,
 }: {
   req: PainterRequest;
   canManage: boolean;
+  /** Painter / CEO / SM: tick "קיבלתי את תוספת החלקים". */
+  canConfirmReceipt: boolean;
   isHighlighted?: boolean;
   onStatusUpdate: (newStatus: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [receivedAt, setReceivedAt] = useState<string | null>(req.received_at ?? null);
+
+  async function toggleReceived(next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const prev = receivedAt;
+    setReceivedAt(next ? new Date().toISOString() : null); // optimistic
+    const res = await confirmPartsReceived(req.id, next);
+    if (res?.error) {
+      setError(res.error);
+      setReceivedAt(prev);
+    }
+    setBusy(false);
+  }
 
   async function setStatus(next: 'PENDING' | 'IN_PROGRESS' | 'DONE') {
     if (busy) return;
@@ -140,6 +160,30 @@ function PainterRequestItem({
                 />
               </a>
             ))}
+          </div>
+        )}
+        {/* Extra parts supplied → the painter confirms they reached him (Amit, 14/10). */}
+        {req.request_type === 'PARTS' && req.status === 'DONE' && (
+          <div className={`mt-2 rounded-lg border p-2 ${receivedAt ? 'border-green-200 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+            {canConfirmReceipt ? (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!receivedAt}
+                  disabled={busy}
+                  onChange={(e) => void toggleReceived(e.target.checked)}
+                  className="w-6 h-6 rounded border-2 border-gray-400 accent-green-600 cursor-pointer shrink-0"
+                />
+                <span className={`text-sm font-semibold ${receivedAt ? 'text-green-800' : 'text-amber-900'}`}>
+                  {receivedAt ? '✓ תוספת החלקים התקבלה' : 'קיבלתי את תוספת החלקים'}
+                </span>
+              </label>
+            ) : (
+              <span className={`text-sm font-semibold ${receivedAt ? 'text-green-800' : 'text-amber-900'}`}>
+                {receivedAt ? '✓ הפחח אישר שתוספת החלקים התקבלה' : '⏳ ממתין לאישור הפחח שתוספת החלקים התקבלה'}
+              </span>
+            )}
+            {receivedAt && <p className="text-[11px] text-green-700 mt-0.5">{formatCheckedAt(receivedAt)}</p>}
           </div>
         )}
         {canManage && req.status !== 'DONE' && (
@@ -704,6 +748,7 @@ export function PainterCaseClient({
                 key={req.id}
                 req={req}
                 canManage={role === 'SERVICE_MANAGER' || role === 'CEO' || role === 'SERVICE_ADVISOR'}
+                canConfirmReceipt={role === 'PAINTER' || role === 'CEO' || role === 'SERVICE_MANAGER'}
                 isHighlighted={req.id === highlightId}
                 onStatusUpdate={(newStatus) => {
                   setRequests((prev) =>
