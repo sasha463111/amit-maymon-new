@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { canUsePartReturns } from '@/lib/partReturns';
+import { readInvoice, type InvoiceFields } from '@/lib/invoiceReader';
 
 // Supplier invoices / delivery notes archive (Amit, 2026-10-14) — a tab in
 // "החזרות". Table public.supplier_documents (migration 20261014160000). Reads
@@ -198,4 +199,24 @@ export async function verifySupplierDoc(id: string): Promise<{ error?: string; o
   if (error) return { error: error.message };
   revalidatePath('/returns');
   return { ok: true };
+}
+
+/** Read a photographed invoice / delivery note / credit invoice with Claude
+ *  (Amit, 2026-10-14). { unavailable } = no API key or API error — the form
+ *  simply stays manual. */
+export async function readSupplierDocPhoto(formData: FormData): Promise<{ fields?: InvoiceFields; unavailable?: true; error?: string }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const photo = formData.get('photo');
+  if (!(photo instanceof File) || photo.size === 0 || !photo.type.startsWith('image/')) return { error: 'אין תמונה' };
+  if (photo.size > 5 * 1024 * 1024) return { error: 'התמונה גדולה מדי' };
+  const base64 = Buffer.from(await photo.arrayBuffer()).toString('base64');
+  const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) ? photo.type : 'image/jpeg';
+  try {
+    const fields = await readInvoice({ base64, mediaType });
+    return fields ? { fields } : { unavailable: true };
+  } catch (e) {
+    console.error('[readSupplierDocPhoto]', e);
+    return { unavailable: true };
+  }
 }

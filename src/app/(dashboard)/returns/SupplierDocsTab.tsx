@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { createSupplierDoc, verifySupplierDoc, type SupplierDocDuplicate, type SupplierDocRow } from '@/app/actions/supplierDocs';
+import { createSupplierDoc, readSupplierDocPhoto, verifySupplierDoc, type SupplierDocDuplicate, type SupplierDocRow } from '@/app/actions/supplierDocs';
 import type { PartReturnRow } from '@/app/actions/partReturns';
 import { PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 import { shrinkImage } from '@/lib/shrinkImage';
@@ -231,6 +231,27 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
   const [preview, setPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reading the photo (Amit, 2026-10-14): fills only fields still empty —
+  // whatever the employee already typed stays.
+  const [reading, setReading] = useState<'idle' | 'reading' | 'filled' | 'manual'>('idle');
+  const [dateTouched, setDateTouched] = useState(false);
+
+  async function readPhoto(f: File) {
+    setReading('reading');
+    const fd = new FormData();
+    fd.append('photo', await shrinkImage(f));
+    const r = await readSupplierDocPhoto(fd).catch(() => ({ unavailable: true as const }));
+    const x = 'fields' in r ? r.fields : undefined;
+    if (!x) return setReading('manual');
+    if (x.doc_type) setDocType(x.doc_type);
+    if (x.supplier) setSupplier((v) => v || x.supplier!);
+    if (x.supplier === 'אחר' && x.supplier_other) setSupplierOther((v) => v || x.supplier_other!);
+    if (x.invoice_number) setNumber((v) => v || x.invoice_number!);
+    if (x.plate) setPlate((v) => v || x.plate!);
+    if (x.amount != null) setAmount((v) => v || String(x.amount));
+    if (x.invoice_date && !dateTouched) setDate(x.invoice_date);
+    setReading('filled');
+  }
 
   const [duplicates, setDuplicates] = useState<SupplierDocDuplicate[] | null>(null);
 
@@ -284,9 +305,13 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
               const f = e.target.files?.[0] ?? null;
               setPhoto(f);
               setPreview(f ? URL.createObjectURL(f) : null);
+              if (f) void readPhoto(f);
             }}
           />
         </label>
+        {reading === 'reading' && <p className="text-sm text-indigo-700">🔍 קורא את המסמך…</p>}
+        {reading === 'filled' && <p className="text-sm text-green-700">✨ מולא אוטומטית — בדקו את הפרטים והשלימו מה שחסר</p>}
+        {reading === 'manual' && <p className="text-sm text-gray-500">ממלאים את הפרטים ידנית</p>}
 
         <div className="flex gap-2">
           {Object.entries(DOC_TYPE_LABEL).map(([k, v]) => (
@@ -301,8 +326,9 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
           ))}
         </div>
 
+        <label className="block text-xs text-gray-500">ספק</label>
         <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className={input}>
-          <option value="">ספק…</option>
+          <option value="">בחרו ספק…</option>
           {PART_RETURN_SUPPLIERS.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -310,10 +336,22 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
         {supplier === 'אחר' && <input value={supplierOther} onChange={(e) => setSupplierOther(e.target.value)} placeholder="שם הספק" className={input} />}
 
         <div className="grid grid-cols-2 gap-2">
-          <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="מספר מסמך" className={input} dir="ltr" />
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={input} />
-          <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="מספר רכב (רשות)" inputMode="numeric" className={input} />
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="סכום ₪ (רשות)" inputMode="decimal" className={input} />
+          <label className="text-xs text-gray-500">
+            {docType === 'DELIVERY_NOTE' ? 'מספר תעודת משלוח' : docType === 'CREDIT_INVOICE' ? 'מספר חשבונית זיכוי' : 'מספר חשבונית'}
+            <input value={number} onChange={(e) => setNumber(e.target.value)} className={`${input} mt-0.5`} dir="ltr" />
+          </label>
+          <label className="text-xs text-gray-500">
+            {docType === 'DELIVERY_NOTE' ? 'תאריך התעודה' : 'תאריך החשבונית'}
+            <input type="date" value={date} onChange={(e) => { setDate(e.target.value); setDateTouched(true); }} className={`${input} mt-0.5`} />
+          </label>
+          <label className="text-xs text-gray-500">
+            מספר רכב (אם מופיע)
+            <input value={plate} onChange={(e) => setPlate(e.target.value)} inputMode="numeric" className={`${input} mt-0.5`} dir="ltr" />
+          </label>
+          <label className="text-xs text-gray-500">
+            סכום כולל מע״מ ₪
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={`${input} mt-0.5`} dir="ltr" />
+          </label>
         </div>
         {branches.length > 1 && (
           <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={input}>
@@ -323,7 +361,10 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
             ))}
           </select>
         )}
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="הערות (רשות)" className={input} />
+        <label className="block text-xs text-gray-500">
+          הערות (רשות)
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} className={`${input} mt-0.5`} />
+        </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         {duplicates && (

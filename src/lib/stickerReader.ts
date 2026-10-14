@@ -24,7 +24,7 @@ export type StickerFields = {
 
 let cachedKey: { value: string | null; at: number } | null = null;
 
-async function apiKey(): Promise<string | null> {
+export async function apiKey(): Promise<string | null> {
   if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
   if (cachedKey && Date.now() - cachedKey.at < 10 * 60_000) return cachedKey.value;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
