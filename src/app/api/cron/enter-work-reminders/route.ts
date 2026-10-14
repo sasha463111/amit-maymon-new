@@ -819,6 +819,43 @@ async function runSupplierStatementReminder(supabase: ServiceClient, isoDate: st
   return { sent: rows.length };
 }
 
+/** Round 9 — collection-case reminders (Amit, 2026-10-14): a reminder set in
+ *  a case's running log ("טיפול שוטף") reaches the person it is for — bell +
+ *  push — once its time has come. Any hour, any day: the collector chose the
+ *  time. Claimed first (reminded_at), so a parallel run can't send it twice. */
+async function runCollectionReminders(supabase: ServiceClient) {
+  const { data } = await supabase
+    .from('collection_case_events')
+    .select('id, case_id, body, remind_user, collection_cases!inner(plate, customer_name, closed_at)')
+    .lte('remind_at', new Date().toISOString())
+    .is('reminded_at', null)
+    .is('remind_done_at', null)
+    .not('remind_at', 'is', null)
+    .limit(200);
+  type C = { plate: string; customer_name: string | null; closed_at: string | null };
+  const rows = (data ?? []) as { id: string; case_id: string; body: string; remind_user: string; collection_cases: C | C[] }[];
+  let sent = 0;
+  for (const r of rows) {
+    const { data: claimed } = await supabase
+      .from('collection_case_events')
+      .update({ reminded_at: new Date().toISOString() } as never)
+      .eq('id', r.id)
+      .is('reminded_at', null)
+      .select('id');
+    if (!claimed || (claimed as unknown[]).length === 0) continue;
+    const c = Array.isArray(r.collection_cases) ? r.collection_cases[0] : r.collection_cases;
+    await supabase.from('notifications').insert({
+      user_id: r.remind_user,
+      type: 'COLLECTION_REMINDER',
+      title: `⏰ תזכורת גבייה — רכב ${c?.plate ?? ''}`,
+      body: [c?.customer_name, r.body].filter(Boolean).join(' · ').slice(0, 300),
+      action_url: `/collections/${r.case_id}#r-${r.id}`,
+    } as never);
+    sent++;
+  }
+  return { due: rows.length, sent };
+}
+
 export async function GET(req: NextRequest) {
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
@@ -870,5 +907,8 @@ export async function GET(req: NextRequest) {
     ? { skipped: true as const }
     : await runSupplierStatementReminder(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements });
+  // 9. Collection-case reminders — whenever they are due.
+  const collectionReminders = await runCollectionReminders(supabase).catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders });
 }

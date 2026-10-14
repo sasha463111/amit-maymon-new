@@ -9,7 +9,7 @@
 // actions/push.ts): the CEO is the primary recipient only of approvals; every
 // other CEO notification is an audit copy.
 const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
-  CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE', 'CASE_RESTORED'],
+  CEO: ['PENDING_APPROVAL', 'APPROVAL_NEEDED', 'APPROVAL_REQUIRED', 'DIRECT_NOTE', 'CASE_RESTORED', 'COLLECTION_REMINDER'],
   SERVICE_MANAGER: ['CEO_REJECTED', 'BLOCKED_ACTION', 'PAINTER_REQUEST', 'EXTRA_CREATED', 'DIRECT_NOTE'],
   SERVICE_ADVISOR: ['PAINTER_REQUEST', 'CEO_REJECTED', 'BLOCKED_ACTION', 'DIRECT_NOTE'],
   // Referrals office and closure office share the role; each only ever
@@ -19,6 +19,9 @@ const ACTION_TYPES_BY_ROLE: Record<string, readonly string[]> = {
   // Warehouse (2026-10-14): the monthly statements reminder and overdue returns need Roey to act.
   WAREHOUSE_MANAGER: ['SUPPLIER_STATEMENT_REMINDER', 'PART_RETURN_OVERDUE_7', 'DIRECT_NOTE'],
   WAREHOUSE: ['PART_RETURN_NEW', 'DIRECT_NOTE'],
+  // Collections (2026-10-14): reminders the collector set in a case's running log.
+  COLLECTIONS: ['COLLECTION_REMINDER', 'DIRECT_NOTE'],
+  ACCOUNTANT: ['COLLECTION_REMINDER', 'DIRECT_NOTE'],
 };
 
 /** Types that need this role to act. Unknown role: only personal notes. */

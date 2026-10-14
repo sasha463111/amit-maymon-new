@@ -40,7 +40,9 @@ async function me() {
 }
 
 const CASE_COLS =
-  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, updated_at, updated_by';
+  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, updated_at, updated_by, ' +
+  // the case file (20261014350000)
+  'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source';
 
 export type CollectionCase = {
   id: string;
@@ -75,9 +77,41 @@ export type CollectionCase = {
   legal_closed_on: string | null;
   legal_recovered_amount: number | null;
   updated_at: string;
-};
+} & CaseFileFields;
 
-const NUMS = ['amount_due', 'vat_offset', 'reinstatement', 'claim_check_amount', 'received_amount', 'offset_amount', 'legal_claim_amount', 'legal_recovered_amount'] as const;
+/** The case-file fields (Amit 14/10, after the BAFI review). */
+export type CaseFileFields = {
+  claim_number: string | null;
+  claim_stage: string | null;
+  event_date: string | null;
+  customer_phone: string | null;
+  claimed_amount: number | null;
+  approved_amount: number | null;
+  appraiser_name: string | null;
+  appraiser_phone: string | null;
+  appraiser_email: string | null;
+  appraiser_damage: number | null;
+  appraiser_fee: number | null;
+  depreciation: number | null;
+  deductible: number | null;
+  salvage_value: number | null;
+  extra_expenses: number | null;
+  insurer_handler: string | null;
+  insurer_handler_phone: string | null;
+  insurer_handler_email: string | null;
+  tp_plate: string | null;
+  tp_insurer: string | null;
+  tp_claim_number: string | null;
+  tp_owner_name: string | null;
+  tp_owner_phone: string | null;
+  legal_claim_number: string | null;
+  external_ref?: string | null;
+  source?: string;
+};
+const FILE_TEXT = ['claim_number', 'claim_stage', 'customer_phone', 'appraiser_name', 'appraiser_phone', 'appraiser_email', 'insurer_handler', 'insurer_handler_phone', 'insurer_handler_email', 'tp_plate', 'tp_insurer', 'tp_claim_number', 'tp_owner_name', 'tp_owner_phone', 'legal_claim_number'] as const;
+const FILE_MONEY = ['claimed_amount', 'approved_amount', 'appraiser_damage', 'appraiser_fee', 'depreciation', 'deductible', 'salvage_value', 'extra_expenses'] as const;
+
+const NUMS = ['amount_due', 'vat_offset', 'reinstatement', 'claim_check_amount', 'received_amount', 'offset_amount', 'legal_claim_amount', 'legal_recovered_amount', ...FILE_MONEY] as const;
 
 export async function listCollectionCases(): Promise<{
   cases: CollectionCase[];
@@ -105,7 +139,7 @@ export async function listCollectionCases(): Promise<{
   if (casesRes.error) return { ...empty, isCeo, myId: ctx.user.id, error: casesRes.error.message };
   const nameById = new Map(((people.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]));
   const branchById = new Map(((branches.data ?? []) as { id: string; name: string }[]).map((b) => [b.id, b.name]));
-  const cases = ((casesRes.data ?? []) as Record<string, unknown>[]).map((c) => {
+  const cases = ((casesRes.data ?? []) as unknown as Record<string, unknown>[]).map((c) => {
     const out = { ...c } as Record<string, unknown>;
     for (const k of NUMS) out[k] = c[k] == null ? null : Number(c[k]);
     out.assigned_name = nameById.get(c.assigned_to as string) ?? null;
@@ -237,10 +271,14 @@ export async function openCollectionCase(
   }
 
   let branchId: string | null = null;
+  // Appraiser + deductible come with the closure data, so the case file starts filled.
+  let fromClosure: { appraiser_name: string | null; deductible: number | null; appraiser_fee: number | null } = { appraiser_name: null, deductible: null, appraiser_fee: null };
   if (input.finance_closure_id) {
-    const { data: fin } = await db.from('finance_closures').select('id, branch_id').eq('id', input.finance_closure_id).maybeSingle();
+    const { data: fin } = await db.from('finance_closures').select('id, branch_id, appraiser, deductible, appraiser_fee').eq('id', input.finance_closure_id).maybeSingle();
     if (!fin) return { error: 'הנתונים לא נמצאו' };
-    branchId = (fin as { branch_id: string }).branch_id;
+    const f = fin as { branch_id: string; appraiser: string | null; deductible: string | number | null; appraiser_fee: string | number | null };
+    branchId = f.branch_id;
+    fromClosure = { appraiser_name: f.appraiser, deductible: f.deductible == null ? null : Number(f.deductible), appraiser_fee: f.appraiser_fee == null ? null : Number(f.appraiser_fee) };
     const { data: existing } = await db.from('collection_cases').select('id').eq('finance_closure_id', input.finance_closure_id).maybeSingle();
     if (existing) return { error: 'לתיק הזה כבר נפתח תיק גבייה' };
   }
@@ -263,17 +301,19 @@ export async function openCollectionCase(
       reinstatement: input.reinstatement,
       claim_check_due_date: input.claim_check_due_date || null,
       claim_check_amount: input.claim_check_amount,
+      ...fromClosure,
       created_by: ctx.user.id,
       updated_by: ctx.user.id,
     } as never)
     .select('id')
     .single();
   if (error) return { error: error.message.includes('uq_collection_cases_finance') ? 'לתיק הזה כבר נפתח תיק גבייה' : error.message };
+  await db.from('collection_case_events').insert({ case_id: (data as { id: string }).id, kind: 'SYSTEM', body: input.finance_closure_id ? 'התיק נפתח (הנתונים נשלפו מהסגירה)' : 'התיק נפתח', created_by: ctx.user.id } as never);
   revalidatePath('/collections');
   return { ok: true, id: (data as { id: string }).id };
 }
 
-export type CaseUpdate = Partial<CaseInput> & {
+export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'external_ref' | 'source'>> & {
   payment_approved_on?: string | null;
   status?: CollectionStatus;
   received_amount?: number | null;
@@ -300,9 +340,9 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
 
   const status = u.status ?? undefined;
   if (status && !STATUSES.has(status)) return { error: 'סטטוס לא תקין' };
-  const dates = [u.case_closed_on, u.claim_check_due_date, u.payment_approved_on, u.received_on, u.legal_sent_on, u.legal_closed_on];
+  const dates = [u.case_closed_on, u.claim_check_due_date, u.payment_approved_on, u.received_on, u.legal_sent_on, u.legal_closed_on, u.event_date];
   if (!dates.every(isDate)) return { error: 'תאריך לא תקין' };
-  const money = [u.amount_due, u.vat_offset, u.reinstatement, u.claim_check_amount, u.received_amount, u.offset_amount, u.legal_claim_amount, u.legal_recovered_amount];
+  const money = [u.amount_due, u.vat_offset, u.reinstatement, u.claim_check_amount, u.received_amount, u.offset_amount, u.legal_claim_amount, u.legal_recovered_amount, ...FILE_MONEY.map((k) => u[k])];
   if (!money.every(okMoney)) return { error: 'סכום לא תקין' };
   if (status === 'PARTIAL' && (!txt(u.partial_reason) || u.offset_amount == null)) return { error: 'בתשלום חלקי חובה סיבה וסכום קיזוז' };
   if ((status === 'PAID' || status === 'PARTIAL') && !u.received_on) return { error: 'נא להזין תאריך תשלום בפועל' };
@@ -323,6 +363,9 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   set('partial_reason', txt(u.partial_reason, 500));
   set('note', txt(u.note, 500));
   set('legal_lawyer', txt(u.legal_lawyer, 80));
+  for (const k of FILE_TEXT) set(k, txt(u[k], 120));
+  for (const k of FILE_MONEY) set(k, u[k] ?? null);
+  set('event_date', u.event_date || null);
   if (status) {
     patch.status = status;
     // Closed when paid (fully or with an offset), or when the legal case is closed.
@@ -330,11 +373,19 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
     patch.closed_at = closes ? cur.closed_at ?? new Date().toISOString() : null;
   }
 
+  const { data: before } = status ? await db.from('collection_cases').select('status').eq('id', id).maybeSingle() : { data: null };
   const { error } = await db.from('collection_cases').update(patch as never).eq('id', id);
   if (error) return { error: error.message };
+  const prev = (before as { status: CollectionStatus } | null)?.status;
+  if (status && prev && prev !== status) {
+    await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `סטטוס: ${STATUS_HE[prev]} ← ${STATUS_HE[status]}`, created_by: ctx.user.id } as never);
+  }
   revalidatePath('/collections');
+  revalidatePath(`/collections/${id}`);
   return { ok: true };
 }
+
+const STATUS_HE: Record<CollectionStatus, string> = { OPEN: 'בטיפול', PAID: 'שולם', PARTIAL: 'תשלום חלקי', DISPUTE: 'במחלוקת', LEGAL: 'מחלקה משפטית', BLOCKED: 'חסומה' };
 
 /** Payment agreement per payer (CEO only). rule null removes it. */
 export async function saveInsurerTerm(insurer: string, rule: Omit<PaymentRule, 'insurer'> | null): Promise<{ error?: string; ok?: true }> {

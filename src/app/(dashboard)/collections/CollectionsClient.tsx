@@ -1,7 +1,9 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { MyReminder } from '@/app/actions/collectionFile';
 import {
   lookupPlateForCollection,
   openCollectionCase,
@@ -15,38 +17,10 @@ import {
   type CollectionStatus,
   type PlateMatch,
 } from '@/app/actions/collections';
-import { daysLate, expectedPayment, payDateByRule, payerOf, ruleLabel, workingDaysBetween, PAYERS_EXTRA, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
-import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
+import { daysLate, expectedPayment, payDateByRule, payerOf, ruleLabel, workingDaysBetween, PAYERS_EXTRA, type PaymentRule } from '@/lib/collections';
+import { INSURERS } from '@/lib/finance';
+import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toCollect, today } from './shared';
 import { formatDate } from '@/lib/dates';
-
-const STATUS_LABEL: Record<CollectionStatus, string> = {
-  OPEN: 'בטיפול',
-  PAID: 'שולם',
-  PARTIAL: 'תשלום חלקי',
-  DISPUTE: 'במחלוקת',
-  LEGAL: 'מחלקה משפטית',
-  BLOCKED: 'חסומה',
-};
-const STATUS_CHIP: Record<CollectionStatus, string> = {
-  OPEN: 'bg-blue-100 text-blue-800',
-  PAID: 'bg-green-100 text-green-800',
-  PARTIAL: 'bg-amber-100 text-amber-800',
-  DISPUTE: 'bg-red-100 text-red-800',
-  LEGAL: 'bg-purple-100 text-purple-800',
-  BLOCKED: 'bg-gray-800 text-white',
-};
-
-const ils = (n: number | null | undefined) => (n == null ? '' : `₪${Math.round(n).toLocaleString('he-IL')}`);
-const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
-const num = (s: string): number | null => {
-  const v = s.replace(/[,₪\s]/g, '');
-  return v === '' ? null : Number(v);
-};
-const str = (n: number | null | undefined) => (n == null ? '' : String(n));
-
-/** To collect: the invoice, minus VAT offset and reinstatement when present. */
-const toCollect = (c: CollectionCase) => (c.amount_due ?? 0) - (c.vat_offset ?? 0) - (c.reinstatement ?? 0) - (c.offset_amount ?? 0);
-const isClosed = (c: CollectionCase) => !!c.closed_at;
 
 type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir';
 
@@ -57,6 +31,7 @@ export function CollectionsClient({
   isCeo,
   canEditTerms = false,
   shir = [],
+  reminders = [],
   error,
 }: {
   cases: CollectionCase[];
@@ -65,12 +40,13 @@ export function CollectionsClient({
   isCeo: boolean;
   canEditTerms?: boolean;
   shir?: ShirInvoice[];
+  reminders?: MyReminder[];
   error: string | null;
 }) {
+  const router = useRouter();
   const [who, setWho] = useState<string>('');
   const [tab, setTab] = useState<Tab>('active');
   const [query, setQuery] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const t0 = today();
@@ -117,6 +93,7 @@ export function CollectionsClient({
         </div>
       </div>
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
+      {reminders.length > 0 && <RemindersStrip reminders={reminders} />}
       {showTerms && <TermsPanel terms={terms} canEdit={canEditTerms} />}
 
       {isCeo && (
@@ -187,17 +164,19 @@ export function CollectionsClient({
             {shown.map(({ c, exp }) => {
               const late = overdue({ c, exp });
               const wd = workingDaysBetween(c.opened_at, c.closed_at ?? t0);
-              return editing === c.id ? (
-                <CaseEditor key={c.id} c={c} onClose={() => setEditing(null)} />
-              ) : (
-                <tr key={c.id} className={`align-top ${late ? 'bg-red-50/50' : ''}`}>
+              return (
+                <tr key={c.id} onClick={() => router.push(`/collections/${c.id}`)} className={`align-top cursor-pointer hover:bg-gray-50 ${late ? 'bg-red-50/50' : ''}`}>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">
                     {formatDate(c.opened_at)}
                     {isCeo && <div className="text-[11px] text-gray-500">{c.assigned_name}</div>}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {c.plate}
+                    <Link href={`/collections/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-indigo-700">
+                      {c.plate}
+                    </Link>
                     {c.customer_name && <div className="text-[11px] text-gray-500">{c.customer_name}</div>}
+                    {c.claim_number && <div className="text-[11px] text-gray-500">תביעה: {c.claim_number}</div>}
+                    {c.claim_stage && <div className="text-[11px] text-indigo-700">{c.claim_stage}</div>}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">{payerOf(c) || '—'}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{c.claim_type ?? ''}</td>
@@ -249,9 +228,9 @@ export function CollectionsClient({
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-center">{wd}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    <button type="button" onClick={() => setEditing(c.id)} className="px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold">
-                      עדכון
-                    </button>
+                    <Link href={`/collections/${c.id}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold">
+                      📂 פתיחה
+                    </Link>
                   </td>
                 </tr>
               );
@@ -264,84 +243,6 @@ export function CollectionsClient({
       )}
 
       {opening && <OpenCaseDialog isCeo={isCeo} collectors={collectors} onClose={() => setOpening(false)} />}
-    </div>
-  );
-}
-
-/** Case data fields — shared by "פתיחת תיק" and the editor. */
-function CaseFields({ v, set }: { v: CaseInput; set: (p: Partial<CaseInput>) => void }) {
-  const input = 'w-full h-9 px-2 rounded-lg border border-gray-300 text-sm bg-white';
-  const label = 'block text-[11px] text-gray-500 mb-0.5';
-  return (
-    <div className="grid gap-2 grid-cols-2 md:grid-cols-4">
-      <div>
-        <label className={label}>מספר רכב</label>
-        <input value={v.plate} onChange={(e) => set({ plate: e.target.value })} className={input} dir="ltr" />
-      </div>
-      <div>
-        <label className={label}>שם לקוח</label>
-        <input value={v.customer_name ?? ''} onChange={(e) => set({ customer_name: e.target.value })} className={input} />
-      </div>
-      <div>
-        <label className={label}>מקור עבודה</label>
-        <select value={v.work_source} onChange={(e) => set({ work_source: e.target.value })} className={input}>
-          {Object.entries(WORK_SOURCE_LABEL).map(([k, l]) => (
-            <option key={k} value={k}>{l}</option>
-          ))}
-        </select>
-      </div>
-      {v.work_source !== 'SHIR' && (
-        <div>
-          <label className={label}>חברת ביטוח</label>
-          <input list="col-insurers" value={v.insurer ?? ''} onChange={(e) => set({ insurer: e.target.value })} className={input} />
-        </div>
-      )}
-      <div>
-        <label className={label}>סוג תביעה</label>
-        <select value={v.claim_type ?? ''} onChange={(e) => set({ claim_type: e.target.value || null })} className={input}>
-          <option value="">—</option>
-          {CLAIM_TYPES.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className={label}>תאריך סגירת התיק</label>
-        <input type="date" value={v.case_closed_on ?? ''} onChange={(e) => set({ case_closed_on: e.target.value || null })} className={input} />
-      </div>
-      <div>
-        <label className={label}>מספר חשבונית</label>
-        <input value={v.invoice_number ?? ''} onChange={(e) => set({ invoice_number: e.target.value })} className={input} dir="ltr" />
-      </div>
-      <div>
-        <label className={label}>סכום חשבונית לתשלום</label>
-        <input value={str(v.amount_due)} onChange={(e) => set({ amount_due: num(e.target.value) })} inputMode="decimal" className={input} dir="ltr" />
-      </div>
-      <div>
-        <label className={label}>קיזוז מע״מ</label>
-        <input value={str(v.vat_offset)} onChange={(e) => set({ vat_offset: num(e.target.value) })} inputMode="decimal" className={input} dir="ltr" />
-      </div>
-      <div>
-        <label className={label}>כינון</label>
-        <input value={str(v.reinstatement)} onChange={(e) => set({ reinstatement: num(e.target.value) })} inputMode="decimal" className={input} dir="ltr" />
-      </div>
-      {v.claim_type === THIRD_PARTY && (
-        <>
-          <div>
-            <label className={label}>מועד פירעון צ׳ק תביעות</label>
-            <input type="date" value={v.claim_check_due_date ?? ''} onChange={(e) => set({ claim_check_due_date: e.target.value || null })} className={input} />
-          </div>
-          <div>
-            <label className={label}>סכום צ׳ק תביעות</label>
-            <input value={str(v.claim_check_amount)} onChange={(e) => set({ claim_check_amount: num(e.target.value) })} inputMode="decimal" className={input} dir="ltr" />
-          </div>
-        </>
-      )}
-      <datalist id="col-insurers">
-        {INSURERS.map((i) => (
-          <option key={i} value={i} />
-        ))}
-      </datalist>
     </div>
   );
 }
@@ -488,169 +389,30 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
   );
 }
 
-function CaseEditor({ c, onClose }: { c: CollectionCase; onClose: () => void }) {
-  const router = useRouter();
-  const [data, setData] = useState<CaseInput>({
-    plate: c.plate,
-    customer_name: c.customer_name,
-    work_source: c.work_source,
-    insurer: c.insurer,
-    claim_type: c.claim_type,
-    case_closed_on: c.case_closed_on,
-    invoice_number: c.invoice_number,
-    amount_due: c.amount_due,
-    vat_offset: c.vat_offset,
-    reinstatement: c.reinstatement,
-    claim_check_due_date: c.claim_check_due_date,
-    claim_check_amount: c.claim_check_amount,
-  });
-  const [showData, setShowData] = useState(false);
-  const [approved, setApproved] = useState(c.payment_approved_on ?? '');
-  const [status, setStatus] = useState<CollectionStatus>(c.status);
-  const [received, setReceived] = useState(str(c.received_amount));
-  const [receivedOn, setReceivedOn] = useState(c.received_on ?? '');
-  const [reason, setReason] = useState(c.partial_reason ?? '');
-  const [offset, setOffset] = useState(str(c.offset_amount));
-  const [note, setNote] = useState(c.note ?? '');
-  const [legalSent, setLegalSent] = useState(c.legal_sent_on ?? '');
-  const [lawyer, setLawyer] = useState(c.legal_lawyer ?? '');
-  const [legalClaim, setLegalClaim] = useState(str(c.legal_claim_amount));
-  const [legalClosed, setLegalClosed] = useState(c.legal_closed_on ?? '');
-  const [legalRecovered, setLegalRecovered] = useState(str(c.legal_recovered_amount));
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const due = (data.amount_due ?? 0) - (data.vat_offset ?? 0) - (data.reinstatement ?? 0) - (num(offset) ?? 0);
-
-  async function save() {
-    setBusy(true);
-    setErr(null);
-    const paid = status === 'PAID' || status === 'PARTIAL';
-    const r = await updateCollectionCase(c.id, {
-      ...data,
-      payment_approved_on: approved || null,
-      status,
-      received_amount: paid ? num(received) ?? (status === 'PAID' ? due : null) : null,
-      received_on: paid ? receivedOn || null : null,
-      partial_reason: reason || null,
-      offset_amount: num(offset),
-      note,
-      legal_sent_on: legalSent || null,
-      legal_lawyer: lawyer || null,
-      legal_claim_amount: num(legalClaim),
-      legal_closed_on: legalClosed || null,
-      legal_recovered_amount: num(legalRecovered),
-    });
-    setBusy(false);
-    if (r.error) return setErr(r.error);
-    onClose();
-    router.refresh();
-  }
-
-  const input = 'h-9 px-2 rounded-lg border border-gray-300 text-sm bg-white';
-  const lab = 'text-[11px] text-gray-500';
+/** My open reminders — due ones first (Amit, 14/10: reminders in every case and on the phone). */
+function RemindersStrip({ reminders }: { reminders: MyReminder[] }) {
+  const now = new Date().toISOString();
+  const due = reminders.filter((r) => r.remind_at <= now);
+  const later = reminders.filter((r) => r.remind_at > now);
+  const at = (iso: string) => new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const Row = ({ r, late }: { r: MyReminder; late: boolean }) => (
+    <Link href={`/collections/${r.case_id}#r-${r.id}`} className={`block rounded-lg border px-3 py-2 text-sm ${late ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}>
+      <span className={`font-semibold ${late ? 'text-amber-800' : 'text-gray-700'}`}>⏰ {at(r.remind_at)}</span>
+      <span className="text-gray-500"> · רכב: </span>
+      <span className="font-semibold">{r.plate}</span>
+      {r.customer_name && <span className="text-gray-500"> · {r.customer_name}</span>}
+      <div className="text-gray-800">{r.body}</div>
+    </Link>
+  );
   return (
-    <tr className="bg-indigo-50/50">
-      <td colSpan={11} className="px-3 py-3 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="text-sm font-semibold">
-            {c.plate} · {c.customer_name ?? ''} · {payerOf(data)} · {data.claim_type ?? ''} · לגבייה {ils(due)}
-          </div>
-          <button type="button" onClick={() => setShowData((v) => !v)} className="text-xs text-indigo-700 underline">
-            {showData ? 'הסתר פרטי תיק' : 'ערוך פרטי תיק'}
-          </button>
-        </div>
-        {showData && <CaseFields v={data} set={(p) => setData({ ...data, ...p })} />}
-
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={lab}>
-            תאריך אישור תשלום {data.claim_type === THIRD_PARTY ? '(צד ג׳ — יום כניסת הכסף)' : ''}
-            <input type="date" value={approved} onChange={(e) => setApproved(e.target.value)} className={`${input} block`} />
-          </label>
-          <div className="flex gap-1 flex-wrap">
-            {(Object.keys(STATUS_LABEL) as CollectionStatus[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => {
-                  setStatus(k);
-                  if ((k === 'PAID' || k === 'PARTIAL') && !receivedOn) setReceivedOn(today());
-                  if (k === 'LEGAL' && !legalSent) setLegalSent(today());
-                }}
-                className={`h-9 px-3 rounded-lg border text-xs font-semibold ${status === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}
-              >
-                {STATUS_LABEL[k]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {(status === 'PAID' || status === 'PARTIAL') && (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className={lab}>
-              סכום שהתקבל
-              <input value={received} onChange={(e) => setReceived(e.target.value)} inputMode="decimal" placeholder={String(Math.round(due))} className={`${input} block w-32`} dir="ltr" />
-            </label>
-            <label className={lab}>
-              תאריך תשלום בפועל
-              <input type="date" value={receivedOn} onChange={(e) => setReceivedOn(e.target.value)} className={`${input} block`} />
-            </label>
-          </div>
-        )}
-
-        {/* Offset (קיזוז) — any time, not only at payment; required for a partial payment. */}
-        <div className="flex flex-wrap items-end gap-3">
-          <label className={lab}>
-            סכום קיזוז {status === 'PARTIAL' ? '*' : '(אם יש)'}
-            <input value={offset} onChange={(e) => setOffset(e.target.value)} inputMode="decimal" className={`${input} block w-32`} dir="ltr" />
-          </label>
-          <label className={`${lab} flex-1 min-w-[220px]`}>
-            סיבת הקיזוז {status === 'PARTIAL' ? '*' : ''}
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className={`${input} block w-full`} />
-          </label>
-        </div>
-
-        {(status === 'LEGAL' || legalSent) && (
-          <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-2 flex flex-wrap items-end gap-3">
-            <span className="text-xs font-semibold text-purple-800 w-full">⚖️ מחלקה משפטית</span>
-            <label className={lab}>
-              תאריך העברה
-              <input type="date" value={legalSent} onChange={(e) => setLegalSent(e.target.value)} className={`${input} block`} />
-            </label>
-            <label className={lab}>
-              עורך דין
-              <input value={lawyer} onChange={(e) => setLawyer(e.target.value)} className={`${input} block w-40`} />
-            </label>
-            <label className={lab}>
-              סכום המחלוקת / התביעה
-              <input value={legalClaim} onChange={(e) => setLegalClaim(e.target.value)} inputMode="decimal" className={`${input} block w-32`} dir="ltr" />
-            </label>
-            <label className={lab}>
-              תאריך סיום התביעה
-              <input type="date" value={legalClosed} onChange={(e) => setLegalClosed(e.target.value)} className={`${input} block`} />
-            </label>
-            <label className={lab}>
-              שולם בסוף התביעה
-              <input value={legalRecovered} onChange={(e) => setLegalRecovered(e.target.value)} inputMode="decimal" className={`${input} block w-32`} dir="ltr" />
-            </label>
-          </div>
-        )}
-
-        <label className={`${lab} block`}>
-          הערה
-          <input value={note} onChange={(e) => setNote(e.target.value)} className={`${input} block w-full`} />
-        </label>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => void save()} disabled={busy} className="h-9 px-4 rounded-lg bg-indigo-600 text-white text-sm font-semibold disabled:opacity-50">
-            {busy ? 'שומר…' : 'שמור'}
-          </button>
-          <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-sm">
-            ביטול
-          </button>
-        </div>
-        {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
-      </td>
-    </tr>
+    <div className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">
+      <p className="font-bold text-sm">⏰ התזכורות שלי {due.length > 0 && <span className="text-amber-700">· {due.length} להיום / באיחור</span>}</p>
+      <div className="grid gap-1.5 md:grid-cols-2">
+        {due.map((r) => <Row key={r.id} r={r} late />)}
+        {later.slice(0, 6).map((r) => <Row key={r.id} r={r} late={false} />)}
+      </div>
+      {later.length > 6 && <p className="text-xs text-gray-500">ועוד {later.length - 6} תזכורות עתידיות</p>}
+    </div>
   );
 }
 

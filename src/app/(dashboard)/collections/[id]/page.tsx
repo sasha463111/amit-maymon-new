@@ -1,0 +1,25 @@
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import { getCollectionFile } from '@/app/actions/collectionFile';
+import { CaseFileClient } from './CaseFileClient';
+
+export const dynamic = 'force-dynamic';
+
+// The collection case file (Amit, 2026-10-14): everything about one claim in
+// one place — the running log with reminders, claim details, appraiser,
+// third party, contacts, documents, status and payment.
+export default async function CollectionCasePage({ params }: { params: { id: string } }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const r = await getCollectionFile(params.id);
+  if (!r.c) {
+    return (
+      <div className="max-w-xl mx-auto py-10 text-center space-y-3" dir="rtl">
+        <p className="text-gray-700">{r.error ?? 'התיק לא נמצא'}</p>
+        <a href="/collections" className="text-indigo-700 font-semibold">→ חזרה לגבייה</a>
+      </div>
+    );
+  }
+  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} />;
+}
