@@ -12,7 +12,16 @@ jobs:
     name: Backup Supabase Database
     steps:
       - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        # The database is Postgres 17; Ubuntu's default client (16) refuses to
+        # dump a newer server, so install 17 from the PostgreSQL apt repo.
+        run: |
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Create backup directory
         run: mkdir -p backups
@@ -55,8 +64,8 @@ jobs:
           # --no-owner / --no-privileges: role grants belong to Supabase and are
           # not restorable into a fresh project, so omitting them keeps the dump
           # replayable.
-          pg_dump \
-            -h aws-0-ap-south-1.pooler.supabase.com \
+          /usr/lib/postgresql/17/bin/pg_dump \
+            -h aws-1-ap-south-1.pooler.supabase.com \
             -p 5432 \
             -U postgres.yhanmyvolpeiuxspcxmk \
             -d postgres \
