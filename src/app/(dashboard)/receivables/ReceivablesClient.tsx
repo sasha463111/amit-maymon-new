@@ -76,7 +76,7 @@ function Kpi({ label, value, hint, tone = '' }: { label: string; value: string; 
 }
 
 export function ReceivablesClient({ data }: { data: ReceivablesData }) {
-  const { cases, unopened, terms, collectors, isCeo, viewers } = data;
+  const { cases, unopened, terms, collectors, isCeo, isManager, viewers } = data;
   const [period, setPeriod] = useState<Period>('month');
   const t0 = today();
   const thisMonth = t0.slice(0, 7);
@@ -337,7 +337,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
           <table className="w-full text-sm min-w-[760px]">
             <thead className="text-xs text-gray-500 bg-gray-50">
               <tr>
-                {['מסלקת', 'בטיפול', 'יתרה בטיפול', 'באיחור', `נסגרו ${PERIOD_LABEL[period]}`, `נגבה ${PERIOD_LABEL[period]}`, 'ממוצע ימי עבודה', 'קיזוזים'].map((h) => (
+                {['מסלקת', 'בטיפול', 'יתרה בטיפול', 'באיחור', `נסגרו ${PERIOD_LABEL[period]}`, ...(isManager ? [`נגבה ${PERIOD_LABEL[period]}`] : []), 'ממוצע ימי עבודה', 'קיזוזים'].map((h) => (
                   <th key={h} className="text-right font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -357,7 +357,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
                     <td className="px-2 py-1.5">{ils(mOpen.reduce((s, r) => s + balance(r.c), 0))}</td>
                     <td className={`px-2 py-1.5 ${mLate.length ? 'text-red-700 font-semibold' : ''}`}>{mLate.length}</td>
                     <td className="px-2 py-1.5">{mPaid.length}</td>
-                    <td className="px-2 py-1.5 text-green-700">{ils(mPaid.reduce((s, c) => s + (c.received_amount ?? 0), 0))}</td>
+                    {isManager && <td className="px-2 py-1.5 text-green-700">{ils(mPaid.reduce((s, c) => s + (c.received_amount ?? 0), 0))}</td>}
                     <td className="px-2 py-1.5">{avg == null ? '—' : avg.toFixed(1)}</td>
                     <td className="px-2 py-1.5">{ils(mPaid.reduce((s, c) => s + (c.offset_amount ?? 0), 0))}</td>
                   </tr>
@@ -367,6 +367,8 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
           </table>
         </div>
       </Section>
+
+      {isManager && <CollectedByCollector cases={cases} collectors={collectors} />}
 
       {isCeo && <AccessPanel viewers={viewers} />}
     </div>
@@ -397,6 +399,97 @@ function AccessPanel({ viewers }: { viewers: ReceivablesData['viewers'] }) {
         ))}
       </div>
       {msg && <p className="text-sm">{msg}</p>}
+    </Section>
+  );
+}
+
+/** "כמה גבתה כל מסלקת" — CEO + bookkeeper only (Amit, 2026-10-14). Money that
+ *  came in on a collector's cases (received + legal recovered), by the date it
+ *  came in: this month / quarter / year, and month by month. */
+function CollectedByCollector({ cases, collectors }: { cases: CollectionCase[]; collectors: { id: string; name: string }[] }) {
+  const t0 = today();
+  const thisMonth = t0.slice(0, 7);
+  const months = Array.from({ length: 12 }, (_, i) => addMonths(thisMonth, i - 11));
+  const income = (c: CollectionCase): { on: string; amount: number }[] => {
+    const out: { on: string; amount: number }[] = [];
+    if ((c.status === 'PAID' || c.status === 'PARTIAL') && c.received_on) out.push({ on: c.received_on, amount: c.received_amount ?? 0 });
+    if (c.legal_closed_on && c.legal_recovered_amount) out.push({ on: c.legal_closed_on, amount: c.legal_recovered_amount });
+    return out;
+  };
+  const rows = collectors.map((p) => {
+    const ins = cases.filter((c) => c.assigned_to === p.id).flatMap(income);
+    const sum = (f: (on: string) => boolean) => ins.filter((x) => f(x.on)).reduce((s, x) => s + x.amount, 0);
+    return {
+      ...p,
+      month: sum((on) => inPeriod(on, 'month', t0)),
+      quarter: sum((on) => inPeriod(on, 'quarter', t0)),
+      year: sum((on) => inPeriod(on, 'year', t0)),
+      total: sum(() => true),
+      byMonth: months.map((ym) => sum((on) => on.slice(0, 7) === ym)),
+    };
+  });
+  const totals = { month: 0, quarter: 0, year: 0, total: 0 };
+  for (const r of rows) {
+    totals.month += r.month;
+    totals.quarter += r.quarter;
+    totals.year += r.year;
+    totals.total += r.total;
+  }
+  const cell = (n: number) => (n ? ils(n) : '—');
+  return (
+    <Section title="💰 כמה גבתה כל מסלקת" hint="🔒 מנכ״ל ומנהלת חשבונות בלבד. כסף שנכנס בתיקים של המסלקת (תשלום + סיום תביעה משפטית), לפי תאריך הכניסה.">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[620px]">
+          <thead className="text-xs text-gray-500 bg-gray-50">
+            <tr>
+              {['מסלקת', `החודש (${MONTHS[Number(thisMonth.slice(5)) - 1]})`, `הרבעון (Q${Math.ceil(Number(thisMonth.slice(5)) / 3)})`, `השנה (${thisMonth.slice(0, 4)})`, 'מאז ההתחלה'].map((h) => (
+                <th key={h} className="text-right font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className="px-2 py-1.5 font-semibold">{r.name}</td>
+                <td className="px-2 py-1.5 text-green-700 font-semibold">{cell(r.month)}</td>
+                <td className="px-2 py-1.5">{cell(r.quarter)}</td>
+                <td className="px-2 py-1.5">{cell(r.year)}</td>
+                <td className="px-2 py-1.5 text-gray-600">{cell(r.total)}</td>
+              </tr>
+            ))}
+            <tr className="bg-gray-50 font-bold">
+              <td className="px-2 py-1.5">סה״כ</td>
+              <td className="px-2 py-1.5">{cell(totals.month)}</td>
+              <td className="px-2 py-1.5">{cell(totals.quarter)}</td>
+              <td className="px-2 py-1.5">{cell(totals.year)}</td>
+              <td className="px-2 py-1.5">{cell(totals.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="overflow-x-auto">
+        <p className="text-xs text-gray-500 mb-1">חודש אחר חודש (12 חודשים)</p>
+        <table className="w-full text-xs min-w-[900px]">
+          <thead className="text-gray-500 bg-gray-50">
+            <tr>
+              <th className="text-right font-semibold px-2 py-1.5">מסלקת</th>
+              {months.map((ym) => (
+                <th key={ym} className="text-right font-semibold px-2 py-1.5 whitespace-nowrap">{monthLabel(ym)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className="px-2 py-1.5 font-semibold whitespace-nowrap">{r.name}</td>
+                {r.byMonth.map((v, i) => (
+                  <td key={months[i]} className="px-2 py-1.5 whitespace-nowrap">{v ? ils(v) : ''}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Section>
   );
 }

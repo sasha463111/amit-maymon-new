@@ -18,16 +18,17 @@ function serviceClient() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-async function access(): Promise<{ userId: string; isCeo: boolean } | null> {
+async function access(): Promise<{ userId: string; isCeo: boolean; isManager: boolean } | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data } = await supabase.from('profiles').select('role, is_active').eq('id', user.id).maybeSingle();
   const p = data as { role: string; is_active: boolean } | null;
   if (!p || p.is_active === false) return null;
-  if (p.role === 'CEO') return { userId: user.id, isCeo: true };
+  if (p.role === 'CEO') return { userId: user.id, isCeo: true, isManager: true };
   const { data: v } = await supabase.from('finance_viewers').select('user_id').eq('user_id', user.id).maybeSingle();
-  return v ? { userId: user.id, isCeo: false } : null;
+  // The bookkeeper also sees the per-collector money (Amit, 14/10).
+  return v ? { userId: user.id, isCeo: false, isManager: p.role === 'ACCOUNTANT' } : null;
 }
 
 export async function canViewReceivables(): Promise<boolean> {
@@ -43,6 +44,8 @@ export type ReceivablesData = {
   terms: Record<string, PaymentRule>;
   collectors: { id: string; name: string }[];
   isCeo: boolean;
+  /** CEO + bookkeeper: see how much each collector collected. */
+  isManager: boolean;
   viewers: { id: string; name: string; role: string; granted: boolean }[];
   error?: string;
 };
@@ -50,7 +53,7 @@ export type ReceivablesData = {
 const NUMS = ['amount_due', 'vat_offset', 'reinstatement', 'claim_check_amount', 'received_amount', 'offset_amount', 'legal_claim_amount', 'legal_recovered_amount'] as const;
 
 export async function getReceivables(): Promise<ReceivablesData> {
-  const empty: ReceivablesData = { cases: [], unopened: [], terms: {}, collectors: [], isCeo: false, viewers: [] };
+  const empty: ReceivablesData = { cases: [], unopened: [], terms: {}, collectors: [], isCeo: false, isManager: false, viewers: [] };
   const a = await access();
   if (!a) return { ...empty, error: 'אין הרשאה' };
   const db = serviceClient();
@@ -93,6 +96,7 @@ export async function getReceivables(): Promise<ReceivablesData> {
     terms: Object.fromEntries(((termRows.data ?? []) as PaymentRule[]).map((t) => [t.insurer, t])),
     collectors: ppl.filter((p) => p.role === 'COLLECTIONS' && p.is_active).map((p) => ({ id: p.id, name: p.full_name ?? '—' })),
     isCeo: a.isCeo,
+    isManager: a.isManager,
     viewers: a.isCeo
       ? ppl.filter((p) => p.is_active && p.role !== 'CEO').map((p) => ({ id: p.id, name: p.full_name ?? '—', role: p.role, granted: granted.has(p.id) })).sort((x, y) => Number(y.granted) - Number(x.granted) || x.name.localeCompare(y.name, 'he'))
       : [],
