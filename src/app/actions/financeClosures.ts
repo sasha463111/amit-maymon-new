@@ -50,6 +50,10 @@ export type FinanceEntry = {
   invoice_number: string | null;
   deductible: number | null;
   job_card_no: string | null;
+  /** צד ג': due date of the claims cheque. */
+  claim_check_due_date: string | null;
+  /** Optional: due date of a deposit cheque. */
+  deposit_check_due_date: string | null;
 };
 
 export async function getFinanceEntry(caseId: string): Promise<{ entry: (FinanceEntry & { updated_at: string }) | null; error?: string }> {
@@ -59,7 +63,7 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
   if (!db) return { entry: null, error: 'שרת לא מוגדר' };
   const { data } = await db
     .from('finance_closures')
-    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, updated_at')
+    .select('closed_on, work_source, insurer, claim_type, idf_category, appraiser, amount_ours, amount_shir, invoice_number, deductible, job_card_no, claim_check_due_date, deposit_check_due_date, updated_at')
     .eq('case_id', caseId)
     .maybeSingle();
   if (!data) return { entry: null };
@@ -98,6 +102,7 @@ export async function saveFinanceEntry(
   const err =
     money(input.amount_ours, 'סכום חשבונית', true) ?? money(input.amount_shir, 'סכום ללא הנחות') ?? money(input.deductible, 'השתתפות עצמית');
   if (err) return { error: err };
+  const date = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
   const t = (v: string | null, max = 120) => (v ?? '').trim().slice(0, max) || null;
 
   const row = {
@@ -116,6 +121,8 @@ export async function saveFinanceEntry(
     invoice_number: t(input.invoice_number, 60),
     deductible: input.deductible,
     job_card_no: t(input.job_card_no, 60),
+    claim_check_due_date: date(input.claim_check_due_date),
+    deposit_check_due_date: date(input.deposit_check_due_date),
     updated_by: a.user.id,
     updated_at: new Date().toISOString(),
   };

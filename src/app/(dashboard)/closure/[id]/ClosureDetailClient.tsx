@@ -769,7 +769,7 @@ export function ClosureDetailClient({
                   <p className="text-sm text-amber-700">
                     {blockedByExtras && 'יש תוספות בטיפול. '}
                     {blockedByApprovals && 'חסר אישור CEO לאומדן/גלגלים.'}
-                    {!financeDone && 'יש להזין קודם את "נתוני סגירה לכספים" (למטה).'}
+                    {!financeDone && activeStep.step_key === 'CLOSE_CASE' && 'יש להזין קודם את "נתוני סגירה לכספים" (למטה).'}
                   </p>
                 )}
               </div>

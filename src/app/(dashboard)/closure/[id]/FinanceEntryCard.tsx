@@ -40,6 +40,9 @@ export function FinanceEntryCard({
   const [invoice, setInvoice] = useState(initial?.invoice_number ?? '');
   const [deductible, setDeductible] = useState(toStr(initial?.deductible));
   const [jobCard, setJobCard] = useState(initial?.job_card_no ?? '');
+  const [claimCheckDue, setClaimCheckDue] = useState(initial?.claim_check_due_date ?? '');
+  const [hasDeposit, setHasDeposit] = useState(!!initial?.deposit_check_due_date);
+  const [depositDue, setDepositDue] = useState(initial?.deposit_check_due_date ?? '');
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<FinanceDuplicate[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
@@ -59,6 +62,8 @@ export function FinanceEntryCard({
       invoice_number: invoice || null,
       deductible: toNum(deductible),
       job_card_no: jobCard || null,
+      claim_check_due_date: claimType === "צד ג'" ? claimCheckDue || null : null,
+      deposit_check_due_date: hasDeposit ? depositDue || null : null,
     }, confirmDuplicate);
     setSaving(false);
     if (r.duplicates?.length) {
@@ -149,6 +154,19 @@ export function FinanceEntryCard({
         <div>
           <label className={label}>מספר כרטיס עבודה</label>
           <input value={jobCard} onChange={(e) => setJobCard(e.target.value)} className={input} dir="ltr" />
+        </div>
+        {claimType === "צד ג'" && (
+          <div>
+            <label className={label}>מועד פירעון צ׳ק תביעות (צד ג׳)</label>
+            <input type="date" value={claimCheckDue} onChange={(e) => setClaimCheckDue(e.target.value)} className={input} />
+          </div>
+        )}
+        <div>
+          <label className="flex items-center gap-2 text-xs text-gray-500 mb-1 cursor-pointer">
+            <input type="checkbox" checked={hasDeposit} onChange={(e) => setHasDeposit(e.target.checked)} className="w-4 h-4" />
+            יש צ׳ק פיקדון
+          </label>
+          {hasDeposit && <input type="date" value={depositDue} onChange={(e) => setDepositDue(e.target.value)} className={input} aria-label="מועד פירעון צ׳ק פיקדון" />}
         </div>
       </div>
 
