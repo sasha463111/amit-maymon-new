@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { listCollectionCases, type CollectionCase } from '@/app/actions/collections';
 import type { PaymentRule } from '@/lib/collections';
+import { loadWeeklySummary, type WeeklySummary } from '@/lib/collectionsWeekly.server';
 
 // The collection case file (Amit, 2026-10-14, after the collectors' BAFI
 // screens): inside one case — the running log ("טיפול שוטף") with reminders
@@ -373,4 +374,11 @@ export async function answerFeedback(id: string, status: 'NEW' | 'PLANNED' | 'DO
   if (error) return { error: error.message };
   revalidatePath('/collections');
   return { ok: true };
+}
+
+/** The weekly summary, live — the "📊 סיכום שבועי" tab (CEO / bookkeeper). */
+export async function getWeeklySummary(): Promise<WeeklySummary | null> {
+  const ctx = await me();
+  if (!ctx || !ctx.supervisor) return null;
+  return loadWeeklySummary(ctx.db);
 }

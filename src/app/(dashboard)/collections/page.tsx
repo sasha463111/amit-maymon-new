@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { listCollectionCases, listShirBatch } from '@/app/actions/collections';
-import { listBetaFeedback, listMyReminders } from '@/app/actions/collectionFile';
+import { getWeeklySummary, listBetaFeedback, listMyReminders } from '@/app/actions/collectionFile';
 import { CollectionsClient } from './CollectionsClient';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export default async function CollectionsPage({ searchParams }: { searchParams?:
   const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const role = (prof as { role: string } | null)?.role;
   if (role !== 'COLLECTIONS' && role !== 'CEO' && role !== 'ACCOUNTANT') redirect('/');
-  const [{ cases, collectors, terms, isCeo, canEditTerms, error }, shir, reminders, feedback] = await Promise.all([listCollectionCases(), listShirBatch(), listMyReminders(), listBetaFeedback()]);
+  const [{ cases, collectors, terms, isCeo, canEditTerms, error }, shir, reminders, feedback, weekly] = await Promise.all([listCollectionCases(), listShirBatch(), listMyReminders(), listBetaFeedback(), getWeeklySummary()]);
   return (
     <CollectionsClient
       cases={cases}
@@ -27,6 +27,7 @@ export default async function CollectionsPage({ searchParams }: { searchParams?:
       shir={shir.invoices}
       reminders={reminders}
       feedback={feedback}
+      weekly={weekly}
       initialTab={searchParams?.tab}
       error={error ?? shir.error ?? null}
     />

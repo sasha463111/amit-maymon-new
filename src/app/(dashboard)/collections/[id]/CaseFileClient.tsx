@@ -10,6 +10,8 @@ import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, ty
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStageDays, israelWorkDateIn } from '@/lib/collectionStages';
+import { WhatsAppDocs } from './WhatsAppDocs';
 import { STATUS_CHIP, STATUS_LABEL, StatusEditor, ils, isClosed, num, toCollect, today } from '../shared';
 
 // The collection case file (Amit, 2026-10-14). The list is the outer view;
@@ -107,7 +109,13 @@ export function CaseFileClient({
             )}
           </Fields>
         </div>
-        <StageChips c={c} />
+        <StagePicker c={c} />
+        <div className="flex gap-2 flex-wrap pt-1">
+          <Link href={`/collections/${c.id}/letter`} className="h-10 px-4 inline-flex items-center rounded-xl border border-gray-300 bg-white text-sm font-semibold">
+            📄 מכתב דרישת תשלום
+          </Link>
+          <WhatsAppDocs c={c} />
+        </div>
       </div>
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
@@ -203,8 +211,8 @@ export function CaseFileClient({
         ))}
       </datalist>
       <datalist id="stages">
-        {['ממתין לדוח שמאי', 'הוגשה דרישת תשלום', 'ממתין לאישור תשלום', 'ממתין לשיק צד ג׳', 'ממתין למסמכים מהלקוח', 'בבירור מול החברה', 'אושר — ממתין לתשלום'].map((x) => (
-          <option key={x} value={x} />
+        {CLAIM_STAGES.map((x) => (
+          <option key={x.stage} value={x.stage} />
         ))}
       </datalist>
     </div>
@@ -225,6 +233,7 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
   const [kind, setKind] = useState<CaseEventKind>('NOTE');
   const [body, setBody] = useState('');
   const [remind, setRemind] = useState(false);
+  const [reason, setReason] = useState('');
   const [rDate, setRDate] = useState(tomorrowNine());
   const [rTime, setRTime] = useState('09:00');
   const [rFor, setRFor] = useState<'me' | 'owner'>('me');
@@ -238,7 +247,9 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
 
   async function add() {
     setErr(null);
-    if (!body.trim()) return setErr(remind ? 'נא לכתוב על מה התזכורת' : 'נא לכתוב מה נעשה');
+    const reasonText = remind && reason && reason !== OTHER ? reason : '';
+    const text = [reasonText, body.trim()].filter(Boolean).join(' — ');
+    if (!text) return setErr(remind ? 'נא לבחור סיבה או לכתוב על מה התזכורת' : 'נא לכתוב מה נעשה');
     let remindAt: string | null = null;
     if (remind) {
       if (!rDate || !rTime) return setErr('נא לבחור תאריך ושעה לתזכורת');
@@ -246,10 +257,11 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
       remindAt = new Date(`${rDate}T${rTime}`).toISOString();
     }
     setBusy(true);
-    const r = await addCaseEvent(c.id, { kind, body, remind_at: remindAt, remind_for: rFor });
+    const r = await addCaseEvent(c.id, { kind, body: text, remind_at: remindAt, remind_for: rFor });
     setBusy(false);
     if (r.error) return setErr(r.error);
     setBody('');
+    setReason('');
     setRemind(false);
     router.refresh();
   }
@@ -302,7 +314,7 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
           value={body}
           onChange={(e) => setBody(e.target.value)}
           rows={3}
-          placeholder={remind ? 'על מה התזכורת? למשל: לחזור לביטוח ישיר לגבי אישור התשלום' : 'מה נעשה? למשל: דיברתי עם מיכל מהראל, הדוח אצל השמאי'}
+          placeholder={remind ? 'פירוט (רשות אם נבחרה סיבה). למשל: לחזור למיכל מביטוח ישיר' : 'מה נעשה? למשל: דיברתי עם מיכל מהראל, הדוח אצל השמאי'}
           className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
         />
         <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
@@ -311,6 +323,16 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
         </label>
         {remind && (
           <div className="flex flex-wrap gap-2 items-end">
+            <label className="text-xs text-gray-500">
+              סיבה
+              <select value={reason} onChange={(e) => setReason(e.target.value)} className={`${input} block max-w-[260px]`}>
+                <option value="">— בחירה —</option>
+                {REMINDER_REASONS.map((x) => (
+                  <option key={x} value={x}>{x}</option>
+                ))}
+                <option value={OTHER}>אחר (כותבים למעלה)</option>
+              </select>
+            </label>
             <label className="text-xs text-gray-500">
               תאריך
               <input type="date" value={rDate} onChange={(e) => setRDate(e.target.value)} className={`${input} block`} />
@@ -639,35 +661,77 @@ function StatusTab({ c }: { c: CollectionCase }) {
   );
 }
 
-const STAGES = ['ממתין לדוח שמאי', 'ממתין לשיק חברה', 'ממתין לשיק צד שלישי', 'הוגשה דרישת תשלום', 'ממתין למסמכים מהלקוח', 'בבירור מול החברה', 'חזרה לפוליסה', 'טיפול משפטי', 'טיפול הסתיים'];
-
-/** One tap to move the claim stage (logged in "טיפול שוטף"). */
-function StageChips({ c }: { c: CollectionCase }) {
+/** Claim stage — a list of the known stages + "אחר" (free text), and the
+ *  automatic reminder to the collector (Amit, 14/10). Logged in "טיפול שוטף". */
+function StagePicker({ c }: { c: CollectionCase }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
-  async function set(stage: string) {
-    if (stage === c.claim_stage) return;
-    setBusy(stage);
-    await updateCollectionCase(c.id, { claim_stage: stage });
-    setBusy(null);
+  const known = CLAIM_STAGES.some((x) => x.stage === c.claim_stage);
+  const [sel, setSel] = useState('');
+  const [other, setOther] = useState('');
+  const [days, setDays] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const stage = sel === OTHER ? other.trim() : sel;
+
+  function pick(v: string) {
+    setSel(v);
+    setMsg(null);
+    const d = v === OTHER ? 7 : defaultStageDays(v);
+    setDays(d ? String(d) : '0');
+  }
+
+  async function save() {
+    if (!stage) return setMsg('נא לבחור מצב או לכתוב');
+    setBusy(true);
+    const n = Number(days);
+    const r = await updateCollectionCase(c.id, { claim_stage: stage, stage_remind_days: n > 0 ? n : null });
+    setBusy(false);
+    if (r.error) return setMsg(`⚠️ ${r.error}`);
+    setMsg(n > 0 ? `✓ עודכן · ⏰ תזכורת ל-${formatDate(israelWorkDateIn(n))} 09:00` : '✓ עודכן');
+    setSel('');
+    setOther('');
     router.refresh();
   }
+
+  const input = 'h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
   return (
-    <div className="space-y-1">
-      <p className="text-xs text-gray-500">עדכון מצב תביעה בלחיצה:</p>
-      <div className="flex gap-1.5 flex-wrap">
-        {STAGES.map((st) => (
-          <button
-            key={st}
-            type="button"
-            disabled={!!busy}
-            onClick={() => void set(st)}
-            className={`h-8 px-3 rounded-full border text-xs font-semibold ${c.claim_stage === st ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'} disabled:opacity-60`}
-          >
-            {busy === st ? '…' : st}
-          </button>
-        ))}
+    <div className="rounded-xl bg-gray-50 border border-gray-200 p-2 space-y-2">
+      <div className="flex flex-wrap gap-2 items-end">
+        <label className="text-xs text-gray-500">
+          עדכון מצב תביעה
+          <select value={sel} onChange={(e) => pick(e.target.value)} className={`${input} block`}>
+            <option value="">{c.claim_stage ? `כרגע: ${c.claim_stage}` : '— בחירה —'}</option>
+            {CLAIM_STAGES.map((x) => (
+              <option key={x.stage} value={x.stage}>{x.stage}</option>
+            ))}
+            <option value={OTHER}>אחר — מלל חופשי</option>
+          </select>
+        </label>
+        {sel === OTHER && (
+          <label className="text-xs text-gray-500 flex-1 min-w-[180px]">
+            מצב (מלל חופשי)
+            <input value={other} onChange={(e) => setOther(e.target.value)} maxLength={120} className={`${input} block w-full`} placeholder="למשל: ממתין לאישור מנהל תביעות" />
+          </label>
+        )}
+        {sel && (
+          <>
+            <label className="text-xs text-gray-500">
+              ⏰ תזכורת אוטומטית
+              <select value={days} onChange={(e) => setDays(e.target.value)} className={`${input} block`}>
+                <option value="0">בלי תזכורת</option>
+                {REMIND_DAY_OPTIONS.map((d) => (
+                  <option key={d} value={String(d)}>{d === 1 ? 'מחר' : `בעוד ${d} ימים`}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" disabled={busy} onClick={() => void save()} className="h-10 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50">
+              {busy ? 'שומר…' : 'עדכון'}
+            </button>
+          </>
+        )}
       </div>
+      {!known && c.claim_stage && !sel && <p className="text-[11px] text-gray-500">המצב הנוכחי לא מהרשימה (נכתב כ&quot;אחר&quot; או מבאפי).</p>}
+      {msg && <p className="text-sm">{msg}</p>}
     </div>
   );
 }

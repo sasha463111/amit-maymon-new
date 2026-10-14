@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
+import { loadWeeklySummary, weeklyText } from '@/lib/collectionsWeekly.server';
 
 /**
  * Reminder sweep — despite the file/route name (kept as-is so the existing
@@ -856,6 +857,32 @@ async function runCollectionReminders(supabase: ServiceClient) {
   return { due: rows.length, sent };
 }
 
+/** Round 10 — weekly collections summary (Amit, 2026-10-14): Sunday from
+ *  08:00 to the CEO and the bookkeeper (bell + push), linking to the
+ *  "📊 סיכום שבועי" tab. Once per week: keyed in public.sent_emails. */
+async function runCollectionsWeekly(supabase: ServiceClient, isoDate: string) {
+  const key = `collections-weekly/${isoDate}`;
+  const { data: claimed, error: claimErr } = await supabase
+    .from('sent_emails')
+    .upsert({ key } as never, { onConflict: 'key', ignoreDuplicates: true })
+    .select('key');
+  if (claimErr) return { error: claimErr.message };
+  if (!claimed?.length) return { skipped: 'already sent this week' };
+  const { data: people } = await supabase.from('profiles').select('id').in('role', ['CEO', 'ACCOUNTANT']).eq('is_active', true);
+  const to = ((people ?? []) as { id: string }[]).map((p) => p.id);
+  const summary = await loadWeeklySummary(supabase as never);
+  const { title, body } = weeklyText(summary);
+  // COLLECTION_REMINDER: relevant to CEO + ACCOUNTANT and never fanned out, so one row each.
+  const { error } = to.length
+    ? await supabase.from('notifications').insert(to.map((id) => ({ user_id: id, type: 'COLLECTION_REMINDER', title, body, action_url: '/collections?tab=summary' })) as never)
+    : { error: null };
+  if (error) {
+    await supabase.from('sent_emails').delete().eq('key', key);
+    return { error: error.message };
+  }
+  return { sent: to.length };
+}
+
 export async function GET(req: NextRequest) {
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
@@ -910,5 +937,10 @@ export async function GET(req: NextRequest) {
   // 9. Collection-case reminders — whenever they are due.
   const collectionReminders = await runCollectionReminders(supabase).catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders });
+  // 10. Weekly collections summary — Sundays from 08:00.
+  const collectionsWeekly = (weekday !== 0 || hour < 8)
+    ? { skipped: true as const }
+    : await runCollectionsWeekly(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly });
 }

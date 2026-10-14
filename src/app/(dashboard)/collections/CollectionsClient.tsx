@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { lookupPlateHistory, type ExistingCollection, type Feedback, type MyReminder, type RepairMatch } from '@/app/actions/collectionFile';
 import { FeedbackButton, FeedbackList } from './Feedback';
+import { WeeklyView } from './Weekly';
+import type { WeeklySummary } from '@/lib/collectionsWeekly.server';
 import {
   lookupPlateForCollection,
   openCollectionCase,
@@ -23,7 +25,7 @@ import { INSURERS, financeDefaultsFromSubType } from '@/lib/finance';
 import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toCollect, today } from './shared';
 import { formatDate } from '@/lib/dates';
 
-type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback';
+type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback' | 'summary';
 
 export function CollectionsClient({
   cases,
@@ -34,6 +36,7 @@ export function CollectionsClient({
   shir = [],
   reminders = [],
   feedback = [],
+  weekly = null,
   initialTab,
   error,
 }: {
@@ -45,12 +48,13 @@ export function CollectionsClient({
   shir?: ShirInvoice[];
   reminders?: MyReminder[];
   feedback?: Feedback[];
+  weekly?: WeeklySummary | null;
   initialTab?: string;
   error: string | null;
 }) {
   const router = useRouter();
   const [who, setWho] = useState<string>('');
-  const [tab, setTab] = useState<Tab>(initialTab === 'feedback' ? 'feedback' : 'active');
+  const [tab, setTab] = useState<Tab>(initialTab === 'feedback' ? 'feedback' : initialTab === 'summary' && weekly ? 'summary' : 'active');
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -127,6 +131,7 @@ export function CollectionsClient({
           ['all', `הכול (${counts.all})`],
           ['shir', '🧾 ש.י.ר — ריכוז חודשי'],
           ['feedback', `💡 פידבק (${feedback.length})`],
+          ...(weekly ? ([['summary', '📊 סיכום שבועי']] as [Tab, string][]) : []),
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -139,7 +144,9 @@ export function CollectionsClient({
         ))}
       </div>
 
-      {tab === 'feedback' ? (
+      {tab === 'summary' && weekly ? (
+        <WeeklyView s={weekly} />
+      ) : tab === 'feedback' ? (
         <FeedbackList items={feedback} supervisor={isCeo} />
       ) : tab === 'shir' ? (
         <ShirBatch invoices={shir} terms={terms} />

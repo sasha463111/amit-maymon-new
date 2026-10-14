@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { PaymentRule } from '@/lib/collections';
+import { defaultStageDays, israelTimeToIso, israelWorkDateIn, stageRule } from '@/lib/collectionStages';
 
 // Collections (Amit, 2026-10-14) — claims collectors (role COLLECTIONS:
 // ספיר, גלית, ליטל) + CEO. Work happens in collection cases: a collector
@@ -348,6 +349,8 @@ export async function openCollectionCase(
 }
 
 export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'external_ref' | 'source' | 'case_id' | 'referral_id'>> & {
+  /** With a claim_stage change: the automatic reminder in N days (null = none; omitted = the stage's default). Not a column. */
+  stage_remind_days?: number | null;
   payment_approved_on?: string | null;
   status?: CollectionStatus;
   received_amount?: number | null;
@@ -412,9 +415,28 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   if (error) return { error: error.message };
   const prevStage = (before as { claim_stage: string | null } | null)?.claim_stage ?? null;
   const newStage = 'claim_stage' in u ? txt(u.claim_stage, 120) : prevStage;
+  const closedNow = 'closed_at' in patch && !!patch.closed_at;
   if (before && newStage !== prevStage) {
     await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `מצב תביעה: ${prevStage ?? '—'} ← ${newStage ?? '—'}`, created_by: ctx.user.id } as never);
+    // Automatic stage reminder (Amit, 14/10): the old one is closed, a new one
+    // goes to the case's collector — e.g. "ממתין לדוח שמאי" → check in 7 days.
+    await closeAutoReminders(db, id);
+    const days = 'stage_remind_days' in u ? u.stage_remind_days ?? null : defaultStageDays(newStage);
+    if (newStage && days && days > 0 && days <= 120 && !closedNow && !cur.closed_at) {
+      const check = stageRule(newStage)?.check || 'לבדוק מה המצב';
+      const dateIso = israelWorkDateIn(days);
+      await db.from('collection_case_events').insert({
+        case_id: id,
+        kind: 'NOTE',
+        body: `🤖 תזכורת אוטומטית — ${newStage}: ${check}`,
+        remind_at: israelTimeToIso(dateIso, 9),
+        remind_user: cur.assigned_to,
+        auto_stage: newStage,
+        created_by: ctx.user.id,
+      } as never);
+    }
   }
+  if (closedNow) await closeAutoReminders(db, id);
   const prev = (before as { status: CollectionStatus } | null)?.status;
   if (status && prev && prev !== status) {
     await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `סטטוס: ${STATUS_HE[prev]} ← ${STATUS_HE[status]}`, created_by: ctx.user.id } as never);
@@ -422,6 +444,16 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   revalidatePath('/collections');
   revalidatePath(`/collections/${id}`);
   return { ok: true };
+}
+
+/** Close a case's open automatic stage reminders (a new stage, or the case closed). */
+async function closeAutoReminders(db: NonNullable<ReturnType<typeof serviceClient>>, caseId: string) {
+  await db
+    .from('collection_case_events')
+    .update({ remind_done_at: new Date().toISOString() } as never)
+    .eq('case_id', caseId)
+    .not('auto_stage', 'is', null)
+    .is('remind_done_at', null);
 }
 
 const STATUS_HE: Record<CollectionStatus, string> = { OPEN: 'בטיפול', PAID: 'שולם', PARTIAL: 'תשלום חלקי', DISPUTE: 'במחלוקת', LEGAL: 'מחלקה משפטית', BLOCKED: 'חסומה' };
