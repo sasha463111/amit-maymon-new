@@ -90,8 +90,8 @@ export function CollectionsClient({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">גבייה</h1>
-          <p className="text-sm text-gray-500">תיקי גבייה לפי מסלקת. פוליסה / הסדר ג׳: צפי לפי אישור התשלום + ההסכם. צד ג׳: לפי מועד פירעון הצ׳ק.</p>
+          <h1 className="text-2xl font-bold">ניהול תביעות ביטוח</h1>
+          <p className="text-sm text-gray-500">תיקי תביעה לפי מסלקת. פוליסה / הסדר ג׳: צפי לפי אישור התשלום + ההסכם. צד ג׳: לפי מועד פירעון הצ׳ק.</p>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={() => setOpening(true)} className="h-11 px-5 rounded-xl bg-red-600 text-white text-sm font-bold">
@@ -176,7 +176,7 @@ export function CollectionsClient({
             {shown.length === 0 && (
               <tr>
                 <td colSpan={11} className="text-center text-gray-400 py-8">
-                  {cases.length === 0 ? 'עוד לא נפתחו תיקי גבייה — לוחצים "📂 פתיחת תיק"' : 'אין תיקים בתצוגה הזו'}
+                  {cases.length === 0 ? 'עוד לא נפתחו תיקי תביעה — לוחצים "📂 פתיחת תיק"' : 'אין תיקים בתצוגה הזו'}
                 </td>
               </tr>
             )}
@@ -414,7 +414,7 @@ export function OpenCaseDialog({ isCeo, collectors, onClose, legal = false }: { 
     <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-2" onClick={onClose}>
       <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl p-4 space-y-3 max-h-[95vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-lg">{legal ? '⚖️ פתיחת תיק משפטי' : '📂 פתיחת תיק גבייה'}</h2>
+          <h2 className="font-bold text-lg">{legal ? '⚖️ פתיחת תיק משפטי' : '📂 פתיחת תיק תביעה'}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 text-xl" aria-label="סגור">✕</button>
         </div>
         <div className="flex gap-2">
@@ -436,7 +436,7 @@ export function OpenCaseDialog({ isCeo, collectors, onClose, legal = false }: { 
         {/* 1. The car already has a collection case: same accident or a new one? */}
         {existing.length > 0 && !newAccident && (
           <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-            <p className="font-bold text-amber-900">⚠️ לרכב הזה כבר יש {existing.length === 1 ? 'תיק גבייה' : `${existing.length} תיקי גבייה`}. זה אותו אירוע או תאונה חדשה?</p>
+            <p className="font-bold text-amber-900">⚠️ לרכב הזה כבר יש {existing.length === 1 ? 'תיק תביעה' : `${existing.length} תיקי תביעה`}. זה אותו אירוע או תאונה חדשה?</p>
             {existing.map((x) => (
               <div key={x.id} className="rounded-lg bg-white border border-amber-200 p-2 space-y-1">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-sm">
@@ -509,7 +509,7 @@ export function OpenCaseDialog({ isCeo, collectors, onClose, legal = false }: { 
                     className={`${box} ${picked === m.finance_closure_id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'} disabled:opacity-50`}
                   >
                     נסגר {formatDate(m.case_closed_on)} · {m.branch_name ?? ''} · {payerOf(m) || '—'} · {m.claim_type ?? ''} · {ils(m.amount_due)}
-                    {m.taken_by && <span className="text-red-700"> · כבר בתיק גבייה של {m.taken_by}</span>}
+                    {m.taken_by && <span className="text-red-700"> · כבר בתיק תביעה של {m.taken_by}</span>}
                   </button>
                 ))}
               </div>

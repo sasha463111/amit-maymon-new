@@ -48,7 +48,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'פחחים', href: '/painters' },
     { label: 'החזרות', href: '/returns' },
     { label: 'כספים', href: '/finance' },
-    { label: 'גבייה', href: '/collections' },
+    { label: 'ניהול תביעות ביטוח', href: '/collections' },
     { label: 'טיפול משפטי', href: '/legal' },
     { label: 'דשבורד גבייה', href: '/receivables' },
     { label: 'התראות', href: '/notifications' },
@@ -84,7 +84,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   // collections dashboard through finance_viewers).
   ACCOUNTANT: [
     { label: 'כספים', href: '/finance' },
-    { label: 'גבייה', href: '/collections' },
+    { label: 'ניהול תביעות ביטוח', href: '/collections' },
     { label: 'טיפול משפטי', href: '/legal' },
     { label: 'החזרות', href: '/returns' },
     { label: 'הודעות', href: '/messages' },
@@ -92,7 +92,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   // Claims collectors (2026-10-14): the collections screen only.
   COLLECTIONS: [
-    { label: 'גבייה', href: '/collections' },
+    { label: 'ניהול תביעות ביטוח', href: '/collections' },
     { label: 'טיפול משפטי', href: '/legal' },
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },

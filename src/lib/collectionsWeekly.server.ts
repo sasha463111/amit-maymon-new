@@ -112,5 +112,5 @@ export function weeklyText(s: WeeklySummary): { title: string; body: string } {
     `תזכורות שלא בוצעו: ${t.lateReminders}`,
     ...s.rows.map((r) => `${r.name}: ${r.open} פתוחים, נגבו ${ils(r.receivedAmount)}, תקועים ${r.stuck}`),
   ];
-  return { title: `📊 סיכום גבייה שבועי (${dm(s.from)}–${dm(s.to)})`, body: lines.join('\n') };
+  return { title: `📊 סיכום תביעות ביטוח שבועי (${dm(s.from)}–${dm(s.to)})`, body: lines.join('\n') };
 }

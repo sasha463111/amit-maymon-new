@@ -345,7 +345,7 @@ export async function sendBetaFeedback(kind: FeedbackKind, body: string, page: s
       user_id: ceoId,
       type: 'DIRECT_NOTE',
       triggered_by: ctx.user.id,
-      title: `${FEEDBACK_HE[kind]} — גבייה (${(sender as { full_name: string | null } | null)?.full_name ?? ''})`,
+      title: `${FEEDBACK_HE[kind]} — תביעות ביטוח (${(sender as { full_name: string | null } | null)?.full_name ?? ''})`,
       body: text.slice(0, 300),
       action_url: '/collections?tab=feedback',
     } as never);

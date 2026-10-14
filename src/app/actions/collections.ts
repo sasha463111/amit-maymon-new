@@ -281,7 +281,7 @@ export async function openCollectionCase(
   // The same car can have several accidents; the same accident only one case (Amit, 14/10).
   if (input.event_date) {
     const { data: same } = await db.from('collection_cases').select('id').eq('plate', plate).eq('event_date', input.event_date).is('closed_at', null).limit(1);
-    if ((same ?? []).length) return { error: 'כבר יש תיק גבייה פתוח לרכב הזה עם אותו תאריך תאונה — פותחים את התיק הקיים' };
+    if ((same ?? []).length) return { error: 'כבר יש תיק תביעה פתוח לרכב הזה עם אותו תאריך תאונה — פותחים את התיק הקיים' };
   }
   if (![input.amount_due, input.vat_offset, input.reinstatement, input.claim_check_amount].every(okMoney)) return { error: 'סכום לא תקין' };
   const legal = input.legal ?? null;
@@ -319,7 +319,7 @@ export async function openCollectionCase(
     branchId = f.branch_id;
     fromClosure = { appraiser_name: f.appraiser, deductible: f.deductible == null ? null : Number(f.deductible), appraiser_fee: f.appraiser_fee == null ? null : Number(f.appraiser_fee) };
     const { data: existing } = await db.from('collection_cases').select('id').eq('finance_closure_id', input.finance_closure_id).maybeSingle();
-    if (existing) return { error: 'לתיק הזה כבר נפתח תיק גבייה' };
+    if (existing) return { error: 'לתיק הזה כבר נפתח תיק תביעה' };
   }
 
   const { data, error } = await db
@@ -362,7 +362,7 @@ export async function openCollectionCase(
     } as never)
     .select('id')
     .single();
-  if (error) return { error: error.message.includes('uq_collection_cases_finance') ? 'לתיק הזה כבר נפתח תיק גבייה' : error.message };
+  if (error) return { error: error.message.includes('uq_collection_cases_finance') ? 'לתיק הזה כבר נפתח תיק תביעה' : error.message };
   const newId = (data as { id: string }).id;
   await db.from('collection_case_events').insert({
     case_id: newId,

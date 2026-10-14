@@ -75,14 +75,14 @@ export function CaseFileClient({
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ כל תיקי הגבייה</Link>
+        <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ ניהול תביעות ביטוח</Link>
         <FeedbackButton />
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">תיק גבייה · רכב {c.plate}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">תיק תביעה · רכב {c.plate}</h1>
             <p className="text-sm text-gray-500">{c.customer_name ?? ''}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-sm font-bold ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
@@ -598,7 +598,7 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
         {msg && <p className="text-sm">{msg}</p>}
       </div>
       <div className="space-y-2">
-        <p className="font-semibold text-sm">מסמכי תיק הגבייה ({own.length})</p>
+        <p className="font-semibold text-sm">מסמכי תיק התביעה ({own.length})</p>
         {own.length ? <List items={own} /> : <p className="text-sm text-gray-400">עוד לא הועלו מסמכים</p>}
       </div>
       {repair.length > 0 && (

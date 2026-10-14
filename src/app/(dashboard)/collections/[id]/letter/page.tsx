@@ -16,7 +16,7 @@ export default async function CollectionLetterPage({ params }: { params: { id: s
     return (
       <div className="max-w-xl mx-auto py-10 text-center space-y-3" dir="rtl">
         <p className="text-gray-700">{r.error ?? 'התיק לא נמצא'}</p>
-        <a href="/collections" className="text-indigo-700 font-semibold">→ חזרה לגבייה</a>
+        <a href="/collections" className="text-indigo-700 font-semibold">→ חזרה לניהול תביעות ביטוח</a>
       </div>
     );
   }

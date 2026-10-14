@@ -39,7 +39,7 @@ export function LegalClient({ cases, pending = [], collectors, isCeo, error }: {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">⚖️ טיפול משפטי</h1>
-          <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ לגבייה</Link>
+          <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ לניהול תביעות ביטוח</Link>
         </div>
         <div className="flex gap-2">
           <FeedbackButton />

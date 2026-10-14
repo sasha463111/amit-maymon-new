@@ -848,7 +848,7 @@ async function runCollectionReminders(supabase: ServiceClient) {
     await supabase.from('notifications').insert({
       user_id: r.remind_user,
       type: 'COLLECTION_REMINDER',
-      title: `⏰ תזכורת גבייה — רכב ${c?.plate ?? ''}`,
+      title: `⏰ תזכורת תביעה — רכב ${c?.plate ?? ''}`,
       body: [c?.customer_name, r.body].filter(Boolean).join(' · ').slice(0, 300),
       action_url: `/collections/${r.case_id}#r-${r.id}`,
     } as never);
