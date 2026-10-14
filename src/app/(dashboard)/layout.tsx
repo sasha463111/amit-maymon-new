@@ -49,6 +49,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'החזרות', href: '/returns' },
     { label: 'כספים', href: '/finance' },
     { label: 'גבייה', href: '/collections' },
+    { label: 'טיפול משפטי', href: '/legal' },
     { label: 'דשבורד גבייה', href: '/receivables' },
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
@@ -84,6 +85,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ACCOUNTANT: [
     { label: 'כספים', href: '/finance' },
     { label: 'גבייה', href: '/collections' },
+    { label: 'טיפול משפטי', href: '/legal' },
     { label: 'החזרות', href: '/returns' },
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
@@ -91,6 +93,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   // Claims collectors (2026-10-14): the collections screen only.
   COLLECTIONS: [
     { label: 'גבייה', href: '/collections' },
+    { label: 'טיפול משפטי', href: '/legal' },
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],

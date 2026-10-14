@@ -6,6 +6,8 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { PaymentRule } from '@/lib/collections';
 import { defaultStageDays, israelTimeToIso, israelWorkDateIn, stageRule } from '@/lib/collectionStages';
 
+const LEGAL_STAGE = 'טיפול משפטי';
+
 // Collections (Amit, 2026-10-14) — claims collectors (role COLLECTIONS:
 // ספיר, גלית, ליטל) + CEO. Work happens in collection cases: a collector
 // opens a case by plate ("פתיחת תיק"), the data is pulled from
@@ -41,7 +43,7 @@ async function me() {
 }
 
 const CASE_COLS =
-  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, updated_at, updated_by, ' +
+  'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, legal_reason, updated_at, updated_by, ' +
   // the case file (20261014350000)
   'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source, case_id, referral_id';
 
@@ -77,6 +79,7 @@ export type CollectionCase = {
   legal_claim_amount: number | null;
   legal_closed_on: string | null;
   legal_recovered_amount: number | null;
+  legal_reason: string | null;
   updated_at: string;
 } & CaseFileFields;
 
@@ -263,6 +266,8 @@ export async function openCollectionCase(
     claim_number?: string | null;
     customer_phone?: string | null;
     appraiser_name?: string | null;
+    /** Opened straight into legal handling (the "⚖️ טיפול משפטי" screen). */
+    legal?: { reason: string; lawyer: string | null; sent_on: string | null; claim_amount: number | null } | null;
   },
 ): Promise<{ error?: string; ok?: true; id?: string }> {
   const ctx = await me();
@@ -279,6 +284,11 @@ export async function openCollectionCase(
     if ((same ?? []).length) return { error: 'כבר יש תיק גבייה פתוח לרכב הזה עם אותו תאריך תאונה — פותחים את התיק הקיים' };
   }
   if (![input.amount_due, input.vat_offset, input.reinstatement, input.claim_check_amount].every(okMoney)) return { error: 'סכום לא תקין' };
+  const legal = input.legal ?? null;
+  if (legal) {
+    if (!txt(legal.reason, 200)) return { error: 'נא לבחור סיבה לטיפול המשפטי' };
+    if (!isDate(legal.sent_on) || !okMoney(legal.claim_amount)) return { error: 'פרטי הטיפול המשפטי לא תקינים' };
+  }
 
   let assignee = ctx.user.id;
   if (SUPERVISORS.has(ctx.role) && input.assign_to) {
@@ -337,14 +347,40 @@ export async function openCollectionCase(
       event_date: input.event_date || null,
       claim_number: txt(input.claim_number, 60),
       customer_phone: txt(input.customer_phone, 30),
+      ...(legal
+        ? {
+            status: 'LEGAL',
+            claim_stage: LEGAL_STAGE,
+            legal_reason: txt(legal.reason, 200),
+            legal_lawyer: txt(legal.lawyer, 80),
+            legal_sent_on: legal.sent_on || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }),
+            legal_claim_amount: legal.claim_amount,
+          }
+        : {}),
       created_by: ctx.user.id,
       updated_by: ctx.user.id,
     } as never)
     .select('id')
     .single();
   if (error) return { error: error.message.includes('uq_collection_cases_finance') ? 'לתיק הזה כבר נפתח תיק גבייה' : error.message };
-  await db.from('collection_case_events').insert({ case_id: (data as { id: string }).id, kind: 'SYSTEM', body: input.finance_closure_id ? 'התיק נפתח (הנתונים נשלפו מהסגירה)' : 'התיק נפתח', created_by: ctx.user.id } as never);
+  const newId = (data as { id: string }).id;
+  await db.from('collection_case_events').insert({
+    case_id: newId,
+    kind: 'SYSTEM',
+    body: `${legal ? `⚖️ נפתח כתיק משפטי — ${txt(legal.reason, 200)}` : 'התיק נפתח'}${input.finance_closure_id ? ' (הנתונים נשלפו מהסגירה)' : ''}`,
+    created_by: ctx.user.id,
+  } as never);
+  if (legal) {
+    const days = defaultStageDays(LEGAL_STAGE);
+    if (days) {
+      await db.from('collection_case_events').insert({
+        case_id: newId, kind: 'NOTE', body: `🤖 תזכורת אוטומטית — ${LEGAL_STAGE}: ${stageRule(LEGAL_STAGE)?.check ?? ''}`,
+        remind_at: israelTimeToIso(israelWorkDateIn(days), 9), remind_user: assignee, auto_stage: LEGAL_STAGE, created_by: ctx.user.id,
+      } as never);
+    }
+  }
   revalidatePath('/collections');
+  revalidatePath('/legal');
   return { ok: true, id: (data as { id: string }).id };
 }
 
@@ -363,6 +399,7 @@ export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'exte
   legal_claim_amount?: number | null;
   legal_closed_on?: string | null;
   legal_recovered_amount?: number | null;
+  legal_reason?: string | null;
 };
 
 export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{ error?: string; ok?: true }> {
@@ -400,6 +437,7 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   set('partial_reason', txt(u.partial_reason, 500));
   set('note', txt(u.note, 500));
   set('legal_lawyer', txt(u.legal_lawyer, 80));
+  set('legal_reason', txt(u.legal_reason, 200));
   for (const k of FILE_TEXT) set(k, txt(u[k], 120));
   for (const k of FILE_MONEY) set(k, u[k] ?? null);
   set('event_date', u.event_date || null);
@@ -442,6 +480,7 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
     await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: `סטטוס: ${STATUS_HE[prev]} ← ${STATUS_HE[status]}`, created_by: ctx.user.id } as never);
   }
   revalidatePath('/collections');
+  revalidatePath('/legal');
   revalidatePath(`/collections/${id}`);
   return { ok: true };
 }

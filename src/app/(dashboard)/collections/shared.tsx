@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LEGAL_REASONS } from '@/lib/collectionStages';
 import { updateCollectionCase, type CaseInput, type CollectionCase, type CollectionStatus } from '@/app/actions/collections';
 import { payerOf, THIRD_PARTY } from '@/lib/collections';
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
@@ -142,6 +143,7 @@ export function StatusEditor({ c, onClose }: { c: CollectionCase; onClose: () =>
   const [note, setNote] = useState(c.note ?? '');
   const [legalSent, setLegalSent] = useState(c.legal_sent_on ?? '');
   const [lawyer, setLawyer] = useState(c.legal_lawyer ?? '');
+  const [legalReason, setLegalReason] = useState(c.legal_reason ?? '');
   const [legalClaim, setLegalClaim] = useState(str(c.legal_claim_amount));
   const [legalClosed, setLegalClosed] = useState(c.legal_closed_on ?? '');
   const [legalRecovered, setLegalRecovered] = useState(str(c.legal_recovered_amount));
@@ -165,6 +167,7 @@ export function StatusEditor({ c, onClose }: { c: CollectionCase; onClose: () =>
       note,
       legal_sent_on: legalSent || null,
       legal_lawyer: lawyer || null,
+      legal_reason: legalReason || null,
       legal_claim_amount: num(legalClaim),
       legal_closed_on: legalClosed || null,
       legal_recovered_amount: num(legalRecovered),
@@ -247,6 +250,15 @@ export function StatusEditor({ c, onClose }: { c: CollectionCase; onClose: () =>
             <label className={lab}>
               עורך דין
               <input value={lawyer} onChange={(e) => setLawyer(e.target.value)} className={`${input} block w-40`} />
+            </label>
+            <label className={lab}>
+              סיבת התביעה המשפטית
+              <input value={legalReason} onChange={(e) => setLegalReason(e.target.value)} list="legal-reasons" className={`${input} block w-56`} />
+              <datalist id="legal-reasons">
+                {LEGAL_REASONS.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
             </label>
             <label className={lab}>
               סכום המחלוקת / התביעה

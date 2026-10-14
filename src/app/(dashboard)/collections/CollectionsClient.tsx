@@ -24,6 +24,7 @@ import { daysLate, expectedPayment, payDateByRule, payerOf, ruleLabel, workingDa
 import { INSURERS, financeDefaultsFromSubType } from '@/lib/finance';
 import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toCollect, today } from './shared';
 import { formatDate } from '@/lib/dates';
+import { LEGAL_REASONS, OTHER } from '@/lib/collectionStages';
 
 type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback' | 'summary';
 
@@ -126,7 +127,6 @@ export function CollectionsClient({
         {([
           ['active', `בטיפול (${counts.active})`],
           ['overdue', `⏰ באיחור (${counts.overdue})`],
-          ['legal', `⚖️ משפטי (${counts.legal})`],
           ['closed', `נסגרו (${counts.closed})`],
           ['all', `הכול (${counts.all})`],
           ['shir', '🧾 ש.י.ר — ריכוז חודשי'],
@@ -142,6 +142,9 @@ export function CollectionsClient({
             {label}
           </button>
         ))}
+        <Link href="/legal" className="px-4 py-2 text-sm font-semibold whitespace-nowrap text-purple-700">
+          ⚖️ טיפול משפטי ({counts.legal}) ←
+        </Link>
       </div>
 
       {tab === 'summary' && weekly ? (
@@ -236,7 +239,7 @@ export function CollectionsClient({
                     )}
                     {c.status === 'LEGAL' && (
                       <div className="text-[11px] text-purple-800">
-                        {c.legal_lawyer ?? ''} · {c.legal_sent_on ? formatDate(c.legal_sent_on) : ''} · {ils(c.legal_claim_amount)}
+                        {c.legal_reason ? `${c.legal_reason} · ` : ''}{c.legal_lawyer ?? ''} · {c.legal_sent_on ? formatDate(c.legal_sent_on) : ''} · {ils(c.legal_claim_amount)}
                         {c.legal_closed_on && ` · נסגר ${ils(c.legal_recovered_amount)}`}
                       </div>
                     )}
@@ -278,8 +281,14 @@ const blankCase = (plate = ''): CaseInput => ({
   claim_check_amount: null,
 });
 
-function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collectors: { id: string; name: string }[]; onClose: () => void }) {
+/** "פתיחת תיק" — collections, or (legal) the "⚖️ טיפול משפטי" screen: same
+ *  lookup by plate → accident date → existing case or a new one; in legal mode
+ *  an existing case moves to legal, a new one opens straight into legal. */
+export function OpenCaseDialog({ isCeo, collectors, onClose, legal = false }: { isCeo: boolean; collectors: { id: string; name: string }[]; onClose: () => void; legal?: boolean }) {
   const router = useRouter();
+  const [lg, setLg] = useState({ reason: '', other: '', lawyer: '', sent_on: today(), claim_amount: '' });
+  const [moveTarget, setMoveTarget] = useState<string | null>(null);
+  const legalReason = lg.reason === OTHER ? (lg.other.trim() ? `אחר: ${lg.other.trim()}` : '') : lg.reason;
   const [plate, setPlate] = useState('');
   const [matches, setMatches] = useState<PlateMatch[] | null>(null);
   const [history, setHistory] = useState<{ existing: ExistingCollection[]; repairs: RepairMatch[] } | null>(null);
@@ -306,6 +315,7 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
     setPicked(null);
     setRepair(null);
     setForm(null);
+    setMoveTarget(null);
   }
 
   /** Start from a repair case: everything typed there comes along. */
@@ -352,8 +362,28 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
     setForm(blankCase(plate.replace(/\D/g, '')));
   }
 
+  async function moveToLegal() {
+    if (!moveTarget) return;
+    if (!legalReason) return setErr('נא לבחור סיבה לטיפול המשפטי');
+    setBusy(true);
+    setErr(null);
+    const r = await updateCollectionCase(moveTarget, {
+      status: 'LEGAL',
+      claim_stage: 'טיפול משפטי',
+      legal_reason: legalReason,
+      legal_lawyer: lg.lawyer || null,
+      legal_sent_on: lg.sent_on || today(),
+      legal_claim_amount: num(lg.claim_amount),
+    });
+    setBusy(false);
+    if (r.error) return setErr(r.error);
+    onClose();
+    router.push(`/collections/${moveTarget}`);
+  }
+
   async function save() {
     if (!form) return;
+    if (legal && !legalReason) return setErr('נא לבחור סיבה לטיפול המשפטי');
     setBusy(true);
     setErr(null);
     const r = await openCollectionCase({
@@ -365,6 +395,7 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
       claim_number: extra.claim_number || null,
       customer_phone: extra.customer_phone || null,
       appraiser_name: extra.appraiser_name || null,
+      legal: legal ? { reason: legalReason, lawyer: lg.lawyer || null, sent_on: lg.sent_on || null, claim_amount: num(lg.claim_amount) } : null,
     });
     setBusy(false);
     if (r.error) return setErr(r.error);
@@ -383,7 +414,7 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
     <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-2" onClick={onClose}>
       <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl p-4 space-y-3 max-h-[95vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-lg">📂 פתיחת תיק גבייה</h2>
+          <h2 className="font-bold text-lg">{legal ? '⚖️ פתיחת תיק משפטי' : '📂 פתיחת תיק גבייה'}</h2>
           <button type="button" onClick={onClose} className="text-gray-400 text-xl" aria-label="סגור">✕</button>
         </div>
         <div className="flex gap-2">
@@ -420,19 +451,32 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
                   <dt className="text-gray-400">מטפלת:</dt>
                   <dd>{x.assigned_name ?? '—'}</dd>
                 </dl>
-                {x.mine ? (
+                {x.mine && legal && x.status !== 'LEGAL' ? (
+                  <button type="button" onClick={() => setMoveTarget(x.id)} className={`inline-flex items-center h-9 px-4 rounded-lg text-sm font-semibold ${moveTarget === x.id ? 'bg-purple-700 text-white' : 'bg-gray-900 text-white'}`}>
+                    ⚖️ זה אותו אירוע — להעביר את התיק הזה למשפטי
+                  </button>
+                ) : x.mine ? (
                   <Link href={`/collections/${x.id}`} className="inline-flex items-center h-9 px-4 rounded-lg bg-gray-900 text-white text-sm font-semibold">
-                    📂 זה אותו אירוע — לפתיחת התיק
+                    📂 זה אותו אירוע — לפתיחת התיק{x.status === 'LEGAL' ? ' (כבר במשפטי)' : ''}
                   </Link>
                 ) : (
                   <p className="text-xs text-gray-600">התיק בטיפול של {x.assigned_name ?? 'מסלקת אחרת'}. אם זה אותו אירוע, אין צורך לפתוח תיק חדש.</p>
                 )}
               </div>
             ))}
-            <button type="button" onClick={() => setNewAccident(true)} className="h-10 px-4 rounded-lg border-2 border-gray-900 bg-white text-sm font-bold">
+            <button type="button" onClick={() => { setNewAccident(true); setMoveTarget(null); }} className="h-10 px-4 rounded-lg border-2 border-gray-900 bg-white text-sm font-bold">
               ➕ זו תאונה אחרת — פתיחת תיק חדש
             </button>
           </div>
+        )}
+
+        {legal && moveTarget && !newAccident && (
+          <>
+            <LegalFields lg={lg} set={(p) => setLg({ ...lg, ...p })} />
+            <button type="button" onClick={() => void moveToLegal()} disabled={busy} className="w-full h-12 rounded-xl bg-purple-700 text-white text-base font-bold disabled:opacity-50">
+              {busy ? 'שומר…' : '⚖️ העברה לטיפול משפטי'}
+            </button>
+          </>
         )}
 
         {/* 2. Pull what we already have: the repair case (accident date) and the closure data. */}
@@ -501,6 +545,7 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
               </div>
             </div>
             <CaseFields v={form} set={(p) => setForm({ ...form, ...p })} />
+            {legal && <LegalFields lg={lg} set={(p) => setLg({ ...lg, ...p })} />}
             {isCeo && (
               <label className="block text-xs text-gray-500">
                 שיוך למסלקת
@@ -513,11 +558,54 @@ function OpenCaseDialog({ isCeo, collectors, onClose }: { isCeo: boolean; collec
               </label>
             )}
             <button type="button" onClick={() => void save()} disabled={busy} className="w-full h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-50">
-              {busy ? 'שומר…' : 'פתח תיק'}
+              {busy ? 'שומר…' : legal ? '⚖️ פתח תיק משפטי' : 'פתח תיק'}
             </button>
           </>
         )}
         {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
+      </div>
+    </div>
+  );
+}
+
+type LegalForm = { reason: string; other: string; lawyer: string; sent_on: string; claim_amount: string };
+
+/** Why it goes to legal (Amit: "סיבת התביעה המשפטית — הפרשים וכדומה") + lawyer, date, amount. */
+function LegalFields({ lg, set }: { lg: LegalForm; set: (p: Partial<LegalForm>) => void }) {
+  const inp = 'w-full h-9 px-2 rounded-lg border border-gray-300 text-sm bg-white';
+  const lab = 'block text-[11px] text-gray-500 mb-0.5';
+  return (
+    <div className="rounded-xl border-2 border-purple-200 bg-purple-50/50 p-3 space-y-2">
+      <p className="text-sm font-bold text-purple-900">⚖️ פרטי הטיפול המשפטי</p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <div>
+          <label className={lab}>סיבת התביעה המשפטית *</label>
+          <select value={lg.reason} onChange={(e) => set({ reason: e.target.value })} className={inp}>
+            <option value="">— בחירה —</option>
+            {LEGAL_REASONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+            <option value={OTHER}>אחר — מלל חופשי</option>
+          </select>
+        </div>
+        {lg.reason === OTHER && (
+          <div>
+            <label className={lab}>פירוט הסיבה *</label>
+            <input value={lg.other} onChange={(e) => set({ other: e.target.value })} maxLength={180} className={inp} />
+          </div>
+        )}
+        <div>
+          <label className={lab}>סכום התביעה / ההפרש (₪)</label>
+          <input value={lg.claim_amount} onChange={(e) => set({ claim_amount: e.target.value })} inputMode="decimal" dir="ltr" className={inp} />
+        </div>
+        <div>
+          <label className={lab}>עורך דין</label>
+          <input value={lg.lawyer} onChange={(e) => set({ lawyer: e.target.value })} className={inp} />
+        </div>
+        <div>
+          <label className={lab}>תאריך העברה למשפטי</label>
+          <input type="date" value={lg.sent_on} onChange={(e) => set({ sent_on: e.target.value })} className={inp} />
+        </div>
       </div>
     </div>
   );

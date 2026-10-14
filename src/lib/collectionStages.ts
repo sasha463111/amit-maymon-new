@@ -71,3 +71,14 @@ export function israelWorkDateIn(days: number): string {
   }
   return iso;
 }
+
+/** Why a claim goes to legal handling (Amit, 14/10: "סיבת התביעה המשפטית — הפרשים וכדומה"). */
+export const LEGAL_REASONS = [
+  'הפרשים — החברה שילמה פחות מהחשבונית',
+  'דחיית התביעה',
+  'ירידת ערך',
+  'שכ״ט שמאי / הוצאות',
+  'צד ג׳ לא משלם',
+  'לקוח לא שילם (השתתפות עצמית / מע״מ)',
+  'עיכוב בתשלום',
+];

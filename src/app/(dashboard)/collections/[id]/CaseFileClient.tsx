@@ -93,6 +93,7 @@ export function CaseFileClient({
             <F label="סוג תביעה">{c.claim_type}</F>
             <F label="מספר תביעה">{c.claim_number}</F>
             <F label="מצב תביעה" tone="text-indigo-700 font-semibold">{c.claim_stage}</F>
+            {c.status === 'LEGAL' && <F label="סיבה משפטית" tone="text-purple-800 font-semibold">{c.legal_reason}</F>}
             <F label="מסלקת">{supervisor ? <Reassign c={c} collectors={collectors} /> : c.assigned_name}</F>
           </Fields>
           <Fields>
