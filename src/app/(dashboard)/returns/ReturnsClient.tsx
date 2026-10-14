@@ -7,6 +7,7 @@ import {
   attachInvoicePhoto,
   cancelPartReturn,
   createPartReturn,
+  readPartSticker,
   handOverToDriver,
   markCredited,
   markDispute,
@@ -474,6 +475,9 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [reason, setReason] = useState('');
   const [reasonOther, setReasonOther] = useState('');
   const [doc, setDoc] = useState('');
+  const [stickerDate, setStickerDate] = useState('');
+  // Sticker reading (Claude): 'reading' while it runs, 'done' after it filled something.
+  const [reading, setReading] = useState<'idle' | 'reading' | 'done'>('idle');
   const [invoice, setInvoice] = useState<File | null>(null);
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
@@ -482,6 +486,43 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   function onPhoto(f: File | null) {
     setPhoto(f);
     setPreview(f ? URL.createObjectURL(f) : null);
+    if (f) void readFromSticker(f);
+  }
+
+  // Fill the form from the sticker (Amit, 2026-10-14). Only EMPTY fields are
+  // filled — never overwrite what the user already typed. No API key / error:
+  // nothing happens and the form stays manual.
+  async function readFromSticker(f: File) {
+    setReading('reading');
+    try {
+      const fd = new FormData();
+      fd.append('photo', await shrinkImage(f, { maxSide: 1600 }));
+      const res = await readPartSticker(fd);
+      const x = res.fields;
+      if (!x) return setReading('idle');
+      // Functional updates: the reading takes a few seconds, and anything the
+      // user typed meanwhile must win over the sticker.
+      let filled = false;
+      const fill = (val: string | null, set: React.Dispatch<React.SetStateAction<string>>) => {
+        if (!val) return;
+        filled = true;
+        set((cur) => (cur.trim() ? cur : val));
+      };
+      if (!general) fill(x.plate, setPlate);
+      fill(x.supplier, setSupplier);
+      if (x.supplier === 'אחר') fill(x.supplier_other, setSupplierOther);
+      fill(x.sku, setSku);
+      fill(x.description, setDescription);
+      fill(x.document_number, setDoc);
+      fill(x.sticker_date, setStickerDate);
+      if (x.quantity && x.quantity > 1) {
+        filled = true;
+        setQuantity((q) => (q === 1 ? x.quantity! : q));
+      }
+      setReading(filled ? 'done' : 'idle');
+    } catch {
+      setReading('idle');
+    }
   }
 
   async function save() {
@@ -503,6 +544,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     fd.append('reason', reason);
     fd.append('reason_other', reasonOther);
     fd.append('document_number', doc);
+    fd.append('sticker_date', stickerDate);
     if (invoice) fd.append('invoice', await shrinkImage(invoice));
     fd.append('branch_id', branchId);
     const res = await createPartReturn(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }));
@@ -533,6 +575,8 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
           )}
           <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onPhoto(e.target.files?.[0] ?? null)} />
         </label>
+        {reading === 'reading' && <p className="text-sm text-blue-700 font-semibold">🔍 קורא את המדבקה…</p>}
+        {reading === 'done' && <p className="text-sm text-green-700 font-semibold">✨ מולא אוטומטית מהמדבקה — בדקו והשלימו מה שחסר</p>}
 
         <div>
           <p className="text-sm font-semibold mb-2">מספר רכב</p>
@@ -576,6 +620,10 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
           </div>
         </div>
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="תיאור החלק" className="w-full h-11 px-3 rounded-lg border border-gray-300 text-sm" />
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600 shrink-0">תאריך על המדבקה</span>
+          <input type="date" value={stickerDate} onChange={(e) => setStickerDate(e.target.value)} className="flex-1 h-10 px-3 rounded-lg border border-gray-300 text-sm" />
+        </label>
 
         <div>
           <p className="text-sm font-semibold mb-2">סיבת החזרה</p>

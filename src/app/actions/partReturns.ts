@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, canUsePartReturns } from '@/lib/partReturns';
+import { readSticker, type StickerFields } from '@/lib/stickerReader';
 
 // Parts returns & credits (Amit's spec, 2026-10-12) — replaces, in parallel
 // at first, his Google Forms/Sheets. Table public.part_returns (migration
@@ -72,6 +73,7 @@ export type PartReturnRow = {
   /** Photo of the supplier's original invoice / of the credit invoice. */
   invoice_url: string | null;
   credit_invoice_url: string | null;
+  sticker_date: string | null;
   mine: boolean;
 };
 
@@ -154,6 +156,7 @@ export async function createPartReturn(formData: FormData) {
       reason,
       reason_other: reason === 'אחר' ? reasonOther : null,
       document_number: clean(formData.get('document_number'), 80) || null,
+      sticker_date: /^\d{4}-\d{2}-\d{2}$/.test(clean(formData.get('sticker_date'), 10)) ? clean(formData.get('sticker_date'), 10) : null,
       notes: clean(formData.get('notes'), 500) || null,
       sticker_path: path,
       invoice_path: invoicePath,
@@ -273,6 +276,7 @@ export async function listPartReturns(opts: { caseId?: string } = {}): Promise<{
     photo_url: urlByPath.get(r.sticker_path) ?? null,
     invoice_url: r.invoice_path ? urlByPath.get(r.invoice_path) ?? null : null,
     credit_invoice_url: r.credit_invoice_path ? urlByPath.get(r.credit_invoice_path) ?? null : null,
+    sticker_date: (r.sticker_date as string | null) ?? null,
     mine: r.created_by === user.id,
   }));
   return { rows, role: profile.role };
@@ -395,4 +399,25 @@ export async function attachInvoicePhoto(formData: FormData) {
   if (old) await db.storage.from(BUCKET).remove([old]);
   revalidatePath('/returns');
   return { ok: true };
+}
+
+/** Read the sticker photo with Claude and return the fields it found
+ *  (Amit, 2026-10-14). null fields = not found; { unavailable } = no API key
+ *  or API error — the form just stays manual. */
+export async function readPartSticker(formData: FormData): Promise<{ fields?: StickerFields; unavailable?: true; error?: string }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'לא מחובר' };
+  if (!MARK_ROLES.has(ctx.profile.role) || !canUsePartReturns(ctx.profile.role)) return { error: 'אין הרשאה' };
+  const photo = formData.get('photo');
+  if (!(photo instanceof File) || photo.size === 0 || !photo.type.startsWith('image/')) return { error: 'אין תמונה' };
+  if (photo.size > 5 * 1024 * 1024) return { error: 'התמונה גדולה מדי' };
+  const base64 = Buffer.from(await photo.arrayBuffer()).toString('base64');
+  const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) ? photo.type : 'image/jpeg';
+  try {
+    const fields = await readSticker({ base64, mediaType });
+    return fields ? { fields } : { unavailable: true };
+  } catch (e) {
+    console.error('[readPartSticker]', e);
+    return { unavailable: true };
+  }
 }
