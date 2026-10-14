@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { createSupplierDoc, verifySupplierDoc, type SupplierDocRow } from '@/app/actions/supplierDocs';
+import { createSupplierDoc, verifySupplierDoc, type SupplierDocDuplicate, type SupplierDocRow } from '@/app/actions/supplierDocs';
 import type { PartReturnRow } from '@/app/actions/partReturns';
 import { PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 import { shrinkImage } from '@/lib/shrinkImage';
@@ -232,7 +232,9 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function save() {
+  const [duplicates, setDuplicates] = useState<SupplierDocDuplicate[] | null>(null);
+
+  async function save(confirmDuplicate = false) {
     setError(null);
     if (!photo) return setError('נא לצלם את המסמך');
     if (!supplier || (supplier === 'אחר' && !supplierOther.trim())) return setError('נא לבחור ספק');
@@ -248,8 +250,11 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
     fd.append('amount', amount);
     fd.append('notes', notes);
     fd.append('photo', await shrinkImage(photo));
+    if (confirmDuplicate) fd.append('confirm_duplicate', 'yes');
     const r = await createSupplierDoc(fd);
     setSaving(false);
+    if (r.duplicates?.length) return setDuplicates(r.duplicates);
+    setDuplicates(null);
     if (r.error) setError(r.error);
     else onSaved();
   }
@@ -321,6 +326,28 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="הערות (רשות)" className={input} />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
+        {duplicates && (
+          <div className="p-3 rounded-xl border-2 border-amber-300 bg-amber-50 space-y-2">
+            <p className="font-bold text-amber-900">⚠️ שים/י לב — ייתכן שזו הקלדה כפולה</p>
+            <ul className="text-sm text-amber-900">
+              {duplicates.map((d, i) => (
+                <li key={i}>
+                  {DOC_TYPE_LABEL[d.doc_type] ?? d.doc_type} {d.doc_number} של {d.supplier} כבר צולמה · {formatDate(d.doc_date)}
+                  {d.branch_name ? ` · ${d.branch_name}` : ''}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-amber-900">זה מסמך אחר עם אותו מספר, או אותו מסמך פעמיים?</p>
+            <div className="flex gap-2 flex-wrap">
+              <button type="button" disabled={saving} onClick={() => void save(true)} className="h-10 px-3 rounded-lg bg-amber-600 text-white text-sm font-semibold disabled:opacity-50">
+                מסמך אחר — אני מאשר/ת, שמור
+              </button>
+              <button type="button" onClick={() => setDuplicates(null)} className="h-10 px-3 rounded-lg border border-gray-300 bg-white text-sm">
+                אותו מסמך — בטל
+              </button>
+            </div>
+          </div>
+        )}
         <button type="button" onClick={() => void save()} disabled={saving} className="w-full h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-50">
           {saving ? 'שומר…' : 'שמור'}
         </button>

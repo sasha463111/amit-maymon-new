@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { saveFinanceEntry, type FinanceEntry } from '@/app/actions/financeClosures';
+import { saveFinanceEntry, type FinanceDuplicate, type FinanceEntry } from '@/app/actions/financeClosures';
 import { APPRAISERS, CLAIM_TYPES, IDF_CATEGORIES, INSURERS, WORK_SOURCE_LABEL, financeDefaultsFromSubType, normalizeAppraiser, type WorkSource } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
 
@@ -39,9 +39,10 @@ export function FinanceEntryCard({
   const [deductible, setDeductible] = useState(toStr(initial?.deductible));
   const [jobCard, setJobCard] = useState(initial?.job_card_no ?? '');
   const [saving, setSaving] = useState(false);
+  const [duplicates, setDuplicates] = useState<FinanceDuplicate[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(initial ? { ok: true, text: `נשמר · עודכן ${formatDate(initial.updated_at)}` } : null);
 
-  async function save() {
+  async function save(confirmDuplicate = false) {
     setSaving(true);
     setMsg(null);
     const r = await saveFinanceEntry(caseId, {
@@ -56,8 +57,13 @@ export function FinanceEntryCard({
       invoice_number: invoice || null,
       deductible: toNum(deductible),
       job_card_no: jobCard || null,
-    });
+    }, confirmDuplicate);
     setSaving(false);
+    if (r.duplicates?.length) {
+      setDuplicates(r.duplicates);
+      return;
+    }
+    setDuplicates(null);
     setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: 'נשמר ✓ — מופיע בדשבורד הכספים' });
   }
 
@@ -153,6 +159,30 @@ export function FinanceEntryCard({
           <option key={a} value={a} />
         ))}
       </datalist>
+
+      {duplicates && (
+        <div className="mt-4 p-4 rounded-xl border-2 border-amber-300 bg-amber-50 space-y-2">
+          <p className="font-bold text-amber-900">⚠️ שים/י לב — ייתכן שזו הקלדה כפולה</p>
+          <ul className="text-sm text-amber-900 space-y-0.5">
+            {duplicates.map((d, i) => (
+              <li key={i}>
+                {d.reason === 'invoice' ? `חשבונית ${d.invoice_number} כבר הוזנה` : `לרכב ${d.plate} כבר הוזנה סגירה`}
+                {' · '}
+                {formatDate(d.closed_on)} · ₪{Math.round(d.amount_ours).toLocaleString('he-IL')}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-amber-900">האם מדובר בשני נזקים שונים, או שזו הקלדה כפולה?</p>
+          <div className="flex gap-2 flex-wrap">
+            <button type="button" disabled={saving} onClick={() => void save(true)} className="h-10 px-4 rounded-lg bg-amber-600 text-white text-sm font-semibold disabled:opacity-50">
+              שני נזקים שונים — אני מאשר/ת, שמור
+            </button>
+            <button type="button" onClick={() => setDuplicates(null)} className="h-10 px-4 rounded-lg border border-gray-300 bg-white text-sm">
+              הקלדה כפולה — בטל
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 mt-4">
         <button type="button" onClick={() => void save()} disabled={saving} className="h-10 px-5 rounded-lg bg-[#1e3a5f] text-white text-sm font-semibold disabled:opacity-50">

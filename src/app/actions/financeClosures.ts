@@ -75,7 +75,14 @@ export async function getFinanceEntry(caseId: string): Promise<{ entry: (Finance
   };
 }
 
-export async function saveFinanceEntry(caseId: string, input: FinanceEntry): Promise<{ error?: string; ok?: true }> {
+/** An earlier entry that looks like the one being typed (same plate or same invoice number). */
+export type FinanceDuplicate = { closed_on: string; amount_ours: number; invoice_number: string | null; plate: string | null; reason: 'plate' | 'invoice' };
+
+export async function saveFinanceEntry(
+  caseId: string,
+  input: FinanceEntry,
+  confirmDuplicate = false,
+): Promise<{ error?: string; ok?: true; duplicates?: FinanceDuplicate[] }> {
   const a = await access(caseId);
   if ('error' in a) return { error: a.error };
   const db = serviceClient();
@@ -113,10 +120,39 @@ export async function saveFinanceEntry(caseId: string, input: FinanceEntry): Pro
     updated_at: new Date().toISOString(),
   };
 
-  const { data: existing } = await db.from('finance_closures').select('id').eq('case_id', caseId).maybeSingle();
+  // Double-entry guard (Amit, 2026-10-14): the same car or the same invoice
+  // number already entered for another case / in the Excel history → ask first.
+  const { data: existing } = await db.from('finance_closures').select('id, duplicate_confirmed_at').eq('case_id', caseId).maybeSingle();
+  const alreadyConfirmed = !!(existing as { duplicate_confirmed_at: string | null } | null)?.duplicate_confirmed_at;
+  if (!confirmDuplicate && !alreadyConfirmed) {
+    const inv = row.invoice_number;
+    const ors = [row.plate ? `plate.eq.${row.plate}` : null, inv ? `invoice_number.eq."${inv.replace(/["\\]/g, '')}"` : null].filter(Boolean).join(',');
+    if (ors) {
+      const { data: dups } = await db
+        .from('finance_closures')
+        .select('closed_on, amount_ours, invoice_number, plate, case_id')
+        .or(ors)
+        .limit(10);
+      const others = ((dups ?? []) as { closed_on: string; amount_ours: string | number; invoice_number: string | null; plate: string | null; case_id: string | null }[])
+        .filter((d) => d.case_id !== caseId);
+      if (others.length) {
+        return {
+          duplicates: others.map((d) => ({
+            closed_on: d.closed_on,
+            amount_ours: Number(d.amount_ours),
+            invoice_number: d.invoice_number,
+            plate: d.plate,
+            reason: inv && d.invoice_number === inv ? 'invoice' : 'plate',
+          })),
+        };
+      }
+    }
+  }
+  const confirmed = confirmDuplicate ? { duplicate_confirmed_by: a.user.id, duplicate_confirmed_at: new Date().toISOString() } : {};
+
   const { error } = existing
-    ? await db.from('finance_closures').update(row as never).eq('id', (existing as { id: string }).id)
-    : await db.from('finance_closures').insert({ ...row, source: 'MANUAL', created_by: a.user.id } as never);
+    ? await db.from('finance_closures').update({ ...row, ...confirmed } as never).eq('id', (existing as { id: string }).id)
+    : await db.from('finance_closures').insert({ ...row, ...confirmed, source: 'MANUAL', created_by: a.user.id } as never);
   if (error) return { error: error.message };
   revalidatePath(`/closure/${caseId}`);
   revalidatePath('/finance');

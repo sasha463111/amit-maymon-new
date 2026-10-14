@@ -101,8 +101,10 @@ export async function listSupplierDocs(): Promise<{ rows: SupplierDocRow[]; erro
   };
 }
 
+export type SupplierDocDuplicate = { doc_date: string; doc_type: string; supplier: string; doc_number: string; branch_name: string | null };
+
 /** Photograph an invoice / delivery note into the archive. */
-export async function createSupplierDoc(formData: FormData): Promise<{ error?: string; ok?: true }> {
+export async function createSupplierDoc(formData: FormData): Promise<{ error?: string; ok?: true; duplicates?: SupplierDocDuplicate[] }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
   const { supabase, user, profile } = ctx;
@@ -126,6 +128,32 @@ export async function createSupplierDoc(formData: FormData): Promise<{ error?: s
 
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
+
+  // Double-entry guard (Amit, 2026-10-14): same supplier + same document number
+  // already in the archive → ask before saving a second copy.
+  const docNumber = clean(formData.get('doc_number'), 80);
+  const confirmDuplicate = clean(formData.get('confirm_duplicate'), 5) === 'yes';
+  if (docNumber && !confirmDuplicate) {
+    const { data: dups } = await db
+      .from('supplier_documents')
+      .select('doc_date, doc_type, supplier, doc_number, branch_id, branches(name)')
+      .eq('supplier', supplier)
+      .ilike('doc_number', docNumber.replace(/[%_\\]/g, ''))
+      .limit(5);
+    const list = (dups ?? []) as { doc_date: string; doc_type: string; supplier: string; doc_number: string; branches: { name: string } | { name: string }[] | null }[];
+    if (list.length) {
+      return {
+        duplicates: list.map((d) => ({
+          doc_date: d.doc_date,
+          doc_type: d.doc_type,
+          supplier: d.supplier,
+          doc_number: d.doc_number,
+          branch_name: (Array.isArray(d.branches) ? d.branches[0] : d.branches)?.name ?? null,
+        })),
+      };
+    }
+  }
+
   const path = `docs/${branchId}/${docDate}/${crypto.randomUUID()}.${file.type === 'image/png' ? 'png' : 'jpg'}`;
   const { error: upErr } = await db.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
   if (upErr) return { error: `שמירת התמונה נכשלה: ${upErr.message}` };
@@ -133,7 +161,8 @@ export async function createSupplierDoc(formData: FormData): Promise<{ error?: s
     branch_id: branchId,
     doc_type: docType,
     supplier,
-    doc_number: clean(formData.get('doc_number'), 80) || null,
+    doc_number: docNumber || null,
+    duplicate_confirmed_at: confirmDuplicate ? new Date().toISOString() : null,
     doc_date: docDate,
     plate: clean(formData.get('plate'), 12).replace(/\D/g, '') || null,
     amount,
