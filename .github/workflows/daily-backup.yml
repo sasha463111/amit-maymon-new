@@ -30,6 +30,16 @@ jobs:
           fi
           echo "Secret present."
 
+      # The repos are public: a plain dump uploaded as an artifact could be
+      # downloaded by anyone (customer names, phones, ID numbers). Encrypt it,
+      # and refuse to run without the passphrase.
+      - name: Verify backup passphrase secret is present
+        run: |
+          if [ -z "${{ secrets.BACKUP_PASSPHRASE }}" ]; then
+            echo "::error::BACKUP_PASSPHRASE secret is not set - refusing to upload an unencrypted backup."
+            exit 1
+          fi
+
       - name: Backup database
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
@@ -64,11 +74,23 @@ jobs:
           echo "Backup created: $BACKUP_FILE"
           ls -lh "$BACKUP_FILE"
 
+      - name: Encrypt backup
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          for f in backups/*.sql; do
+            gzip -9 "$f"
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" --symmetric --cipher-algo AES256 -o "$f.gz.gpg" "$f.gz"
+            rm -f "$f.gz"
+          done
+          ls -lh backups/
+          # Restore: gpg -d backup_X.sql.gz.gpg | gunzip > backup_X.sql
+
       - name: Upload backup to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: supabase-backup-${{ github.run_id }}
-          path: backups/
+          path: backups/*.gpg
           retention-days: 30
 
       - name: Report status
