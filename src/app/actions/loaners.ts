@@ -161,6 +161,7 @@ export async function saveFleetCar(input: { id?: string; plate: string; car_type
   const plate = input.plate.replace(/\D/g, '');
   if (plate.length < 5) return { error: 'מספר רכב לא תקין' };
   if (!input.car_type.trim()) return { error: 'נא להזין סוג רכב' };
+  if (!input.branch_id) return { error: 'נא לבחור סניף' };
   const row = { plate, car_type: input.car_type.trim().slice(0, 80), branch_id: input.branch_id || null, notes: (input.notes ?? '').trim().slice(0, 300) || null, active: input.active };
   const { error } = input.id
     ? await ctx.db.from('loaner_fleet').update(row as never).eq('id', input.id)
@@ -209,9 +210,14 @@ export async function createHandover(fd: FormData): Promise<{ error?: string; ok
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
   const { db, user } = ctx;
-  const fleetId = clean(fd.get('fleet_id'), 40) || null;
+  let fleetId = clean(fd.get('fleet_id'), 40) || null;
   let loanerPlate = clean(fd.get('loaner_plate'), 12).replace(/\D/g, '');
   let loanerType = clean(fd.get('loaner_type'), 80) || null;
+  if (!fleetId && loanerPlate.length >= 5) {
+    // A typed plate that is in the fleet → link it (busy check + type from the list).
+    const { data: byPlate } = await db.from('loaner_fleet').select('id').eq('plate', loanerPlate).maybeSingle();
+    fleetId = (byPlate as { id: string } | null)?.id ?? null;
+  }
   if (fleetId) {
     const { data: car } = await db.from('loaner_fleet').select('plate, car_type, active').eq('id', fleetId).maybeSingle();
     if (!car) return { error: 'הרכב לא נמצא ברשימה' };

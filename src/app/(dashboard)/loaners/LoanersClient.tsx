@@ -93,9 +93,9 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
         {([
-          ['out', `אצל לקוחות (${out.length})`],
+          ['out', `נמסר ללקוח/ה (${out.length})`],
           ['back', `הוחזרו (${back.length})`],
-          ['fleet', `צי רכבים חליפיים (${fleet.filter((f) => f.active).length})`],
+          ['fleet', `פנוי / תפוס (${fleet.filter((f) => f.active && !f.busy).length} פנויים)`],
         ] as [Tab, string][]).map(([k, label]) => (
           <button
             key={k}
@@ -112,6 +112,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
         <FleetTab fleet={fleet} branches={branches} handovers={out} onDone={done} />
       ) : (
         <>
+          {tab === 'back' && <IncidentLookup handovers={handovers} onShare={setShare} onDone={done} />}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -119,7 +120,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
             className="w-full h-11 px-3 rounded-xl border border-gray-300 text-sm"
             dir="auto"
           />
-          {shown.length === 0 && <p className="text-gray-400 py-8 text-center">{tab === 'out' ? 'אין כרגע רכבים חליפיים אצל לקוחות' : 'אין החזרות'}</p>}
+          {shown.length === 0 && <p className="text-gray-400 py-8 text-center">{tab === 'out' ? 'אין כרגע רכבים חליפיים שנמסרו ללקוחות' : 'אין החזרות'}</p>}
           <div className="grid gap-3 md:grid-cols-2">
             {shown.map((h) => (
               <HandoverCard key={h.id} h={h} onDone={done} onShare={setShare} />
@@ -130,7 +131,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
 
       {giving && (
         <GiveDialog
-          fleet={fleet.filter((f) => f.active && !f.busy)}
+          fleet={fleet.filter((f) => f.active)}
           branches={branches}
           onClose={() => setGiving(false)}
           onSaved={(m, sh) => {
@@ -278,6 +279,67 @@ function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string)
   );
 }
 
+const ilDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+
+/** A traffic ticket / damage found later: loaner plate + date → who had the car (Amit, 14/10). */
+function IncidentLookup({ handovers, onShare, onDone }: { handovers: Handover[]; onShare: (s: ShareLink) => void; onDone: (m: string) => void }) {
+  const [plate, setPlate] = useState('');
+  const [date, setDate] = useState('');
+  const p = plate.replace(/\D/g, '');
+  const covers = (h: Handover) => !!date && ilDate(h.given_at) <= date && (!h.returned_at || ilDate(h.returned_at) >= date);
+  const history = p.length >= 3 ? handovers.filter((h) => h.loaner_plate.includes(p)) : [];
+  const hits = history.filter(covers);
+  const rest = date ? history.filter((h) => !covers(h)) : history;
+
+  return (
+    <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 p-3 space-y-2">
+      <p className="font-semibold text-sm text-indigo-900">🔎 איתור לקוח לפי דו״ח / אירוע (מספר רכב חליפי + תאריך)</p>
+      <div className="grid grid-cols-2 gap-2">
+        <label>
+          <span className={lab}>מספר הרכב החליפי</span>
+          <input value={plate} onChange={(e) => setPlate(e.target.value)} inputMode="numeric" className={input} dir="ltr" />
+        </label>
+        <label>
+          <span className={lab}>תאריך הדו״ח / האירוע</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={input} />
+        </label>
+      </div>
+      {p.length >= 3 && history.length === 0 && <p className="text-sm text-gray-500">אין מסירות לרכב הזה</p>}
+      {date && history.length > 0 && hits.length === 0 && <p className="text-sm text-amber-700 font-semibold">⚠️ בתאריך הזה הרכב לא היה אצל אף לקוח (לפי המסירות הרשומות)</p>}
+      {hits.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-bold text-green-800">🎯 בתאריך הזה הרכב היה אצל:</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {hits.map((h) => (
+              <div key={h.id} className="ring-2 ring-green-500 rounded-xl">
+                <HandoverCard h={h} onDone={onDone} onShare={onShare} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {rest.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-semibold text-gray-600">{date ? 'שאר היסטוריית המסירות של הרכב' : 'היסטוריית המסירות של הרכב'} ({rest.length}):</p>
+          <div className="grid gap-1.5 md:grid-cols-2">
+            {rest.map((h) => (
+              <div key={h.id} className="rounded-lg border border-gray-200 bg-white p-2">
+                <Fields>
+                  <F label="רכב חליפי">{h.loaner_plate}</F>
+                  <F label="מתאריך">{fmt(h.given_at)}</F>
+                  <F label="עד תאריך">{h.returned_at ? fmt(h.returned_at) : 'עדיין אצל הלקוח'}</F>
+                  <F label="לקוח">{h.customer_name ?? '—'}</F>
+                  {h.customer_phone && <F label="טלפון">{h.customer_phone}</F>}
+                </Fields>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-40 bg-black/40 flex items-end md:items-center justify-center p-2" onClick={onClose}>
@@ -297,7 +359,7 @@ const lab = 'block text-xs text-gray-500 mb-0.5';
 
 function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; branches: { id: string; name: string }[]; onClose: () => void; onSaved: (m: string, share?: ShareLink) => void }) {
   const router = useRouter();
-  const [fleetId, setFleetId] = useState<string>('');
+  // Type the loaner's plate → its type comes from the fleet list (Amit, 14/10).
   const [manualPlate, setManualPlate] = useState('');
   const [manualType, setManualType] = useState('');
   const [custPlate, setCustPlate] = useState('');
@@ -330,9 +392,12 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
   const [driverOk, setDriverOk] = useState(false);
   const wCost = waiver ? waiverCost(waiverFrom, waiverTo) : null;
 
-  const car = fleet.find((f) => f.id === fleetId);
-  const loanerPlate = car?.plate ?? manualPlate.replace(/\D/g, '');
+  const plateDigits = manualPlate.replace(/\D/g, '');
+  const car = plateDigits.length >= 5 ? fleet.find((f) => f.plate === plateDigits) : undefined;
+  const fleetId = car?.id ?? '';
+  const loanerPlate = car?.plate ?? plateDigits;
   const loanerType = car?.car_type ?? manualType;
+  const freeCars = fleet.filter((f) => !f.busy);
   const branchName = branches.find((b) => b.id === branchId)?.name ?? null;
   const docsText = loanerDocuments({
     branchName,
@@ -365,9 +430,11 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
 
   async function save() {
     setErr(null);
-    if (!loanerPlate) return setErr('נא לבחור רכב חליפי');
+    if (loanerPlate.length < 5) return setErr('נא להקליד את מספר הרכב החליפי');
+    if (car?.busy) return setErr(`הרכב ${car.plate} מסומן כנמסר ללקוח — קודם מחזירים אותו`);
+    if (!loanerType.trim()) return setErr('נא להזין סוג רכב');
     if (!name.trim()) return setErr('נא להזין את שם הלקוח');
-    if (!caseId && !branchId) return setErr('נא לבחור סניף');
+    if (!caseId && !branchId && !car?.branch_id) return setErr('נא לבחור סניף');
     if (signMode === 'screen' && (!(dName || name).trim() || dId.replace(/\D/g, '').length < 5 || !dLicense.trim() || !dAddress.trim()))
       return setErr('בהצהרת הנהג חובה: שם מלא, ת.ז., מס׳ רישיון נהיגה וכתובת');
     if (waiver && !wCost) return setErr('בביטול השתתפות עצמית — נא לבחור מתאריך עד תאריך');
@@ -380,7 +447,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     fd.append('loaner_plate', loanerPlate);
     fd.append('loaner_type', loanerType);
     if (caseId) fd.append('case_id', caseId);
-    fd.append('branch_id', branchId);
+    fd.append('branch_id', branchId || car?.branch_id || '');
     fd.append('customer_plate', custPlate);
     fd.append('customer_name', name);
     fd.append('customer_phone', phone);
@@ -416,30 +483,61 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     <Modal title="🚗 מסירת רכב חליפי" onClose={onClose}>
       <section className="space-y-2">
         <p className="font-semibold text-sm">1. איזה רכב חליפי</p>
-        {fleet.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {fleet.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFleetId(fleetId === f.id ? '' : f.id)}
-                className={`px-3 py-2 rounded-xl border-2 text-sm text-right ${fleetId === f.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}
-              >
-                <b>{f.plate}</b> · {f.car_type}
-              </button>
-            ))}
-          </div>
-        )}
-        {!fleetId && (
-          <div className="grid grid-cols-2 gap-2">
-            <label>
-              <span className={lab}>{fleet.length ? 'או מספר רכב חליפי שלא ברשימה' : 'מספר רכב חליפי'}</span>
-              <input value={manualPlate} onChange={(e) => setManualPlate(e.target.value)} inputMode="numeric" className={input} dir="ltr" />
-            </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label>
+            <span className={lab}>מספר רכב חליפי</span>
+            <input value={manualPlate} onChange={(e) => setManualPlate(e.target.value)} inputMode="numeric" className={input} dir="ltr" autoFocus />
+          </label>
+          {car ? (
+            <div>
+              <span className={lab}>סוג רכב (מרשימת הצי)</span>
+              <div className="h-11 px-3 rounded-lg border border-green-300 bg-green-50 text-sm font-semibold flex items-center">{car.car_type}</div>
+            </div>
+          ) : (
             <label>
               <span className={lab}>סוג רכב</span>
               <input value={manualType} onChange={(e) => setManualType(e.target.value)} placeholder="למשל: טויוטה קורולה" className={input} />
             </label>
+          )}
+        </div>
+        {car && (
+          <Fields>
+            {car.branch_name && <F label="סניף הרכב">{car.branch_name}</F>}
+            <F label="מצב" tone={car.busy ? 'text-red-700 font-semibold' : 'text-green-700 font-semibold'}>
+              {car.busy ? 'נמסר — כבר אצל לקוח/ה' : 'פנוי ✓'}
+            </F>
+          </Fields>
+        )}
+        {!car && plateDigits.length >= 5 && fleet.length > 0 && <p className="text-xs text-amber-700">הרכב לא נמצא ברשימת הצי — מזינים סוג רכב ידנית.</p>}
+        {!car && freeCars.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">או בחירה מהרכבים הפנויים:</p>
+            {branches.map((b) => {
+              const cars = freeCars.filter((f) => f.branch_id === b.id);
+              if (!cars.length) return null;
+              return (
+                <div key={b.id} className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-semibold text-gray-600 w-14">{b.name}:</span>
+                  {cars.map((f) => (
+                    <button key={f.id} type="button" onClick={() => setManualPlate(f.plate)} className="px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs text-right">
+                      <b>{f.plate}</b> · {f.car_type}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+            {freeCars.some((f) => !f.branch_id) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-semibold text-gray-600 w-14">ללא סניף:</span>
+                {freeCars
+                  .filter((f) => !f.branch_id)
+                  .map((f) => (
+                    <button key={f.id} type="button" onClick={() => setManualPlate(f.plate)} className="px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs text-right">
+                      <b>{f.plate}</b> · {f.car_type}
+                    </button>
+                  ))}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -713,8 +811,18 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Split by branch (אשקלון / נתיבות) + filter free / handed over (Amit, 14/10).
+  const [branchTab, setBranchTab] = useState<string>(branches[0]?.id ?? '');
+  const [status, setStatus] = useState<'all' | 'free' | 'busy'>('all');
+  const groups = [...branches.map((b) => ({ id: b.id, name: b.name })), ...(fleet.some((f) => !f.branch_id) ? [{ id: '', name: 'ללא סניף' }] : [])];
+  const inBranch = fleet.filter((f) => (f.branch_id ?? '') === branchTab);
+  const shownCars = inBranch
+    .filter((f) => (status === 'free' ? f.active && !f.busy : status === 'busy' ? f.busy : true))
+    .sort((a, b) => Number(a.busy) - Number(b.busy) || Number(b.active) - Number(a.active) || a.plate.localeCompare(b.plate));
+
   async function save() {
     if (!edit) return;
+    if (!edit.branch_id) return setErr('נא לבחור סניף');
     setBusy(true);
     setErr(null);
     const r = await saveFleetCar({ id: edit.id, plate: edit.plate ?? '', car_type: edit.car_type ?? '', branch_id: edit.branch_id ?? null, notes: edit.notes ?? null, active: edit.active ?? true });
@@ -727,22 +835,62 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
 
   return (
     <div className="space-y-3">
-      <button type="button" onClick={() => setEdit({ active: true })} className="h-10 px-4 rounded-xl bg-gray-900 text-white text-sm font-bold">
-        + הוספת רכב לצי
-      </button>
-      {fleet.length === 0 && <p className="text-gray-400 py-6 text-center">עוד לא הוזנו רכבים חליפיים. אפשר להוסיף כאן, או לשלוח רשימה ונזין אותה.</p>}
+      <div className="flex gap-2 flex-wrap">
+        {groups.map((g) => {
+          const cars = fleet.filter((f) => (f.branch_id ?? '') === g.id && f.active);
+          const free = cars.filter((f) => !f.busy).length;
+          return (
+            <button
+              key={g.id || 'none'}
+              type="button"
+              onClick={() => setBranchTab(g.id)}
+              className={`px-4 py-2 rounded-xl border-2 text-sm text-right ${branchTab === g.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}
+            >
+              <b>{g.name}</b>
+              <span className="block text-xs opacity-80">
+                פנויים: {free} · נמסרו: {cars.length - free}
+              </span>
+            </button>
+          );
+        })}
+        <button type="button" onClick={() => setEdit({ active: true, branch_id: branchTab || null })} className="h-10 px-4 rounded-xl bg-gray-900 text-white text-sm font-bold self-center mr-auto">
+          + הוספת רכב לצי
+        </button>
+      </div>
+      <div className="flex gap-1.5">
+        {([
+          ['all', 'הכל'],
+          ['free', 'פנוי'],
+          ['busy', 'נמסר'],
+        ] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setStatus(k)} className={`h-8 px-3 rounded-lg border text-xs font-semibold ${status === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {fleet.length === 0 && <p className="text-gray-400 py-6 text-center">עוד לא הוזנו רכבים חליפיים. מוסיפים כאן לכל סניף, או שולחים רשימה ונזין אותה.</p>}
+      {fleet.length > 0 && shownCars.length === 0 && <p className="text-gray-400 py-6 text-center">אין רכבים להצגה בסניף הזה</p>}
       <div className="grid gap-2 md:grid-cols-2">
-        {fleet.map((f) => {
+        {shownCars.map((f) => {
           const at = handovers.find((h) => h.fleet_id === f.id);
           return (
-            <div key={f.id} className={`rounded-xl border p-3 bg-white ${f.active ? 'border-gray-200' : 'border-gray-200 opacity-60'}`}>
+            <div key={f.id} className={`rounded-xl border-2 p-3 bg-white ${!f.active ? 'border-gray-200 opacity-60' : at ? 'border-amber-300' : 'border-green-300'}`}>
+              <div className="mb-1">
+                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${!f.active ? 'bg-gray-100 text-gray-500' : at ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}`}>
+                  {!f.active ? 'לא פעיל' : at ? 'נמסר' : 'פנוי'}
+                </span>
+              </div>
               <Fields>
                 <F label="מספר רכב" tone="text-gray-900 font-bold">{f.plate}</F>
-                <F label="סוג רכב">{f.car_type}</F>
-                {f.branch_name && <F label="סניף">{f.branch_name}</F>}
-                <F label="מצב" tone={at ? 'text-amber-700 font-semibold' : f.active ? 'text-green-700 font-semibold' : 'text-gray-500'}>
-                  {at ? `אצל ${at.customer_name ?? 'לקוח'} מ-${fmt(at.given_at)}` : f.active ? 'פנוי' : 'לא פעיל'}
-                </F>
+                <F label="דגם">{f.car_type}</F>
+                {at && (
+                  <>
+                    <F label="נמסר ל">{at.customer_name ?? '—'}</F>
+                    {at.customer_phone && <F label="טלפון">{at.customer_phone}</F>}
+                    <F label="מתאריך">{fmt(at.given_at)}</F>
+                    <F label="ימים אצל הלקוח">{days(at.given_at, null)}</F>
+                  </>
+                )}
                 {f.notes && <F label="הערות">{f.notes}</F>}
               </Fields>
               <button type="button" onClick={() => setEdit(f)} className="mt-2 px-3 h-8 rounded-lg border border-gray-300 text-xs font-semibold">
@@ -764,9 +912,9 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
               <input value={edit.car_type ?? ''} onChange={(e) => setEdit({ ...edit, car_type: e.target.value })} className={input} />
             </label>
             <label>
-              <span className={lab}>סניף (רשות)</span>
+              <span className={lab}>סניף *</span>
               <select value={edit.branch_id ?? ''} onChange={(e) => setEdit({ ...edit, branch_id: e.target.value || null })} className={input}>
-                <option value="">—</option>
+                <option value="">בחרו…</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
