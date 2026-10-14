@@ -157,16 +157,62 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
   const lastNotificationIdRef = useRef<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Load rows + unread count (joins case + plate + sender name)
+  // One load at a time (2026-10-14): realtime bursts, focus and the poll used
+  // to start overlapping loads. A request during a load runs once after it.
+  const loadingRef = useRef(false);
+  const againRef = useRef(false);
   async function loadRows() {
+    if (loadingRef.current) {
+      againRef.current = true;
+      return;
+    }
+    loadingRef.current = true;
+    try {
+      do {
+        againRef.current = false;
+        await loadRowsNow();
+      } while (againRef.current);
+    } catch {
+      // keep the last rows; the next trigger retries
+    } finally {
+      loadingRef.current = false;
+    }
+  }
+
+  // Load rows + unread count (joins case + plate + sender name)
+  async function loadRowsNow() {
     const perfStart = performance.now(); // speed measurement (PerfBeacon)
     const supabase = createClient();
-    const { data: notifData } = await supabase
-      .from('notifications')
-      .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(groupUpdates ? 150 : 30);
+    const COLS = 'id, type, title, body, read, created_at, case_id, action_url, triggered_by';
+    const wantsRequests = actionTypeList.includes('PAINTER_REQUEST');
+
+    // Speed (2026-10-14, measured ~1.4s per load): every query below used to
+    // wait for the previous one — 5 round trips to the DB in a row. The four
+    // independent ones now run together, then the two that depend on them.
+    const [{ data: notifData }, { data: actionData }, { data: pendingData }, { data: openReqs }] = await Promise.all([
+      supabase
+        .from('notifications')
+        .select(COLS)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(groupUpdates ? 150 : 30),
+      // Everything unread that needs me stays reachable even when it is older
+      // than the latest 30, so it cannot fall off the bottom of "לטיפול".
+      supabase
+        .from('notifications')
+        .select(COLS)
+        .eq('user_id', userId)
+        .eq('read', false)
+        .in('type', [...actionTypeList])
+        .order('created_at', { ascending: false })
+        .limit(100),
+      // Approvals still waiting (visible to CEO; empty for everyone else).
+      supabase.from('ceo_approvals').select('case_id').eq('status', 'PENDING'),
+      // Painter requests still open (advisors).
+      wantsRequests
+        ? supabase.from('painter_requests').select('case_id').eq('status', 'PENDING')
+        : Promise.resolve({ data: [] as { case_id: string }[] }),
+    ]);
 
     type BaseRow = {
       id: string;
@@ -181,16 +227,6 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     };
     const list = (notifData ?? []) as BaseRow[];
 
-    // Everything unread that needs me stays reachable even when it is older
-    // than the latest 30, so it cannot fall off the bottom of "לטיפול".
-    const { data: actionData } = await supabase
-      .from('notifications')
-      .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
-      .eq('user_id', userId)
-      .eq('read', false)
-      .in('type', [...actionTypeList])
-      .order('created_at', { ascending: false })
-      .limit(100);
     const haveIds = new Set(list.map((n) => n.id));
     for (const n of (actionData ?? []) as BaseRow[]) {
       if (!haveIds.has(n.id)) {
@@ -199,52 +235,50 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
       }
     }
 
-    // Approvals still waiting (visible to CEO; empty for everyone else). Their
-    // latest notification is always shown — even if older than the 15 above —
-    // so nothing waiting for a decision can fall off the bottom of the list.
-    const { data: pendingData } = await supabase.from('ceo_approvals').select('case_id').eq('status', 'PENDING');
     const pendingCaseIds = new Set(((pendingData ?? []) as { case_id: string }[]).map((p) => p.case_id));
-    if (pendingCaseIds.size > 0) {
-      const { data: approvalNotifs } = await supabase
-        .from('notifications')
-        .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
-        .eq('user_id', userId)
-        .eq('type', 'PENDING_APPROVAL')
-        .in('case_id', Array.from(pendingCaseIds))
-        .order('created_at', { ascending: false })
-        .limit(100);
-      const shownCases = new Set(list.filter((n) => n.type === 'PENDING_APPROVAL').map((n) => n.case_id));
-      for (const n of (approvalNotifs ?? []) as BaseRow[]) {
-        if (n.case_id && !shownCases.has(n.case_id)) {
-          shownCases.add(n.case_id);
-          list.push(n);
-        }
+    const pendingRequestCases = new Set(((openReqs ?? []) as { case_id: string }[]).map((r) => r.case_id));
+
+    const [{ data: approvalNotifs }, { data: reqNotifs }] = await Promise.all([
+      pendingCaseIds.size > 0
+        ? supabase
+            .from('notifications')
+            .select(COLS)
+            .eq('user_id', userId)
+            .eq('type', 'PENDING_APPROVAL')
+            .in('case_id', Array.from(pendingCaseIds))
+            .order('created_at', { ascending: false })
+            .limit(100)
+        : Promise.resolve({ data: [] as BaseRow[] }),
+      wantsRequests && pendingRequestCases.size > 0
+        ? supabase
+            .from('notifications')
+            .select(COLS)
+            .eq('user_id', userId)
+            .eq('type', 'PAINTER_REQUEST')
+            .in('case_id', Array.from(pendingRequestCases))
+            .order('created_at', { ascending: false })
+            .limit(100)
+        : Promise.resolve({ data: [] as BaseRow[] }),
+    ]);
+
+    // An approval's latest notification is always shown — even if older than
+    // the rows above — so nothing waiting for a decision can fall off the list.
+    const shownCases = new Set(list.filter((n) => n.type === 'PENDING_APPROVAL').map((n) => n.case_id));
+    for (const n of (approvalNotifs ?? []) as BaseRow[]) {
+      if (n.case_id && !shownCases.has(n.case_id)) {
+        shownCases.add(n.case_id);
+        list.push(n);
       }
     }
 
-    // Painter requests still open (advisors): their latest notification per
-    // case is always shown and stays "לטיפולי" until the request is handled.
-    let pendingRequestCases = new Set<string>();
-    if (actionTypeList.includes('PAINTER_REQUEST')) {
-      const { data: openReqs } = await supabase.from('painter_requests').select('case_id').eq('status', 'PENDING');
-      pendingRequestCases = new Set(((openReqs ?? []) as { case_id: string }[]).map((r) => r.case_id));
-      if (pendingRequestCases.size > 0) {
-        const { data: reqNotifs } = await supabase
-          .from('notifications')
-          .select('id, type, title, body, read, created_at, case_id, action_url, triggered_by')
-          .eq('user_id', userId)
-          .eq('type', 'PAINTER_REQUEST')
-          .in('case_id', Array.from(pendingRequestCases))
-          .order('created_at', { ascending: false })
-          .limit(100);
-        const shown = new Set(list.filter((n) => n.type === 'PAINTER_REQUEST').map((n) => n.case_id));
-        for (const n of (reqNotifs ?? []) as BaseRow[]) {
-          if (n.case_id && !shown.has(n.case_id) && !haveIds.has(n.id)) {
-            shown.add(n.case_id);
-            haveIds.add(n.id);
-            list.push(n);
-          }
-        }
+    // Painter requests: latest notification per case is always shown and
+    // stays "לטיפולי" until the request is handled.
+    const shownReq = new Set(list.filter((n) => n.type === 'PAINTER_REQUEST').map((n) => n.case_id));
+    for (const n of (reqNotifs ?? []) as BaseRow[]) {
+      if (n.case_id && !shownReq.has(n.case_id) && !haveIds.has(n.id)) {
+        shownReq.add(n.case_id);
+        haveIds.add(n.id);
+        list.push(n);
       }
     }
 
@@ -349,7 +383,10 @@ export function NotificationsBell({ userId, role }: { userId: string; role?: str
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
 
-    const id = setInterval(() => void loadRows(), 20000);
+    // Backstop poll only while the app is on screen — focus reloads anyway.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void loadRows();
+    }, 20000);
 
     return () => {
       clearInterval(id);
