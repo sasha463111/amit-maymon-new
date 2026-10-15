@@ -448,3 +448,55 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
   revalidatePath('/loaners');
   return docErr ? { error: docErr, share: share ?? undefined } : { ok: true, share: share ?? undefined };
 }
+
+/** Fix a hand-over after the fact (Amit 15/10, #44: a date typed as July
+ *  instead of October could not be corrected). CEO / office only. Every edit
+ *  is noted on the hand-over itself (who, when, which fields). */
+export async function updateHandover(fd: FormData): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  if (ctx.role !== 'CEO' && ctx.role !== 'OFFICE') return { error: 'רק משרד / מנכ״ל יכולים לערוך מסירה' };
+  const id = clean(fd.get('handover_id'), 40);
+  const { data: cur } = await ctx.db.from('loaner_handovers').select('*').eq('id', id).maybeSingle();
+  const h = cur as Record<string, unknown> | null;
+  if (!h) return { error: 'לא נמצא' };
+  const givenAt = isoOrNull(fd.get('given_at'));
+  if (!givenAt) return { error: 'נא להזין תאריך ושעת מסירה' };
+  const wasReturned = !!h.returned_at;
+  const returnedAt = wasReturned ? isoOrNull(fd.get('returned_at')) : null;
+  if (wasReturned && !returnedAt) return { error: 'נא להזין תאריך ושעת החזרה' };
+  if (returnedAt && new Date(returnedAt) < new Date(givenAt)) return { error: 'ההחזרה לפני המסירה — בדקו את התאריכים' };
+  if (new Date(givenAt).getTime() > Date.now() + 86_400_000) return { error: 'תאריך המסירה בעתיד — בדקו את התאריך' };
+
+  const next: Record<string, unknown> = {
+    given_at: givenAt,
+    km_out: int(fd.get('km_out')),
+    fuel_out: clean(fd.get('fuel_out'), 20) || null,
+    customer_name: clean(fd.get('customer_name'), 120) || null,
+    customer_phone: clean(fd.get('customer_phone'), 30) || null,
+    customer_plate: clean(fd.get('customer_plate'), 12).replace(/\D/g, '') || null,
+    notes: clean(fd.get('notes'), 500) || null,
+    ...(wasReturned
+      ? { returned_at: returnedAt, km_in: int(fd.get('km_in')), fuel_in: clean(fd.get('fuel_in'), 20) || null, return_notes: clean(fd.get('return_notes'), 500) || null }
+      : {}),
+  };
+  const LABEL: Record<string, string> = {
+    given_at: 'מועד מסירה', km_out: 'ק״מ במסירה', fuel_out: 'דלק במסירה', customer_name: 'שם לקוח', customer_phone: 'טלפון',
+    customer_plate: 'רכב הלקוח', notes: 'הערות', returned_at: 'מועד החזרה', km_in: 'ק״מ בהחזרה', fuel_in: 'דלק בהחזרה', return_notes: 'הערות החזרה',
+  };
+  const same = (a: unknown, b: unknown) =>
+    (a == null && b == null) || (typeof a === 'string' && typeof b === 'string' && !Number.isNaN(Date.parse(a)) && /T/.test(a) ? new Date(a).getTime() === new Date(b).getTime() : String(a ?? '') === String(b ?? ''));
+  const changed = Object.keys(next).filter((k) => k !== 'notes' && !same(h[k], next[k]));
+  if (!changed.length && same(h.notes, next.notes)) return { ok: true };
+
+  const { data: me_ } = await ctx.db.from('profiles').select('full_name').eq('id', ctx.user.id).maybeSingle();
+  const who = (me_ as { full_name: string | null } | null)?.full_name ?? '';
+  const when = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const trail = changed.length ? `[✏️ ${when} ${who}: ${changed.map((k) => LABEL[k] ?? k).join(', ')}]` : '';
+  if (trail) next.notes = [next.notes, trail].filter(Boolean).join(' ').slice(0, 1000);
+
+  const { error } = await ctx.db.from('loaner_handovers').update({ ...next, updated_at: new Date().toISOString() } as never).eq('id', id);
+  if (error) return { error: error.message.includes('returned') || error.message.includes('check') ? 'ההחזרה לפני המסירה — בדקו את התאריכים' : error.message };
+  revalidatePath('/loaners');
+  return { ok: true };
+}

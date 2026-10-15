@@ -2,7 +2,7 @@
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatCard, StatGrid } from '@/components/ui/kit';
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -12,6 +12,7 @@ import {
   returnHandover,
   resendLoanerCopy,
   saveFleetCar,
+  updateHandover,
   type ShareLink,
   type FleetCar,
   type Handover,
@@ -84,7 +85,7 @@ async function uploadDocsOneByOne(handoverId: string, stage: 'OUT' | 'IN', files
   return failed;
 }
 
-export function LoanersClient({ fleet, handovers, branches, error }: { fleet: FleetCar[]; handovers: Handover[]; branches: { id: string; name: string }[]; error: string | null }) {
+export function LoanersClient({ fleet, handovers, branches, error, canEdit = false }: { fleet: FleetCar[]; handovers: Handover[]; branches: { id: string; name: string }[]; error: string | null; canEdit?: boolean }) {
   const [tab, setTab] = useState<Tab>('out');
   const [query, setQuery] = useState('');
   const [giving, setGiving] = useState(false);
@@ -115,6 +116,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
   }
 
   return (
+    <CanEdit.Provider value={canEdit}>
     <div className="max-w-6xl mx-auto space-y-4" dir="rtl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
@@ -189,11 +191,17 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
 
       {share && <ShareDialog share={share} onClose={() => setShare(null)} />}
     </div>
+    </CanEdit.Provider>
   );
 }
 
+// Who may fix a hand-over after the fact (#44) — set once by LoanersClient.
+const CanEdit = createContext(false);
+
 function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string) => void; onShare: (s: ShareLink) => void }) {
   const router = useRouter();
+  const canEdit = useContext(CanEdit);
+  const [editing, setEditing] = useState(false);
   const [returning, setReturning] = useState(false);
   const [view, setView] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -281,6 +289,11 @@ function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string)
           {busy ? 'שומר…' : '📷 סריקת מסמך'}
           <input type="file" accept="image/*,application/pdf" multiple className="hidden" disabled={busy} onChange={(e) => void scan(e.target.files, open ? 'OUT' : 'IN')} />
         </label>
+        {canEdit && (
+          <button type="button" onClick={() => setEditing(true)} className="px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs font-semibold">
+            ✏️ עריכה
+          </button>
+        )}
         {h.signature_url && (
           <button
             type="button"
@@ -304,6 +317,17 @@ function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string)
         )}
       </div>
 
+      {editing && (
+        <EditHandoverDialog
+          h={h}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onDone('המסירה עודכנה ✓');
+            router.refresh();
+          }}
+        />
+      )}
       {returning && (
         <ReturnDialog
           h={h}
@@ -775,6 +799,103 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
       <button type="button" onClick={() => void save()} disabled={busy} className="w-full h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-50">
         {busy ? 'שומר…' : 'שמירת המסירה'}
       </button>
+    </Modal>
+  );
+}
+
+/** ✏️ Fix a hand-over after the fact (Amit 15/10, #44). */
+function EditHandoverDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => void; onSaved: () => void }) {
+  const local = (iso: string | null) => {
+    if (!iso) return { d: '', t: '' };
+    const d = new Date(iso);
+    return { d: d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }), t: d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }) };
+  };
+  const g = local(h.given_at);
+  const r = local(h.returned_at);
+  // The edit trail ("[✏️ …]") stays out of the editable notes and is re-attached on save.
+  const trail = (h.notes ?? '').match(/\[✏️[^\]]*\]/g) ?? [];
+  const [v, setV] = useState({
+    gd: g.d, gt: g.t, km_out: h.km_out?.toString() ?? '', fuel_out: h.fuel_out ?? '',
+    customer_name: h.customer_name ?? '', customer_phone: h.customer_phone ?? '', customer_plate: h.customer_plate ?? '',
+    notes: (h.notes ?? '').replace(/\s*\[✏️[^\]]*\]/g, '').trim(),
+    rd: r.d, rt: r.t, km_in: h.km_in?.toString() ?? '', fuel_in: h.fuel_in ?? '', return_notes: h.return_notes ?? '',
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setV({ ...v, [k]: e.target.value });
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const fd = new FormData();
+    fd.append('handover_id', h.id);
+    fd.append('given_at', v.gd && v.gt ? `${v.gd}T${v.gt}` : '');
+    fd.append('km_out', v.km_out);
+    fd.append('fuel_out', v.fuel_out);
+    fd.append('customer_name', v.customer_name);
+    fd.append('customer_phone', v.customer_phone);
+    fd.append('customer_plate', v.customer_plate);
+    fd.append('notes', [v.notes, ...trail].filter(Boolean).join(' '));
+    if (h.returned_at) {
+      fd.append('returned_at', v.rd && v.rt ? `${v.rd}T${v.rt}` : '');
+      fd.append('km_in', v.km_in);
+      fd.append('fuel_in', v.fuel_in);
+      fd.append('return_notes', v.return_notes);
+    }
+    const res = await updateHandover(fd);
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    onSaved();
+  }
+
+  return (
+    <Modal title={`✏️ עריכת מסירה — ${h.loaner_plate}`} onClose={onClose}>
+      <p className="text-xs text-gray-500">תיקון פרטים של מסירה שכבר בוצעה (למשל תאריך שהוקלד בטעות). כל עריכה נרשמת במסירה — מי, מתי ומה שונה.</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <label><span className={lab}>תאריך מסירה</span><input type="date" value={v.gd} onChange={set('gd')} className={input} /></label>
+        <label><span className={lab}>שעה</span><input type="time" value={v.gt} onChange={set('gt')} className={input} /></label>
+        <label><span className={lab}>ק״מ במסירה</span><input value={v.km_out} onChange={set('km_out')} inputMode="numeric" className={input} dir="ltr" /></label>
+        <label>
+          <span className={lab}>דלק במסירה</span>
+          <select value={v.fuel_out} onChange={set('fuel_out')} className={input}>
+            <option value="">—</option>
+            {FUEL_LEVELS.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </label>
+        <label><span className={lab}>שם לקוח</span><input value={v.customer_name} onChange={set('customer_name')} className={input} /></label>
+        <label><span className={lab}>טלפון</span><input value={v.customer_phone} onChange={set('customer_phone')} inputMode="tel" className={input} dir="ltr" /></label>
+        <label><span className={lab}>רכב הלקוח</span><input value={v.customer_plate} onChange={set('customer_plate')} inputMode="numeric" className={input} dir="ltr" /></label>
+        <label><span className={lab}>הערות</span><input value={v.notes} onChange={set('notes')} className={input} /></label>
+      </div>
+      {h.returned_at && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
+          <label><span className={lab}>תאריך החזרה</span><input type="date" value={v.rd} onChange={set('rd')} className={input} /></label>
+          <label><span className={lab}>שעה</span><input type="time" value={v.rt} onChange={set('rt')} className={input} /></label>
+          <label><span className={lab}>ק״מ בהחזרה</span><input value={v.km_in} onChange={set('km_in')} inputMode="numeric" className={input} dir="ltr" /></label>
+          <label>
+            <span className={lab}>דלק בהחזרה</span>
+            <select value={v.fuel_in} onChange={set('fuel_in')} className={input}>
+              <option value="">—</option>
+              {FUEL_LEVELS.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
+          </label>
+          <label className="col-span-2 md:col-span-4"><span className={lab}>הערות החזרה</span><input value={v.return_notes} onChange={set('return_notes')} className={input} /></label>
+        </div>
+      )}
+      {trail.length > 0 && <p className="text-[11px] text-gray-500">היסטוריית עריכות: {trail.join(' ')}</p>}
+      {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => void save()} className="h-11 px-6 rounded-xl bg-gray-900 text-white font-bold disabled:opacity-50">
+          {busy ? 'שומר…' : 'שמירה'}
+        </button>
+        <button type="button" disabled={busy} onClick={onClose} className="h-11 px-4 rounded-xl border border-gray-300">
+          ביטול
+        </button>
+      </div>
     </Modal>
   );
 }

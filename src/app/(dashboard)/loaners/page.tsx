@@ -14,5 +14,7 @@ export default async function LoanersPage() {
   const { data: prof } = await supabase.from('profiles').select('role, loaners_access').eq('id', user.id).maybeSingle();
   if (!canUseLoaners((prof as { role: string } | null)?.role, !!(prof as { loaners_access?: boolean } | null)?.loaners_access)) redirect('/');
   const { fleet, handovers, branches, error } = await listLoaners();
-  return <LoanersClient fleet={fleet} handovers={handovers} branches={branches} error={error ?? null} />;
+  const role = (prof as { role: string } | null)?.role;
+  // Fixing a hand-over after the fact (#44): office + CEO.
+  return <LoanersClient fleet={fleet} handovers={handovers} branches={branches} error={error ?? null} canEdit={role === 'CEO' || role === 'OFFICE'} />;
 }
