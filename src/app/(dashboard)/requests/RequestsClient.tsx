@@ -59,10 +59,10 @@ function Composer({ requestId, onDone, placeholder, cta }: { requestId?: string;
   );
 }
 
-export function RequestsClient({ items, advisor }: { items: AppRequest[]; advisor: { available: boolean; messages: AdvisorMessage[] } }) {
+export function RequestsClient({ items, advisor, isCeo }: { items: AppRequest[]; advisor: { available: boolean; messages: AdvisorMessage[] } | null; isCeo: boolean }) {
   const router = useRouter();
   const [hash, setHash] = useState('');
-  const [tab, setTab] = useState<'chat' | 'requests'>(advisor.available ? 'chat' : 'requests');
+  const [tab, setTab] = useState<'chat' | 'requests'>(advisor?.available ? 'chat' : 'requests');
   useEffect(() => {
     const h = window.location.hash.slice(1);
     setHash(h);
@@ -80,7 +80,7 @@ export function RequestsClient({ items, advisor }: { items: AppRequest[]; adviso
     <div key={r.id} id={r.id} className={`rounded-2xl border bg-white p-4 space-y-3 ${hash === r.id ? 'ring-2 ring-amber-400' : 'border-gray-200'}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap text-xs text-gray-500">
         <span className={`px-2.5 py-1 rounded-full font-bold ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
-        <span>נפתחה {at(r.created_at)}</span>
+        <span>{isCeo && r.by ? `${r.by} · ` : ''}נפתחה {at(r.created_at)}</span>
       </div>
       <div className="space-y-2">
         {r.messages.map((m) => (
@@ -97,7 +97,7 @@ export function RequestsClient({ items, advisor }: { items: AppRequest[]; adviso
         ))}
       </div>
       <Composer requestId={r.id} onDone={() => router.refresh()} placeholder="תגובה / הבהרה…" cta="שליחה" />
-      {r.status !== 'DONE' && r.status !== 'NO' && (
+      {isCeo && r.status !== 'DONE' && r.status !== 'NO' && (
         <div className="flex gap-3 text-xs">
           <button type="button" onClick={() => void close(r.id, 'DONE')} className="text-green-700 underline">✓ סגור — הבקשה טופלה</button>
           <button type="button" onClick={() => void close(r.id, 'NO')} className="text-gray-500 underline">לא רלוונטי יותר</button>
@@ -109,9 +109,14 @@ export function RequestsClient({ items, advisor }: { items: AppRequest[]; adviso
   return (
     <div className="max-w-3xl mx-auto space-y-5" dir="rtl">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">💡 הצעות ייעול</h1>
-        <p className="text-sm text-gray-500">מתייעצים עם היועץ של המערכת, או כותבים בקשה לשינוי. כל שינוי עובר לאישור תומר, ומקבלים התראה לטלפון כשמשהו בוצע.</p>
+        <h1 className="text-2xl font-bold text-gray-900">{isCeo ? '💡 הצעות ייעול' : '💡 הערות לשיפור'}</h1>
+        <p className="text-sm text-gray-500">
+          {isCeo
+            ? 'מתייעצים עם היועץ של המערכת, או כותבים בקשה לשינוי. כאן רואים גם את ההערות של העובדים. כל שינוי עובר לאישור תומר.'
+            : 'משהו לא נוח? חסר משהו? כתבו כאן (אפשר עם צילום מסך). כל הערה נקראת, והתשובה תגיע לכאן עם התראה לטלפון.'}
+        </p>
       </div>
+      {advisor && (
       <div className="flex gap-2 border-b border-gray-200">
         {([['chat', '🤖 התייעצות'], ['requests', `💡 בקשות (${open.length} פתוחות)`]] as const).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500'}`}>
@@ -119,13 +124,18 @@ export function RequestsClient({ items, advisor }: { items: AppRequest[]; adviso
           </button>
         ))}
       </div>
-      {tab === 'chat' ? (
+      )}
+      {advisor && tab === 'chat' ? (
         <AdvisorChat available={advisor.available} messages={advisor.messages} />
       ) : (
       <>
       <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 space-y-2">
-        <p className="font-bold text-amber-900">➕ בקשה חדשה</p>
-        <Composer onDone={() => router.refresh()} placeholder="מה לשנות / להוסיף? למשל: במקום ״מכתב דרישת תשלום״ ← ״צור מכתב דרישת תשלום״" cta="שליחת הבקשה" />
+        <p className="font-bold text-amber-900">{isCeo ? '➕ בקשה חדשה' : '➕ הערה חדשה'}</p>
+        <Composer
+          onDone={() => router.refresh()}
+          placeholder={isCeo ? 'מה לשנות / להוסיף? למשל: במקום ״מכתב דרישת תשלום״ ← ״צור מכתב דרישת תשלום״' : 'מה לשפר? למשל: בהחזרת חלק אין סינון לפי סניף'}
+          cta={isCeo ? 'שליחת הבקשה' : 'שליחת ההערה'}
+        />
       </div>
       <section className="space-y-3">
         <h2 className="font-bold text-gray-800">בטיפול ({open.length})</h2>

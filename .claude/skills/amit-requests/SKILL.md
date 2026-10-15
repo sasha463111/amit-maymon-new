@@ -5,7 +5,7 @@ description: Check Amit's improvement requests ("💡 הצעות ייעול" in 
 
 # Amit's requests (הצעות ייעול)
 
-Since 2026-10-15 Amit writes improvement requests inside the app (`/requests`, CEO only) instead of GitHub Discussions (the repo is private). Tables: `app_requests` (status NEW / IN_PROGRESS / DONE / NO) and `app_request_messages` (`author_id` null = the development team). Screenshots are stored in the private bucket `app-requests`.
+Since 2026-10-15 Amit writes improvement requests inside the app (`/requests`) instead of GitHub Discussions (the repo is private). Since the same day **every staff member** can write notes there too ("💡 הערות לשיפור"; they see only their own). Report and answer staff notes the same way, addressed to the person who wrote them (their name is in `created_by`). Tables: `app_requests` (status NEW / IN_PROGRESS / DONE / NO) and `app_request_messages` (`author_id` null = the development team). Screenshots are stored in the private bucket `app-requests`.
 
 ## 1. Read (Supabase MCP `execute_sql`, project `yhanmyvolpeiuxspcxmk`)
 ```sql

@@ -183,6 +183,8 @@ export default async function DashboardLayout({
         role === 'CEO' ? Promise.resolve({ data: null }) : supabase.from('finance_viewers').select('user_id').eq('user_id', user.id).maybeSingle(),
       ]);
   if (viewerRow && !links.some((l) => l.href === '/receivables')) links.push({ label: 'דשבורד גבייה', href: '/receivables' });
+  // "💡 הערות לשיפור" for everyone (15/10); a CEO already has "הצעות ייעול".
+  if (!isPreview && !links.some((l) => l.href === '/requests')) links.push({ label: '💡 הערות לשיפור', href: '/requests' });
 
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {
