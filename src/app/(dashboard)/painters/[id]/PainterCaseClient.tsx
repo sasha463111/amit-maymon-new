@@ -39,7 +39,7 @@ const REQUEST_STATUS_COLORS: Record<string, string> = {
 function formatCheckedAt(iso: string): string {
   const d = new Date(iso);
   const date = formatDate(d);
-  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
   return `סומן ב-${date}, ${time}`;
 }
 
@@ -507,7 +507,7 @@ export function PainterCaseClient({
             <span className="font-semibold text-gray-700">{enterWorkCompletedByName ?? 'לא ידוע'}</span>
             {' · '}
             {formatDate(enterWorkCompletedAt)},{' '}
-            {new Date(enterWorkCompletedAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+            {new Date(enterWorkCompletedAt).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
 

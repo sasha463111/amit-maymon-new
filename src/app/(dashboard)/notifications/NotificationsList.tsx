@@ -80,7 +80,7 @@ function formatRelativeTime(dateStr: string): string {
   const diffHour = Math.floor(diffMs / 3600000);
   const diffDay = Math.floor(diffMs / 86400000);
 
-  const timeStr = date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const timeStr = date.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
 
   if (diffMin < 1) return 'עכשיו';
   if (diffMin < 60) return `לפני ${diffMin} דקות — ${timeStr}`;

@@ -87,7 +87,7 @@ type StepRow = { id: string; step_key: string; state: StepState; order_index: nu
 function formatStepCompletedAt(iso: string): string {
   const d = new Date(iso);
   const date = formatDate(d);
-  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
   return `הושלם ב-${date}, ${time}`;
 }
 

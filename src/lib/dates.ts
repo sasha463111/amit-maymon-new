@@ -13,13 +13,21 @@
  * mistake at 24 call sites.
  */
 
+// Always Israel time (16/10, #45/#46): without a timeZone the server (Vercel,
+// UTC) rendered times 3 hours off from the browser, and dates near midnight a
+// day off — React then reported a hydration mismatch (error #425) and
+// re-rendered the whole page in the browser.
+const TZ = 'Asia/Jerusalem';
+
 const DATE_OPTS: Intl.DateTimeFormatOptions = {
+  timeZone: TZ,
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
 };
 
 const TIME_OPTS: Intl.DateTimeFormatOptions = {
+  timeZone: TZ,
   hour: '2-digit',
   minute: '2-digit',
   hour12: false,
