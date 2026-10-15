@@ -11,8 +11,12 @@ export const PASSWORD_RULES: { label: string; test: (s: string) => boolean }[] =
   { label: 'תו מיוחד (למשל ! @ # - _ .)', test: (s) => /[^A-Za-z0-9\s]/.test(s) },
 ];
 
+/** Shown on the change-password screen as an example — and refused as a password. */
+export const PASSWORD_EXAMPLE = 'Tehila#2026';
+
 export function passwordProblems(s: string): string[] {
   const out = PASSWORD_RULES.filter((r) => !r.test(s)).map((r) => r.label);
+  if (s === PASSWORD_EXAMPLE) out.push('לא סיסמת הדוגמה');
   if (/\s/.test(s)) out.push('בלי רווחים');
   if (s.length > 72) out.push('עד 72 תווים');
   return out;

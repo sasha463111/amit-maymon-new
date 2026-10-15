@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { changeMyPassword } from '@/app/actions/myPassword';
-import { PASSWORD_RULES, passwordProblems } from '@/lib/passwordPolicy';
+import { PASSWORD_EXAMPLE as EXAMPLE, PASSWORD_RULES, passwordProblems } from '@/lib/passwordPolicy';
 
 // "🔑 החלפת סיסמה" (Amit, 15/10) — for everyone, from the key icon in the
 // header. The rules turn green while typing, so nobody guesses.
@@ -14,7 +14,7 @@ export default function ChangePasswordPage() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const ready = passwordProblems(next).length === 0 && next === again && current.length > 0;
+  const ready = passwordProblems(next).length === 0 && next === again && current.length > 0 && next !== EXAMPLE;
 
   async function save() {
     setBusy(true);
@@ -33,6 +33,23 @@ export default function ChangePasswordPage() {
   return (
     <div className="max-w-md mx-auto space-y-4" dir="rtl">
       <h1 className="text-xl font-bold text-gray-900">🔑 החלפת סיסמה</h1>
+
+      <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 space-y-2 text-sm">
+        <p className="font-bold text-indigo-900">כללי הסיסמה — הסיסמה החדשה צריכה לכלול:</p>
+        <ul className="list-disc pr-5 space-y-0.5 text-indigo-900">
+          {PASSWORD_RULES.map((r) => (
+            <li key={r.label}>{r.label}</li>
+          ))}
+          <li>בלי רווחים</li>
+        </ul>
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-1">
+          <p className="text-gray-800">
+            דוגמה לסיסמה שעומדת בכל הכללים: <span dir="ltr" className="font-mono font-bold text-base">{EXAMPLE}</span>
+          </p>
+          <p className="font-bold text-red-700">⚠️ זו רק דוגמה — לא לבחור את הסיסמה הזו! בוחרים סיסמה אחרת, משלכם.</p>
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
         <label className="block text-sm text-gray-700">
           הסיסמה הנוכחית
@@ -52,7 +69,7 @@ export default function ChangePasswordPage() {
             );
           })}
         </ul>
-        <p className="text-xs text-gray-500">דוגמה לסיסמה טובה: <span dir="ltr" className="font-mono">Tehila#2026</span> (רק דוגמה — לבחור משהו אחר)</p>
+        {next === EXAMPLE && <p className="text-sm font-bold text-red-700">זו סיסמת הדוגמה — נא לבחור סיסמה אחרת</p>}
         <label className="block text-sm text-gray-700">
           שוב את הסיסמה החדשה
           <input type={type} value={again} onChange={(e) => setAgain(e.target.value)} dir="ltr" autoComplete="new-password" autoCapitalize="none" className={input} />
