@@ -4,8 +4,9 @@ import { hasPermission } from '@/lib/permissions';
 import { ReferralDetailClient } from './ReferralDetailClient';
 import type { Referral, ReferralDocument } from '@/types/database';
 import { getReferralStatusUpdates } from '@/app/actions/referrals';
-import { canSendCustomerLink, whatsAppUrl } from '@/lib/customerDocs';
+import { canSendCustomerLink, consentText, docItemsFor, firstName, whatsAppUrl } from '@/lib/customerDocs';
 import { CustomerLinkPanel, type CustomerLinkRow } from './CustomerLinkPanel';
+import { serviceClient } from '@/lib/customerDocLinks.server';
 
 export default async function ReferralDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -73,18 +74,22 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
   if (profile && canSendCustomerLink(profile.role)) {
     const { data: linkRows } = await supabase
       .from('customer_doc_links')
-      .select('id, created_at, expires_at, revoked_at, opened_at, consent_at, completed_at')
+      .select('id, created_at, expires_at, revoked_at, opened_at, consent_at, completed_at, kit_docs, kit_values')
       .eq('referral_id', params.id)
       .order('created_at', { ascending: false })
       .limit(1);
-    const last = ((linkRows ?? []) as Omit<CustomerLinkRow, 'files'>[])[0] ?? null;
+    const last = ((linkRows ?? []) as Omit<CustomerLinkRow, 'files' | 'uploaded' | 'signed'>[])[0] ?? null;
     let latest: CustomerLinkRow | null = null;
     if (last) {
-      const { count } = await supabase
-        .from('referral_documents')
-        .select('id', { count: 'exact', head: true })
-        .eq('via_link_id', last.id);
-      latest = { ...last, files: count ?? 0 };
+      // Files per item + signed kit docs — for the files count and "👁️ מה שנשלח" (#36).
+      // kit_signatures is server-only (no RLS policy); this block is already behind canSendCustomerLink.
+      const [{ data: files }, { data: sigs }] = await Promise.all([
+        supabase.from('referral_documents').select('doc_kind').eq('via_link_id', last.id),
+        last.kit_docs?.length ? serviceClient()!.from('kit_signatures').select('doc_id').eq('link_id', last.id) : Promise.resolve({ data: [] }),
+      ]);
+      const uploaded: Record<string, number> = {};
+      for (const f of (files ?? []) as { doc_kind: string | null }[]) if (f.doc_kind) uploaded[f.doc_kind] = (uploaded[f.doc_kind] ?? 0) + 1;
+      latest = { ...last, files: (files ?? []).length, uploaded, signed: ((sigs ?? []) as { doc_id: string }[]).map((x) => x.doc_id) };
     }
     customerLinkSlot = (
       <>
@@ -92,7 +97,12 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
           <span>📄 קיט מסמכים לתביעה</span>
           <span className="text-xs font-normal text-indigo-700">מולא מההפניה · להקלדה ולהדפסה ←</span>
         </a>
-        <CustomerLinkPanel referralId={params.id} latest={latest} hasPhone={!!whatsAppUrl(row.phone, 'x')} />
+        <CustomerLinkPanel
+          referralId={params.id}
+          latest={latest}
+          hasPhone={!!whatsAppUrl(row.phone, 'x')}
+          preview={{ name: firstName(row.customer_name), plate: row.plate_number, items: docItemsFor(row.claim_type), consent: consentText(row.plate_number) }}
+        />
       </>
     );
   }

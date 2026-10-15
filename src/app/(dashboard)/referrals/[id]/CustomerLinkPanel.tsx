@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createCustomerDocLink, revokeCustomerDocLink } from '@/app/actions/customerDocLinks';
+import { CustomerPreview, type PreviewData } from './CustomerPreview';
 
 export interface CustomerLinkRow {
   id: string;
@@ -12,15 +13,20 @@ export interface CustomerLinkRow {
   opened_at: string | null;
   consent_at: string | null;
   completed_at: string | null;
+  kit_docs: string[] | null;
+  kit_values: Record<string, string> | null;
   files: number;
+  uploaded: Record<string, number>;
+  signed: string[];
 }
 
 const fmt = (s: string) =>
   new Date(s).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 /** "📲 קישור ללקוח" on a referral (Amit, 2026-10-14). */
-export function CustomerLinkPanel({ referralId, latest, hasPhone }: { referralId: string; latest: CustomerLinkRow | null; hasPhone: boolean }) {
+export function CustomerLinkPanel({ referralId, latest, hasPhone, preview }: { referralId: string; latest: CustomerLinkRow | null; hasPhone: boolean; preview: PreviewData }) {
   const router = useRouter();
+  const [showing, setShowing] = useState<'before' | 'sent' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<{ message: string; whatsapp: string | null } | null>(null);
@@ -80,7 +86,15 @@ export function CustomerLinkPanel({ referralId, latest, hasPhone }: { referralId
     <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="font-semibold">📲 קישור ללקוח להעלאת מסמכים <span className="text-xs text-gray-400 font-normal">🔒 פיילוט</span></h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setShowing('before')} className="h-9 px-3 rounded-lg border border-gray-300 text-sm">
+            👁️ תצוגה מקדימה
+          </button>
+          {latest && (
+            <button onClick={() => setShowing('sent')} className="h-9 px-3 rounded-lg border border-gray-300 text-sm">
+              👁️ מה שנשלח
+            </button>
+          )}
           {live && (
             <button onClick={() => void revoke()} disabled={busy} className="h-9 px-3 rounded-lg border border-gray-300 text-sm disabled:opacity-50">
               בטל קישור
@@ -121,6 +135,17 @@ export function CustomerLinkPanel({ referralId, latest, hasPhone }: { referralId
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {showing === 'before' && <CustomerPreview data={preview} kit={null} onClose={() => setShowing(null)} />}
+      {showing === 'sent' && latest && (
+        <CustomerPreview
+          data={preview}
+          kit={latest.kit_docs?.length ? { docs: latest.kit_docs, values: latest.kit_values ?? {}, signed: latest.signed } : null}
+          uploaded={latest.uploaded}
+          sent={{ consented: !!latest.consent_at, completed: !!latest.completed_at, expiresAt: latest.expires_at }}
+          onClose={() => setShowing(null)}
+        />
+      )}
     </div>
   );
 }

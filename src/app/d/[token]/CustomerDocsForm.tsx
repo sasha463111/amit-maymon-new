@@ -29,7 +29,10 @@ export function CustomerDocsForm(props: {
   expiresAt: string;
   /** Claim kit to sign (stage 2) — null when the link carries none. */
   kit?: { docs: string[]; values: Record<string, string>; signed: string[] } | null;
+  /** Staff preview (#36): the same screens, but nothing is sent or saved. */
+  preview?: boolean;
 }) {
+  const send = (fields: Record<string, string | Blob>) => (props.preview ? Promise.resolve({ ok: true } as { ok: boolean; error?: string }) : post(fields));
   const [consented, setConsented] = useState(props.consented);
   const [agree, setAgree] = useState(false);
   const [uploaded, setUploaded] = useState<Record<string, number>>(props.initialUploaded);
@@ -46,7 +49,7 @@ export function CustomerDocsForm(props: {
   async function accept() {
     setError(null);
     setSending(true);
-    const r = await post({ token: props.token, action: 'consent', agree: 'yes' });
+    const r = await send({ token: props.token, action: 'consent', agree: 'yes' });
     setSending(false);
     if (r.ok) setConsented(true);
     else setError(r.error ?? 'שגיאה');
@@ -57,7 +60,7 @@ export function CustomerDocsForm(props: {
     setError(null);
     setBusyKind(kind);
     for (const file of Array.from(files)) {
-      const r = await post({ token: props.token, action: 'upload', kind, file });
+      const r = await send({ token: props.token, action: 'upload', kind, file });
       if (!r.ok) {
         setError(r.error ?? 'שגיאה בהעלאה');
         break;
@@ -71,7 +74,7 @@ export function CustomerDocsForm(props: {
 
   async function finish() {
     setSending(true);
-    const r = await post({ token: props.token, action: 'done' });
+    const r = await send({ token: props.token, action: 'done' });
     setSending(false);
     if (r.ok) setFinished(true);
     else setError(r.error ?? 'שגיאה');
@@ -141,7 +144,7 @@ export function CustomerDocsForm(props: {
   return (
     <>
       {header}
-      {props.kit && <KitSign token={props.token} docs={props.kit.docs} initialValues={props.kit.values} initialSigned={props.kit.signed} />}
+      {props.kit && <KitSign preview={props.preview} token={props.token} docs={props.kit.docs} initialValues={props.kit.values} initialSigned={props.kit.signed} />}
       <p className="text-sm text-gray-600 mb-3">צלם/י או העלה/י כל מסמך. מסמך שהתקבל יסומן ב-✓.</p>
       <div className="space-y-2">
         {props.items.map((item) => {

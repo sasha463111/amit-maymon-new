@@ -13,7 +13,7 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return (await fetch(dataUrl)).blob();
 }
 
-export function KitSign({ token, docs, initialValues, initialSigned }: { token: string; docs: string[]; initialValues: KitValues; initialSigned: string[] }) {
+export function KitSign({ token, docs, initialValues, initialSigned, preview }: { token: string; docs: string[]; initialValues: KitValues; initialSigned: string[]; preview?: boolean }) {
   const [values, setValues] = useState<KitValues>(initialValues);
   const [signed, setSigned] = useState<string[]>(initialSigned);
   const [openId, setOpenId] = useState<string | null>(docs.find((d) => !initialSigned.includes(d)) ?? null);
@@ -31,8 +31,8 @@ export function KitSign({ token, docs, initialValues, initialSigned }: { token: 
     fd.append('doc', docId);
     fd.append('values', JSON.stringify(values));
     fd.append('signature', new File([await dataUrlToBlob(sigDataUrl)], 'signature.png', { type: 'image/png' }));
-    let ok = false;
-    try {
+    let ok = !!preview;
+    if (!preview) try {
       const res = await fetch('/api/customer-docs', { method: 'POST', body: fd });
       const j = (await res.json()) as { ok: boolean; error?: string };
       ok = j.ok;

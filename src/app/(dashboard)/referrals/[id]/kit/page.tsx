@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { canSendCustomerLink } from '@/lib/customerDocs';
+import { canSendCustomerLink, consentText, docItemsFor, firstName } from '@/lib/customerDocs';
 import { suggestDocs, claimKindLabel } from '@/lib/claimKit';
 import { KitClient } from './KitClient';
 import { getKitStatus } from '@/app/actions/customerDocLinks';
@@ -48,6 +48,7 @@ export default async function ReferralKitPage({ params }: { params: { id: string
         event_date: ilDate(caseRow?.event_date),
         vat_choice: caseRow?.vat_status === 'NONE' ? '1' : caseRow?.vat_status === 'DEALER' || caseRow?.vat_status === 'COMPANY' ? '2' : '',
       }}
+      customer={{ name: firstName(r.customer_name), plate: r.plate_number, items: docItemsFor(r.claim_type), consent: consentText(r.plate_number) }}
       summary={[
         { label: 'לקוח', value: r.customer_name ?? '' },
         { label: 'רכב', value: r.plate_number ?? '' },

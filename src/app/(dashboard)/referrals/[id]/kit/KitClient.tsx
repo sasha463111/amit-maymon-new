@@ -6,13 +6,15 @@ import { KIT_DOCS } from '@/lib/claimKit';
 import { KitPages, type KitValues } from '@/components/claimKit/KitPages';
 import { createCustomerDocLink, type KitLinkStatus } from '@/app/actions/customerDocLinks';
 import { useRouter } from 'next/navigation';
+import { CustomerPreview, type PreviewData } from '../CustomerPreview';
 
 // The kit screen (Amit, 15/10): pick the documents (the claim type suggests
 // them), type into the pages, print / save as PDF — or send it to the customer
 // to complete and sign on the phone (stage 2: the customer link, KitSign).
 
-export function KitClient({ referralId, status, hasPhone, backHref, suggested, initial, summary }: { referralId: string; status: KitLinkStatus; hasPhone: boolean; backHref: string; suggested: string[]; initial: KitValues; summary: { label: string; value: string }[] }) {
+export function KitClient({ referralId, status, hasPhone, backHref, suggested, initial, summary, customer }: { referralId: string; status: KitLinkStatus; hasPhone: boolean; backHref: string; suggested: string[]; initial: KitValues; summary: { label: string; value: string }[]; customer: PreviewData }) {
   const router = useRouter();
+  const [preview, setPreview] = useState<'before' | 'sent' | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<{ whatsapp: string | null; message: string } | null>(null);
   const [sendErr, setSendErr] = useState<string | null>(null);
@@ -60,6 +62,9 @@ export function KitClient({ referralId, status, hasPhone, backHref, suggested, i
             <button type="button" disabled={sending || !selected.length} onClick={() => void sendToCustomer()} className="h-11 px-5 rounded-xl bg-green-600 text-white font-bold disabled:opacity-40">
               {sending ? 'יוצר קישור…' : '📲 שליחה ללקוח לחתימה'}
             </button>
+            <button type="button" disabled={!selected.length} onClick={() => setPreview('before')} className="h-11 px-5 rounded-xl border-2 border-gray-300 bg-white font-bold disabled:opacity-40">
+              👁️ תצוגה מקדימה ללקוח
+            </button>
             <span className="text-xs text-gray-500 self-center">מקלידים ישר בתוך הדפים (השדות הכחולים). ערך שמוקלד פעם אחת מתמלא בכל המסמכים.</span>
           </div>
           {!hasPhone && <p className="text-xs text-amber-700">אין בהפניה נייד תקין — הקישור ייווצר, ותעתיקו את ההודעה ידנית.</p>}
@@ -82,6 +87,7 @@ export function KitClient({ referralId, status, hasPhone, backHref, suggested, i
                   return <li key={d.id}>{sg ? '✓' : '○'} {d.title}{sg ? ` — נחתם ${new Date(sg.signedAt).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}</li>;
                 })}
               </ul>
+              <button type="button" onClick={() => setPreview('sent')} className="block mt-1 text-indigo-700 font-semibold">👁️ צפייה במה שנשלח ללקוח ←</button>
               {status.signed.length > 0 && (
                 <Link href={`/referrals/${referralId}/kit/signed`} className="inline-block mt-1 text-indigo-700 font-semibold">📄 המסמכים החתומים — צפייה והדפסה ←</Link>
               )}
@@ -89,6 +95,15 @@ export function KitClient({ referralId, status, hasPhone, backHref, suggested, i
           )}
         </div>
       </div>
+      {preview === 'before' && <CustomerPreview data={customer} kit={{ docs: selected, values: values as Record<string, string>, signed: [] }} onClose={() => setPreview(null)} />}
+      {preview === 'sent' && status && (
+        <CustomerPreview
+          data={customer}
+          kit={{ docs: status.docs.map((d) => d.id), values: status.values, signed: status.signed.map((s) => s.docId) }}
+          sent={{ consented: status.consented, completed: status.completed, expiresAt: status.expiresAt }}
+          onClose={() => setPreview(null)}
+        />
+      )}
       <div id="claim-kit" className="bg-gray-100 print:bg-white rounded-2xl print:rounded-none p-2 md:p-6 print:p-0 overflow-x-auto">
         <KitPages selected={selected} values={values} setValues={setValues} summary={summary} />
       </div>
