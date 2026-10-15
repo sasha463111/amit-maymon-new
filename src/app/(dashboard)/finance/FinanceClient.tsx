@@ -1,5 +1,7 @@
 'use client';
 
+import { LicensePlate } from '@/components/ui/LicensePlate';
+import { StatCard, StatGrid } from '@/components/ui/kit';
 import { useMemo, useState } from 'react';
 
 export interface FinanceRow {
@@ -178,16 +180,18 @@ export function FinanceClient({ rows, branches, error }: { rows: FinanceRow[]; b
         </select>
       </div>
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Kpi label="סה״כ חשבוניות" value={ils(total)} />
-        <Kpi label="תיקים" value={String(filtered.length)} />
-        <Kpi label="ממוצע לתיק" value={filtered.length ? ils(total / filtered.length) : '—'} />
-        <Kpi
+      {/* The shared kit (15/10, "עיצוב אחיד"). */}
+      <StatGrid>
+        <StatCard label="סה״כ חשבוניות" value={ils(total)} tone="good" />
+        <StatCard label="תיקים" value={filtered.length} />
+        <StatCard label="ממוצע לתיק" value={filtered.length ? ils(total / filtered.length) : '—'} />
+        <StatCard
           label="פער ש.י.ר (הנחות שנתנו)"
           value={shirRows.length ? ils(shirGap) : '—'}
           hint={shirRows.length ? `לפי ${shirRows.length} תיקים עם סכום ללא הנחות` : 'אין עדיין סכומים ללא הנחות'}
+          tone={shirRows.length ? 'warn' : 'neutral'}
         />
-      </div>
+      </StatGrid>
 
       <Breakdown title={`מגמה לפי ${trendKind === 'quarter' ? 'רבעון' : 'חודש'}`} groups={trend} label={periodLabel} />
 
@@ -206,7 +210,7 @@ export function FinanceClient({ rows, branches, error }: { rows: FinanceRow[]; b
           <ul className="text-sm space-y-1">
             {review.map((r) => (
               <li key={r.id}>
-                {r.plate} · {branchName[r.branch_id]} · {r.closed_on.split('-').reverse().join('/')} — {r.review_note}
+                {r.plate ? <span className="inline-block align-middle"><LicensePlate plate={r.plate} size="sm" /></span> : '—'} · {branchName[r.branch_id]} · {r.closed_on.split('-').reverse().join('/')} — {r.review_note}
               </li>
             ))}
           </ul>
@@ -218,20 +222,20 @@ export function FinanceClient({ rows, branches, error }: { rows: FinanceRow[]; b
           {showRows ? '▲ הסתר' : '▼ הצג'} את כל השורות ({filtered.length})
         </button>
         {showRows && (
-          <div className="overflow-x-auto mt-2">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[11px] text-gray-400 text-right">
+          <div className="overflow-auto max-h-[70vh] mt-2 rounded-lg border border-gray-200">
+            <table className="w-full text-[13px] [&_td]:px-2 [&_td]:py-1.5">
+              <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10">
+                <tr className="text-right">
                   {['תאריך', 'רכב', 'סניף', 'מקור', 'חברת ביטוח', 'סוג תביעה', 'שמאי', 'סכום', 'ללא הנחות'].map((h) => (
-                    <th key={h} className="font-normal px-3 py-2 whitespace-nowrap">{h}</th>
+                    <th key={h} className="font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="[&>tr:nth-child(even)]:bg-gray-50/60">
                 {filtered.map((r) => (
                   <tr key={r.id} className="border-t border-gray-100">
                     <td className="px-3 py-2 whitespace-nowrap">{r.closed_on.split('-').reverse().join('/')}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{r.plate}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{r.plate ? <LicensePlate plate={r.plate} size="sm" /> : '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{branchName[r.branch_id]}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{SOURCE_LABEL[r.work_source]}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{r.insurer ?? '—'}</td>
@@ -246,16 +250,6 @@ export function FinanceClient({ rows, branches, error }: { rows: FinanceRow[]; b
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-3">
-      <div className="text-[11px] text-gray-400">{label}</div>
-      <div className="text-xl font-bold mt-1">{value}</div>
-      {hint && <div className="text-[11px] text-gray-400 mt-1">{hint}</div>}
     </div>
   );
 }

@@ -9,6 +9,8 @@ import { formatDate } from '@/lib/dates';
 import { OpenCaseDialog } from '../collections/CollectionsClient';
 import { FeedbackButton } from '../collections/Feedback';
 import { ils, today } from '../collections/shared';
+import { LicensePlate } from '@/components/ui/LicensePlate';
+import { StatCard, StatGrid } from '@/components/ui/kit';
 
 type View = 'open' | 'closed' | 'all';
 
@@ -56,25 +58,19 @@ export function LegalClient({ cases, pending = [], collectors, isCeo, error }: {
           <p className="text-xs text-amber-900">פותחים את התיק ← &quot;סטטוס ותשלום&quot; ← &quot;מחלקה משפטית&quot; (עם סיבה ועורך דין), או &quot;⚖️ פתיחת תיק משפטי&quot; לפי מספר הרכב.</p>
           {pending.map((c) => (
             <Link key={c.id} href={`/collections/${c.id}`} className="block text-sm py-0.5">
-              <span className="font-semibold text-indigo-700">{c.plate}</span> · {c.customer_name ?? ''} · {payerOf(c) || '—'} · {c.claim_stage} · {c.assigned_name ?? ''}
+              <span className="inline-block align-middle"><LicensePlate plate={c.plate} size="sm" /></span> · {c.customer_name ?? ''} · {payerOf(c) || '—'} · {c.claim_stage} · {c.assigned_name ?? ''}
             </Link>
           ))}
         </div>
       )}
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        {[
-          ['תיקים פתוחים', String(open.length)],
-          ['סכום בתביעה (פתוחים)', ils(sum(open, 'legal_claim_amount'))],
-          ['תיקים שהסתיימו', String(closed.length)],
-          ['נגבה בסוף התביעות', ils(sum(closed, 'legal_recovered_amount'))],
-        ].map(([l, v]) => (
-          <div key={l} className="rounded-xl border border-purple-200 bg-purple-50/50 p-3">
-            <p className="text-xs text-gray-500">{l}</p>
-            <p className="text-xl font-bold text-gray-900">{v}</p>
-          </div>
-        ))}
-      </div>
+      {/* Summary strip — the shared kit (15/10); a card switches the view. */}
+      <StatGrid>
+        <StatCard label="תיקים בטיפול" value={open.length} hint={`בתביעה ${ils(sum(open, 'legal_claim_amount'))}`} tone="warn" onClick={() => setView('open')} active={view === 'open'} />
+        <StatCard label="תיקים שהסתיימו" value={closed.length} hint={`נגבה ${ils(sum(closed, 'legal_recovered_amount'))}`} tone="good" onClick={() => setView('closed')} active={view === 'closed'} />
+        <StatCard label="סכום בתביעה (פתוחים)" value={ils(sum(open, 'legal_claim_amount'))} />
+        <StatCard label="נגבה בסוף התביעות" value={ils(sum(closed, 'legal_recovered_amount'))} tone="good" />
+      </StatGrid>
 
       {isCeo && (
         <div className="flex gap-1.5 flex-wrap">
@@ -98,18 +94,19 @@ export function LegalClient({ cases, pending = [], collectors, isCeo, error }: {
         ))}
       </div>
 
-      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="🔎 רכב, לקוח, חברה, סיבה, עורך דין, מספר תביעה…" className="w-full h-11 px-3 rounded-xl border border-gray-300 text-sm" dir="auto" />
+      <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="🔎 רכב, לקוח, חברה, סיבה, עורך דין, מספר תביעה…" className="w-full h-10 px-3 rounded-xl border border-gray-300 text-sm" dir="auto" />
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="min-w-[1000px] w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600 text-xs">
+      {/* Compact table — same as the claims list (15/10). */}
+      <div className="overflow-auto max-h-[72vh] rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-[960px] w-full text-[13px] [&_td]:px-2 [&_td]:py-1.5 [&_th]:px-2 [&_th]:py-2">
+          <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
             <tr>
-              {['הועבר', 'רכב / לקוח', 'משלם', 'סיבה', 'עורך דין', 'סכום התביעה', 'תוצאה', 'ימים במשפטי', ''].map((h) => (
-                <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+              {['הועבר', 'רכב / לקוח', 'משלם', 'סיבה', 'עורך דין', 'סכום התביעה', 'תוצאה', 'ימים במשפטי', ''].map((h, i) => (
+                <th key={h || i} className="text-right font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
             {shown.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center text-gray-400 py-8">
@@ -124,7 +121,7 @@ export function LegalClient({ cases, pending = [], collectors, isCeo, error }: {
                   {isCeo && <div className="text-[11px] text-gray-500">{c.assigned_name}</div>}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <span className="font-semibold text-indigo-700">{c.plate}</span>
+                  <LicensePlate plate={c.plate} size="sm" />
                   {c.customer_name && <div className="text-[11px] text-gray-500">{c.customer_name}</div>}
                   {c.event_date && <div className="text-[11px] text-gray-500">תאונה: {formatDate(c.event_date)}</div>}
                 </td>
