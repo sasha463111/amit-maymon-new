@@ -11,6 +11,7 @@ import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { DocScanner } from '@/components/DocScanner';
+import { ScanToCase } from '@/components/ScanToCase';
 import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStageDays, israelWorkDateIn } from '@/lib/collectionStages';
 import { WhatsAppDocs } from './WhatsAppDocs';
 import { InsurerCheckPanel } from './InsurerCheckPanel';
@@ -619,6 +620,7 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
           ))}
         </div>
         <div className="flex gap-2 flex-wrap">
+          <ScanToCase onSave={saveScan} fileName={scanName} disabled={busy} />
           <DocScanner
             onSave={saveScan}
             fileName={scanName}
