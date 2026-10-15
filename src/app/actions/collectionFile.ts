@@ -383,6 +383,24 @@ export async function sendBetaFeedback(kind: FeedbackKind, body: string, page: s
   if (text.length < 3) return { error: 'נא לכתוב כמה מילים' };
   const { error } = await ctx.db.from('beta_feedback').insert({ kind, body: text, page: (page ?? '').slice(0, 200) || null, created_by: ctx.user.id } as never);
   if (error) return { error: error.message };
+  // Also onto the bugs / features boards (Tomer, 15/10): a problem → 🐞, an
+  // idea or a dream → 🚀. Tomer / Amit can re-tag it there.
+  const boardKind = kind === 'PROBLEM' ? 'BUG' : 'FEATURE';
+  const { data: reqRow } = await ctx.db
+    .from('app_requests')
+    .insert({ body: text.replace(/\s+/g, ' ').slice(0, 200), kind: boardKind, created_by: ctx.user.id } as never)
+    .select('id')
+    .single();
+  const reqId = (reqRow as { id: string } | null)?.id;
+  if (reqId) {
+    await ctx.db.from('app_request_messages').insert({
+      request_id: reqId,
+      body: `${text}
+
+(${FEEDBACK_HE[kind]} מכפתור המשוב בתביעות ביטוח${page ? ` · ${page.slice(0, 200)}` : ''})`,
+      author_id: ctx.user.id,
+    } as never);
+  }
   // To Amit as a personal note (push + "הודעות"), one row — DIRECT_NOTE is never fanned out.
   const [{ data: sender }, { data: ceo }] = await Promise.all([
     ctx.db.from('profiles').select('full_name').eq('id', ctx.user.id).maybeSingle(),
@@ -396,7 +414,7 @@ export async function sendBetaFeedback(kind: FeedbackKind, body: string, page: s
       triggered_by: ctx.user.id,
       title: `${FEEDBACK_HE[kind]} — תביעות ביטוח (${(sender as { full_name: string | null } | null)?.full_name ?? ''})`,
       body: text.slice(0, 300),
-      action_url: '/collections?tab=feedback',
+      action_url: reqId ? `${boardKind === 'BUG' ? '/bugs' : '/features'}#${reqId}` : '/collections?tab=feedback',
     } as never);
   }
   revalidatePath('/collections');
