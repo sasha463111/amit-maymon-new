@@ -23,6 +23,7 @@ import { needsSmsCode } from '@/lib/loginVerify.server';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'תיקים', href: '/cases' },
     { label: 'הודעות', href: '/messages' },
     { label: 'החזרות', href: '/returns' },
@@ -31,6 +32,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'התראות', href: '/notifications' },
   ],
   OFFICE: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     // Cases too (2026-10-11): office staff complete paperwork / notes on cases
     // they opened; their edits show in the case history.
     { label: 'תיקים', href: '/cases' },
@@ -64,6 +66,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: '🚀 פיתוחים', href: '/features' },
   ],
   PAINTER: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'תיקים', href: '/painters' },
     { label: 'הודעות', href: '/messages' },
     { label: 'החזרות', href: '/returns' },
@@ -71,6 +74,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'התראות', href: '/notifications' },
   ],
   SERVICE_ADVISOR: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'תיקים', href: '/cases' },
     { label: 'הודעות', href: '/messages' },
     { label: 'החזרות', href: '/returns' },
@@ -79,11 +83,13 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   // Parts-returns module (2026-10-12): warehouse staff and Roei.
   WAREHOUSE: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'החזרות', href: '/returns' },
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],
   WAREHOUSE_MANAGER: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'החזרות', href: '/returns' },
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
@@ -91,6 +97,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   // Bookkeeper (חני, 2026-10-14): returns, finance, collections (+ the
   // collections dashboard through finance_viewers).
   ACCOUNTANT: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'כספים', href: '/finance' },
     { label: 'ניהול תביעות ביטוח', href: '/collections' },
     { label: 'טיפול משפטי', href: '/legal' },
@@ -100,6 +107,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   // Claims collectors (2026-10-14): the collections screen only.
   COLLECTIONS: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'ניהול תביעות ביטוח', href: '/collections' },
     { label: 'טיפול משפטי', href: '/legal' },
     { label: 'הודעות', href: '/messages' },
@@ -107,6 +115,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   ],
   // Drivers (ינון, יצחק — Tomer, 15/10): the loaner-car module only.
   DRIVER: [
+    { label: '🏠 היום', href: '/today' }, // every role's own day (15/10)
     { label: 'רכב חליפי', href: '/loaners' },
     { label: 'התראות', href: '/notifications' },
   ],
