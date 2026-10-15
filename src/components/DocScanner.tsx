@@ -12,9 +12,14 @@ import { useEffect, useRef, useState } from 'react';
  * Everything happens in the browser (pdf-lib, loaded only when saving). The
  * PDF is kept under `maxBytes` (the server action limit) by lowering the
  * resolution / quality until it fits.
+ *
+ * On a computer (Sapir, 15/10 — no camera; the office scanner saves PDFs into
+ * a "סריקות" folder, and the image-only picker hid them) the button opens a
+ * file picker for images AND PDFs; a PDF's pages are copied as they are into
+ * the one output PDF. On a phone it stays the camera.
  */
 
-type Page = { file: File; url: string };
+type Page = { file: File; url: string; pdf: boolean };
 
 const STEPS: { side: number; quality: number }[] = [
   { side: 1800, quality: 0.72 },
@@ -82,11 +87,20 @@ async function pageJpeg(img: HTMLImageElement, side: number, quality: number, en
 
 async function buildPdf(pages: Page[], enhance: boolean, maxBytes: number): Promise<Uint8Array> {
   const { PDFDocument } = await import('pdf-lib');
-  const imgs = await Promise.all(pages.map((p) => loadImage(p.file)));
+  // Load every source once: an image, or a PDF from the scanner.
+  const srcs = await Promise.all(
+    pages.map(async (p) => (p.pdf ? { pdf: await PDFDocument.load(await p.file.arrayBuffer(), { ignoreEncryption: true }) } : { img: await loadImage(p.file) })),
+  );
   let last: Uint8Array | null = null;
   for (const step of STEPS) {
     const pdf = await PDFDocument.create();
-    for (const img of imgs) {
+    for (const src of srcs) {
+      if ('pdf' in src && src.pdf) {
+        const copied = await pdf.copyPages(src.pdf, src.pdf.getPageIndices());
+        copied.forEach((pg) => pdf.addPage(pg));
+        continue;
+      }
+      const img = (src as { img: HTMLImageElement }).img;
       const j = await pageJpeg(img, step.side, step.quality, enhance);
       const embedded = await pdf.embedJpg(j.bytes);
       // A4 width (595pt), height by the photo's proportions.
@@ -122,6 +136,15 @@ export function DocScanner({
   const [enhance, setEnhance] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Phone / tablet → the camera; computer → pick images or scanner PDFs.
+  const [touch, setTouch] = useState(true);
+  useEffect(() => {
+    try {
+      setTouch(window.matchMedia('(pointer: coarse)').matches);
+    } catch {
+      /* keep the camera default */
+    }
+  }, []);
   const input = useRef<HTMLInputElement>(null);
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
@@ -129,7 +152,12 @@ export function DocScanner({
 
   function add(list: FileList | null) {
     if (!list?.length) return;
-    const next = Array.from(list).filter((f) => f.type.startsWith('image/')).map((file) => ({ file, url: URL.createObjectURL(file) }));
+    const next = Array.from(list)
+      .filter((f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name))
+      .map((file) => {
+        const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        return { file, pdf, url: pdf ? '' : URL.createObjectURL(file) };
+      });
     setPages((p) => [...p, ...next]);
     setOpen(true);
     if (input.current) input.current.value = '';
@@ -167,7 +195,11 @@ export function DocScanner({
       const ok = await onSave(new File([bytes as BlobPart], fileName, { type: 'application/pdf' }));
       if (ok) reset();
     } catch (e) {
-      setErr(e instanceof Error && e.message === 'too-big' ? 'המסמך גדול מדי — נסו לחלק אותו לשתי סריקות.' : 'לא הצלחנו ליצור את ה-PDF. נסו שוב.');
+      setErr(
+        e instanceof Error && e.message === 'too-big'
+          ? 'המסמך גדול מדי (עד 4MB) — נסו לחלק אותו לשתי שמירות, או לסרוק ברזולוציה נמוכה יותר.'
+          : 'לא הצלחנו ליצור את ה-PDF (ייתכן שקובץ ה-PDF מוגן). אפשר להעלות אותו ב"בחירת קבצים".',
+      );
     }
     setBusy(false);
   }
@@ -175,20 +207,32 @@ export function DocScanner({
   return (
     <>
       <label className={`${className} ${disabled || busy ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
-        {pages.length ? '📷 עמוד נוסף' : label}
-        <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" disabled={disabled || busy} onChange={(e) => add(e.target.files)} />
+        {pages.length ? (touch ? '📷 עמוד נוסף' : '➕ עוד קובץ') : label}
+        {touch ? (
+          <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" disabled={disabled || busy} onChange={(e) => add(e.target.files)} />
+        ) : (
+          <input ref={input} type="file" multiple accept="image/*,application/pdf,.pdf" className="hidden" disabled={disabled || busy} onChange={(e) => add(e.target.files)} />
+        )}
       </label>
       {open && pages.length > 0 && (
         <div className="w-full rounded-xl border-2 border-indigo-200 bg-indigo-50/50 p-3 space-y-3">
-          <p className="text-sm font-semibold">📄 סריקה — {pages.length} {pages.length === 1 ? 'עמוד' : 'עמודים'} · יישמרו כקובץ PDF אחד</p>
+          <p className="text-sm font-semibold">📄 סריקה — {pages.length} {pages.length === 1 ? 'פריט' : 'פריטים'} · יישמרו כקובץ PDF אחד</p>
+          {!touch && <p className="text-xs text-gray-600">מהמחשב: בוחרים קבצים מתיקיית הסריקות (PDF או תמונה). כמה קבצים יאוחדו למסמך אחד, לפי הסדר כאן.</p>}
           <div className="flex gap-2 overflow-x-auto pb-1">
             {pages.map((p, i) => (
-              <div key={p.url} className="shrink-0 w-24 space-y-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={`עמוד ${i + 1}`} className={`w-24 h-32 object-cover rounded-lg border border-gray-300 bg-white ${enhance ? 'grayscale contrast-150' : ''}`} />
+              <div key={`${i}-${p.file.name}-${p.file.size}`} className="shrink-0 w-24 space-y-1">
+                {p.pdf ? (
+                  <div className="w-24 h-32 rounded-lg border border-gray-300 bg-white flex flex-col items-center justify-center p-1 text-center">
+                    <span className="text-3xl">📄</span>
+                    <span className="text-[10px] text-gray-600 break-all line-clamp-3">{p.file.name}</span>
+                  </div>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.url} alt={`עמוד ${i + 1}`} className={`w-24 h-32 object-cover rounded-lg border border-gray-300 bg-white ${enhance ? 'grayscale contrast-150' : ''}`} />
+                )}
                 <div className="flex items-center justify-between text-xs">
                   <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="px-1 disabled:opacity-20" aria-label="הזזה ימינה">→</button>
-                  <span className="text-gray-600">עמ׳ {i + 1}</span>
+                  <span className="text-gray-600">{p.pdf ? `קובץ ${i + 1}` : `עמ׳ ${i + 1}`}</span>
                   <button type="button" onClick={() => move(i, 1)} disabled={i === pages.length - 1} className="px-1 disabled:opacity-20" aria-label="הזזה שמאלה">←</button>
                 </div>
                 <button type="button" onClick={() => drop(i)} className="w-full text-xs text-red-600">✕ הסרה</button>
@@ -204,7 +248,7 @@ export function DocScanner({
               {busy ? 'שומר…' : `💾 שמירה לתיק (${pages.length})`}
             </button>
             <button type="button" disabled={busy} onClick={() => input.current?.click()} className="h-11 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
-              📷 עמוד נוסף
+              {touch ? '📷 עמוד נוסף' : '➕ עוד קובץ'}
             </button>
             <button type="button" disabled={busy} onClick={reset} className="h-11 px-4 rounded-xl text-sm text-gray-600 underline">
               ביטול
