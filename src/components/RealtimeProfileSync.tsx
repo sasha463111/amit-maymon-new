@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -9,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
  * No page refresh needed.
  */
 export function RealtimeProfileSync({ userId }: { userId: string }) {
+  const router = useRouter();
   useEffect(() => {
     const supabase = createClient();
 
@@ -30,8 +32,14 @@ export function RealtimeProfileSync({ userId }: { userId: string }) {
           // When a profile is updated, force a page refresh if it's the current user
           // or clear any cached UI state that depends on roles/branches
           if (payload.new.id === userId) {
-            // Current user's profile changed — refresh to pick up new permissions
-            window.location.reload();
+            // Current user's profile changed — pick up new permissions. Only
+            // when what the screen depends on changed, and with a soft refresh:
+            // a full reload wiped whatever the person was typing (Amit, 15/10).
+            const before = payload.old as Record<string, unknown> | undefined;
+            const after = payload.new as Record<string, unknown>;
+            const keys = ['role', 'branch_ids', 'is_active', 'office_function', 'sees_all_branches'];
+            const changed = !before || keys.some((k) => k in before && JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+            if (changed) router.refresh();
           } else {
             // Another user's profile changed
             // Dispatch custom event for components listening to role changes
@@ -54,7 +62,7 @@ export function RealtimeProfileSync({ userId }: { userId: string }) {
     return () => {
       channel.unsubscribe();
     };
-  }, [userId]);
+  }, [userId, router]);
 
   return null; // This component doesn't render anything
 }
