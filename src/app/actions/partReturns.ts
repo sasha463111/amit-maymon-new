@@ -134,6 +134,32 @@ export async function createPartReturn(formData: FormData) {
 
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
+
+  // Double-entry guard (Liron 15/10, like the invoices): the same SKU — for the
+  // same car when one is given — already marked and not credited yet → ask first.
+  if (sku && clean(formData.get('confirm_duplicate'), 5) !== 'yes') {
+    let q = db
+      .from('part_returns')
+      .select('created_at, status, plate, quantity, branches(name)')
+      .ilike('sku', sku.replace(/[%_\\]/g, ''))
+      .in('status', ['WAITING_PICKUP', 'COLLECTED', 'DISPUTE'])
+      .limit(5);
+    if (plate) q = q.eq('plate', plate);
+    const { data: dups } = await q;
+    const list = (dups ?? []) as { created_at: string; status: string; plate: string | null; quantity: number; branches: { name: string } | { name: string }[] | null }[];
+    if (list.length) {
+      return {
+        duplicates: list.map((d) => ({
+          created_at: d.created_at,
+          status: d.status,
+          plate: d.plate,
+          quantity: d.quantity,
+          branch_name: (Array.isArray(d.branches) ? d.branches[0] : d.branches)?.name ?? null,
+        })),
+      };
+    }
+  }
+
   const path = photoPath(branchId, photo);
   const { error: upErr } = await db.storage.from(BUCKET).upload(path, photo, { contentType: photo.type, upsert: false });
   if (upErr) return { error: `שמירת התמונה נכשלה: ${upErr.message}` };

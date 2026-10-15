@@ -712,6 +712,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [dups, setDups] = useState<{ created_at: string; status: string; plate: string | null; quantity: number; branch_name: string | null }[] | null>(null);
 
   function onPhoto(f: File | null) {
     setPhoto(f);
@@ -755,8 +756,9 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     }
   }
 
-  async function save() {
+  async function save(confirmDuplicate = false) {
     setErr(null);
+    setDups(null);
     if (!photo) return setErr('חובה לצלם את המדבקה');
     if (!supplier) return setErr('נא לבחור ספק');
     if (!reason) return setErr('נא לבחור סיבת החזרה');
@@ -776,9 +778,11 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     fd.append('document_number', doc);
     fd.append('sticker_date', stickerDate);
     fd.append('branch_id', branchId);
+    if (confirmDuplicate) fd.append('confirm_duplicate', 'yes');
     const res = await createPartReturn(fd).catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'שגיאה' }));
     setBusy(false);
     if ('error' in res && res.error) return setErr(res.error);
+    if ('duplicates' in res && res.duplicates?.length) return setDups(res.duplicates);
     onSaved('linkedToCase' in res ? !!res.linkedToCase : false);
   }
 
@@ -898,6 +902,24 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         )}
 
         {err && <p className="text-sm text-red-700 font-semibold">⚠️ {err}</p>}
+        {dups && (
+          <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-3 space-y-2 text-sm">
+            <p className="font-bold text-amber-900">⚠️ החלק הזה (מק״ט {sku}) כבר מסומן להחזרה ועוד לא זוכה:</p>
+            <ul className="space-y-0.5 text-amber-900">
+              {dups.map((d, i) => (
+                <li key={i}>
+                  {formatDate(d.created_at)} · {PART_RETURN_STATUS_LABEL[d.status] ?? d.status}
+                  {d.plate ? ` · רכב ${d.plate}` : ''} · כמות {d.quantity}
+                  {d.branch_name ? ` · ${d.branch_name}` : ''}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button type="button" disabled={busy} onClick={() => void save(true)} className="h-9 px-4 rounded-lg bg-amber-600 text-white font-bold disabled:opacity-50">זה חלק נוסף — לשמור בכל זאת</button>
+              <button type="button" onClick={() => setDups(null)} className="h-9 px-4 rounded-lg border border-gray-300 bg-white">ביטול</button>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           disabled={busy}
