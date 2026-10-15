@@ -1,6 +1,7 @@
 'use client';
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { StatCard, StatGrid } from '@/components/ui/kit';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -72,6 +73,16 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
   const match = (h: Handover) =>
     !q || [h.loaner_plate, h.loaner_type, h.customer_plate, h.customer_name, h.customer_phone, h.branch_name].some((v) => (v ?? '').toLowerCase().replace(/-/g, '').includes(q));
   const shown = useMemo(() => (tab === 'out' ? out : back).filter(match), [tab, out, back, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Summary strip (the shared kit, 15/10).
+  const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const weekAgo = Date.now() - 7 * 86_400_000;
+  const sum = {
+    outLong: out.filter((h) => days(h.given_at, null) > 7).length,
+    free: fleet.filter((f) => f.active && !f.busy).length,
+    active: fleet.filter((f) => f.active).length,
+    tests: fleet.filter((f) => f.active && f.test_until && f.test_until <= in30).length,
+    backWeek: back.filter((h) => h.returned_at && new Date(h.returned_at).getTime() > weekAgo).length,
+  };
 
   function done(m: string) {
     setToast(m);
@@ -79,7 +90,7 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4" dir="rtl">
+    <div className="max-w-6xl mx-auto space-y-4" dir="rtl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🚗 מעקב רכב חליפי</h1>
@@ -91,6 +102,13 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
       </div>
       {toast && <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-4 py-2 text-sm font-semibold">{toast}</div>}
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
+
+      <StatGrid>
+        <StatCard label="נמסר ללקוחות" value={out.length} hint={`${sum.outLong} מעל 7 ימים`} tone={sum.outLong ? 'warn' : 'neutral'} onClick={() => setTab('out')} active={tab === 'out'} />
+        <StatCard label="פנויים עכשיו" value={sum.free} hint={`מתוך ${sum.active} פעילים בצי`} tone="good" onClick={() => setTab('fleet')} active={tab === 'fleet'} />
+        <StatCard label="טסט נגמר בחודש הקרוב" value={sum.tests} tone={sum.tests ? 'bad' : 'good'} onClick={() => setTab('fleet')} />
+        <StatCard label="הוחזרו השבוע" value={sum.backWeek} tone="info" onClick={() => setTab('back')} active={tab === 'back'} />
+      </StatGrid>
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
         {([
@@ -118,11 +136,11 @@ export function LoanersClient({ fleet, handovers, branches, error }: { fleet: Fl
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="🔎 חיפוש: מספר רכב חליפי, מספר רכב הלקוח, שם לקוח, טלפון…"
-            className="w-full h-11 px-3 rounded-xl border border-gray-300 text-sm"
+            className="w-full h-10 px-3 rounded-xl border border-gray-300 text-sm"
             dir="auto"
           />
           {shown.length === 0 && <p className="text-gray-400 py-8 text-center">{tab === 'out' ? 'אין כרגע רכבים חליפיים שנמסרו ללקוחות' : 'אין החזרות'}</p>}
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {shown.map((h) => (
               <HandoverCard key={h.id} h={h} onDone={done} onShare={setShare} />
             ))}
@@ -169,19 +187,21 @@ function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string)
     <div className={`rounded-xl border bg-white p-3 space-y-2 ${open && days(h.given_at, null) >= 14 ? 'border-amber-300' : 'border-gray-200'}`}>
       <Fields>
         <F label="רכב חליפי" tone="text-gray-900 font-bold">
-          {h.loaner_plate}
-          {h.loaner_type ? ` · ${h.loaner_type}` : ''}
+          <LicensePlate plate={h.loaner_plate} size="sm" />
+          {h.loaner_type ? ` ${h.loaner_type}` : ''}
         </F>
         <F label="לקוח">{h.customer_name || '—'}</F>
         {h.customer_phone && <F label="טלפון">{h.customer_phone}</F>}
         {h.customer_car_model && <F label="דגם רכב הלקוח">{h.customer_car_model}</F>}
         <F label="רכב הלקוח">
           {h.case_id ? (
-            <Link href={`/go/${h.case_id}`} className="text-indigo-700 font-semibold">
-              {h.customer_plate || 'לתיק'} ← לתיק
+            <Link href={`/go/${h.case_id}`} className="text-indigo-700 font-semibold inline-flex items-center gap-1">
+              {h.customer_plate ? <LicensePlate plate={h.customer_plate} size="sm" /> : 'לתיק'} ← לתיק
             </Link>
+          ) : h.customer_plate ? (
+            <LicensePlate plate={h.customer_plate} size="sm" />
           ) : (
-            h.customer_plate || '—'
+            '—'
           )}
         </F>
         {h.branch_name && <F label="סניף">{h.branch_name}</F>}
@@ -326,7 +346,9 @@ function IncidentLookup({ handovers, onShare, onDone }: { handovers: Handover[];
             {rest.map((h) => (
               <div key={h.id} className="rounded-lg border border-gray-200 bg-white p-2">
                 <Fields>
-                  <F label="רכב חליפי">{h.loaner_plate}</F>
+                  <F label="רכב חליפי">
+                    <LicensePlate plate={h.loaner_plate} size="sm" />
+                  </F>
                   <F label="מתאריך">{fmt(h.given_at)}</F>
                   <F label="עד תאריך">{h.returned_at ? fmt(h.returned_at) : 'עדיין אצל הלקוח'}</F>
                   <F label="לקוח">{h.customer_name ?? '—'}</F>
