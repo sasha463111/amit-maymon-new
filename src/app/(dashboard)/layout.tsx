@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
+import { WhatsNewBanner } from '@/components/WhatsNewBanner';
+import { listMyAnnouncements } from '@/app/actions/announcements';
 import { redirect } from 'next/navigation';
 import type { UserRole } from '@/types/database';
 import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
@@ -174,6 +176,7 @@ export default async function DashboardLayout({
         { label: 'התראות', href: '/notifications' },
       ]
     : ROLE_LINKS[role].filter((l) => l.href !== '/returns' || canUsePartReturns(role));
+  const announcements = isPreview ? [] : await listMyAnnouncements().catch(() => []);
   // "משרד הפניות" / "משרד סגירה" instead of a bare "משרד" (staffJobs.ts).
   const roleLabel = viewAs ? ROLE_LABEL[role] : jobLabel(role, profile?.office_function);
 
@@ -242,6 +245,9 @@ export default async function DashboardLayout({
 
       {/* Prominent push-enable nudge — shows for anyone not yet subscribed */}
       {!isPreview && <PushEnableBanner />}
+
+      {/* "🆕 מה חדש" — announcements of changes that affect everyone (15/10) */}
+      {!isPreview && !viewAs && announcements.length > 0 && <WhatsNewBanner items={announcements} />}
 
       {/* Top header with brand + nav + user */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">

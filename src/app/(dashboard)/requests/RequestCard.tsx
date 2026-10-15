@@ -9,6 +9,7 @@ import {
   setRequestPriority,
   setRequestStatus,
   type AppRequest,
+  type AppRequestEvent,
   type RequestKind,
   type RequestStatus,
 } from '@/app/actions/appRequests';
@@ -100,11 +101,119 @@ export function Composer({ requestId, onDone, placeholder, cta, defaultKind }: {
   );
 }
 
+const STATUS_WORD: Record<string, string> = { NEW: '🆕 נפתח', IN_PROGRESS: '🔧 בעבודה', DONE: '✅ בוצע', NO: '⏸ לא כרגע' };
+const fieldLine = (e: AppRequestEvent): string => {
+  if (e.field === 'CREATED') return '🆕 נפתח';
+  if (e.field === 'STATUS') return e.to === 'NEW' ? '↩️ נפתח מחדש' : STATUS_WORD[e.to ?? ''] ?? e.to ?? '';
+  if (e.field === 'PRIORITY') return `עדיפות: ${e.to ? PRIORITY[Number(e.to)]?.[0] ?? e.to : 'ללא'}`;
+  return `סוג: ${e.to ? KIND[e.to as RequestKind]?.[0] ?? e.to : '—'}`;
+};
+
+/** History (15/10): נפתח → בעבודה → בוצע, with date and who; priority / kind changes small. */
+function Timeline({ events }: { events: AppRequestEvent[] }) {
+  if (!events.length) return null;
+  return (
+    <ol className="relative border-r-2 border-gray-200 pr-4 space-y-2 text-xs">
+      {events.map((e) => {
+        const main = e.field === 'CREATED' || e.field === 'STATUS';
+        return (
+          <li key={e.id} className="relative">
+            <span className={`absolute -right-[21px] top-1 w-2.5 h-2.5 rounded-full ${main ? 'bg-indigo-500' : 'bg-gray-300'}`} />
+            <span className={main ? 'font-bold text-gray-900' : 'text-gray-500'}>{fieldLine(e)}</span>
+            <span className="text-gray-500">
+              {' '}· {at(e.at)} · {e.by ?? '🛠 צוות הפיתוח'}
+            </span>
+            {e.note && <p className="mt-0.5 text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-md px-2 py-1">📝 {e.note}</p>}
+            {e.commit && <p className="mt-0.5 text-gray-500" dir="ltr">commit: {e.commit}</p>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Closing a ticket (DONE / NO): "מה בוצע" (required for DONE), commit,
+ *  notify the requester (default on), and "שינוי שמשפיע על כולם" → 🆕 מה חדש. */
+function ClosePanel({ r, to, onCancel, onDone }: { r: AppRequest; to: 'DONE' | 'NO'; onCancel: () => void; onDone: () => void }) {
+  const [note, setNote] = useState('');
+  const [commit, setCommit] = useState('');
+  const [notify, setNotify] = useState(true);
+  const [announce, setAnnounce] = useState(false);
+  const [title, setTitle] = useState((r.messages[0]?.body || '').replace(/\s+/g, ' ').slice(0, 80));
+  const [body, setBody] = useState('');
+  const [push, setPush] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const done = to === 'DONE';
+
+  async function save() {
+    if (done && note.trim().length < 3) return setErr('צריך לכתוב "מה בוצע"');
+    if (announce && !title.trim()) return setErr('צריך כותרת להודעה לכולם');
+    setBusy(true);
+    setErr(null);
+    const res = await setRequestStatus(r.id, to, {
+      note,
+      commit: done ? commit : null,
+      notify,
+      announce: announce ? { title, body: body || note, push } : null,
+    });
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    onDone();
+  }
+
+  return (
+    <div className={`rounded-xl border-2 p-3 space-y-2 text-sm ${done ? 'border-green-300 bg-green-50' : 'border-gray-300 bg-gray-50'}`}>
+      <p className="font-bold">{done ? '✅ סגירה — בוצע' : '⏸ סגירה — לא כרגע'}</p>
+      <label className="block">
+        <span className="text-xs font-semibold text-gray-700">{done ? 'מה בוצע? *' : 'למה לא כרגע? (רשות)'}</span>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 bg-white" placeholder={done ? 'למשל: בטופס המסירה אפשר עכשיו לסמן ביטול השתתפות בלי תאריך סיום' : ''} />
+      </label>
+      {done && (
+        <label className="block">
+          <span className="text-xs font-semibold text-gray-700">קומיט (רשות)</span>
+          <input value={commit} onChange={(e) => setCommit(e.target.value)} dir="ltr" className="mt-1 w-full h-9 px-3 rounded-lg border border-gray-300 bg-white" placeholder="abc1234" />
+        </label>
+      )}
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="w-4 h-4" />
+        לעדכן את מי שפתח ({r.by || '—'})
+      </label>
+      {done && (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={announce} onChange={(e) => setAnnounce(e.target.checked)} className="w-4 h-4" />
+          שינוי שמשפיע על כולם — להציג ב-🆕 מה חדש
+        </label>
+      )}
+      {done && announce && (
+        <div className="rounded-lg border border-emerald-300 bg-white p-2 space-y-1.5">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full h-9 px-3 rounded-lg border border-gray-300" placeholder="כותרת — מה השתנה" />
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg border border-gray-300" placeholder='פירוט (ריק = הטקסט של "מה בוצע")' />
+          <label className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={push} onChange={(e) => setPush(e.target.checked)} className="w-4 h-4" />
+            לשלוח גם התראה לטלפון לכל המשתמשים
+          </label>
+        </div>
+      )}
+      {err && <p className="text-red-600">⚠️ {err}</p>}
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => void save()} className={`h-10 px-5 rounded-xl text-white font-bold disabled:opacity-50 ${done ? 'bg-green-600' : 'bg-gray-700'}`}>
+          {busy ? 'שומר…' : 'סגירת הטיקט'}
+        </button>
+        <button type="button" disabled={busy} onClick={onCancel} className="h-10 px-4 rounded-xl border border-gray-300 bg-white">
+          ביטול
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** One request: chips, the thread, a reply box and — for a CEO — management. */
 export function RequestCard({ r, isCeo, highlight = false, collapsible = false }: { r: AppRequest; isCeo: boolean; highlight?: boolean; collapsible?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(!collapsible || highlight);
   const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState<'DONE' | 'NO' | null>(null);
   const first = r.messages[0];
 
   async function run(fn: () => Promise<{ error?: string }>) {
@@ -132,6 +241,7 @@ export function RequestCard({ r, isCeo, highlight = false, collapsible = false }
 
       {open && (
         <>
+          <Timeline events={r.events} />
           <div className="space-y-2">
             {r.messages.map((m) => (
               <div key={m.id} className={`rounded-xl px-3 py-2 text-sm ${m.from_dev ? 'bg-indigo-50 border border-indigo-100 mr-6' : 'bg-gray-50 border border-gray-100 ml-6'}`}>
@@ -154,11 +264,22 @@ export function RequestCard({ r, isCeo, highlight = false, collapsible = false }
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-semibold text-gray-600 w-12">סטטוס:</span>
                 {(Object.keys(STATUS) as RequestStatus[]).map((s) => (
-                  <button key={s} type="button" disabled={busy || r.status === s} onClick={() => void run(() => setRequestStatus(r.id, s))} className={`h-8 px-2.5 rounded-lg border font-semibold ${r.status === s ? `${STATUS[s][1]} border-transparent` : 'bg-white border-gray-300'} disabled:cursor-default`}>
+                  <button key={s} type="button" disabled={busy || r.status === s} onClick={() => (s === 'DONE' || s === 'NO' ? setClosing(s) : void run(() => setRequestStatus(r.id, s)))} className={`h-8 px-2.5 rounded-lg border font-semibold ${r.status === s ? `${STATUS[s][1]} border-transparent` : 'bg-white border-gray-300'} disabled:cursor-default`}>
                     {STATUS[s][0]}
                   </button>
                 ))}
               </div>
+              {closing && (
+                <ClosePanel
+                  r={r}
+                  to={closing}
+                  onCancel={() => setClosing(null)}
+                  onDone={() => {
+                    setClosing(null);
+                    router.refresh();
+                  }}
+                />
+              )}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-semibold text-gray-600 w-12">עדיפות:</span>
                 {[1, 2, 3].map((p) => (

@@ -9,7 +9,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 // Since 15/10 (Tomer, after Liron's feedback) open to every active user as
 // "💡 הערות לשיפור": staff see only their own notes, a CEO sees all of them.
 // The development side answers from the terminal with dev_reply_request()
-// (see .claude/skills/amit-requests). A new note / message pushes to the
+// (see .claude/skills/app-requests). A new note / message pushes to the
 // developer account only (profiles.office_function 'DEVELOPER') as a DIRECT_NOTE — not to Amit, who
 // asked for fewer pushes; he sees the staff notes on the page.
 
@@ -41,7 +41,10 @@ export type RequestStatus = 'NEW' | 'IN_PROGRESS' | 'DONE' | 'NO';
 // /bugs and /features (CEO). null = not tagged yet (requests from before).
 export type RequestKind = 'BUG' | 'FEATURE';
 export type AppRequestMessage = { id: string; body: string; image_url: string | null; author: string; from_dev: boolean; at: string };
-export type AppRequest = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_at: string; updated_at: string; by: string; messages: AppRequestMessage[] };
+// History (15/10): app_request_events, written by a DB trigger on every
+// change of status / priority / kind. by = null → the development team.
+export type AppRequestEvent = { id: string; field: 'CREATED' | 'STATUS' | 'PRIORITY' | 'KIND'; from: string | null; to: string | null; note: string | null; commit: string | null; by: string | null; at: string };
+export type AppRequest = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_at: string; updated_at: string; by: string; by_id: string; messages: AppRequestMessage[]; events: AppRequestEvent[] };
 
 export async function listAppRequests(): Promise<AppRequest[]> {
   const c = await member();
@@ -53,9 +56,15 @@ export async function listAppRequests(): Promise<AppRequest[]> {
   type M = { id: string; request_id: string; body: string; image_path: string | null; author_id: string | null; created_at: string };
   const rs = (reqs ?? []) as R[];
   if (!rs.length) return [];
-  const { data: msgs } = await c.db.from('app_request_messages').select('id, request_id, body, image_path, author_id, created_at').in('request_id', rs.map((r) => r.id)).order('created_at').limit(3000);
+  const ids = rs.map((r) => r.id);
+  const [{ data: msgs }, { data: evs }] = await Promise.all([
+    c.db.from('app_request_messages').select('id, request_id, body, image_path, author_id, created_at').in('request_id', ids).order('created_at').limit(3000),
+    c.db.from('app_request_events').select('id, request_id, field, from_value, to_value, note, commit_ref, by_id, created_at').in('request_id', ids).order('created_at').limit(5000),
+  ]);
   const ms = (msgs ?? []) as M[];
-  const people = Array.from(new Set([...rs.map((r) => r.created_by), ...ms.map((m) => m.author_id)].filter((x): x is string => !!x)));
+  type E = { id: string; request_id: string; field: AppRequestEvent['field']; from_value: string | null; to_value: string | null; note: string | null; commit_ref: string | null; by_id: string | null; created_at: string };
+  const es = (evs ?? []) as E[];
+  const people = Array.from(new Set([...rs.map((r) => r.created_by), ...ms.map((m) => m.author_id), ...es.map((e) => e.by_id)].filter((x): x is string => !!x)));
   const paths = ms.map((m) => m.image_path).filter((x): x is string => !!x);
   const [{ data: names }, signed] = await Promise.all([
     people.length ? c.db.from('profiles').select('id, full_name').in('id', people) : Promise.resolve({ data: [] }),
@@ -71,6 +80,10 @@ export async function listAppRequests(): Promise<AppRequest[]> {
     created_at: r.created_at,
     updated_at: r.updated_at,
     by: nameById.get(r.created_by) ?? '',
+    by_id: r.created_by,
+    events: es
+      .filter((e) => e.request_id === r.id)
+      .map((e) => ({ id: e.id, field: e.field, from: e.from_value, to: e.to_value, note: e.note, commit: e.commit_ref, by: e.by_id ? nameById.get(e.by_id) ?? '' : null, at: e.created_at })),
     messages: ms
       .filter((m) => m.request_id === r.id)
       .map((m) => ({
@@ -146,22 +159,55 @@ export async function addRequestMessage(fd: FormData): Promise<{ ok?: true; erro
   return { ok: true };
 }
 
-export async function setRequestStatus(id: string, status: RequestStatus): Promise<{ ok?: true; error?: string }> {
+export type CloseOptions = {
+  /** "מה בוצע" — required when closing as DONE. */
+  note?: string | null;
+  commit?: string | null;
+  /** Tell the person who opened it (default yes). */
+  notify?: boolean;
+  /** "שינוי שמשפיע על כולם" → a "🆕 מה חדש" banner (+ optionally a push to everyone). */
+  announce?: { title: string; body?: string | null; push?: boolean } | null;
+};
+
+export async function setRequestStatus(id: string, status: RequestStatus, opts: CloseOptions = {}): Promise<{ ok?: true; error?: string }> {
   const c = await member();
   if (!c?.isCeo) return { error: 'אין הרשאה' };
   if (!['NEW', 'IN_PROGRESS', 'DONE', 'NO'].includes(status)) return { error: 'סטטוס לא תקין' };
-  const { data: req } = await c.db.from('app_requests').select('created_by, status').eq('id', id).maybeSingle();
-  const r = req as { created_by: string; status: RequestStatus } | null;
+  const note = (opts.note ?? '').trim().slice(0, 3000);
+  const commit = (opts.commit ?? '').trim().slice(0, 200);
+  if (status === 'DONE' && note.length < 3) return { error: 'בסגירה צריך לכתוב "מה בוצע"' };
+  const { data: req } = await c.db.from('app_requests').select('created_by, status, body').eq('id', id).maybeSingle();
+  const r = req as { created_by: string; status: RequestStatus; body: string } | null;
   if (!r) return { error: 'הבקשה לא נמצאה' };
-  const { error } = await c.db.from('app_requests').update({ status, updated_at: new Date().toISOString() } as never).eq('id', id);
+  // The trigger writes the history event (actor = updated_by, note / commit = pending_*).
+  const { error } = await c.db
+    .from('app_requests')
+    .update({ status, updated_at: new Date().toISOString(), updated_by: c.user.id, pending_note: note || null, pending_commit: commit || null } as never)
+    .eq('id', id);
   if (error) return { error: error.message };
-  if (r.created_by !== c.user.id && r.status !== status && status !== 'NEW') {
-    const title = status === 'DONE' ? '✅ הבקשה שלך בוצעה' : status === 'IN_PROGRESS' ? '🔧 התחלנו לעבוד על הבקשה שלך' : '⏸ הבקשה שלך נדחתה לבינתיים';
-    await notifyOwner(c, r.created_by, id, title, 'פרטים בדף ההערות לשיפור');
+  // The note also goes into the thread, so the requester sees what was done.
+  if (note && (status === 'DONE' || status === 'NO')) {
+    await c.db.from('app_request_messages').insert({ request_id: id, body: `${status === 'DONE' ? '✅ בוצע' : '⏸ לא כרגע'}: ${note}`, author_id: c.user.id } as never);
   }
+  if ((opts.notify ?? true) && r.created_by !== c.user.id && r.status !== status && status !== 'NEW') {
+    const title = status === 'DONE' ? '✅ הבקשה שלך בוצעה' : status === 'IN_PROGRESS' ? '🔧 התחלנו לעבוד על הבקשה שלך' : '⏸ הבקשה שלך נדחתה לבינתיים';
+    await notifyOwner(c, r.created_by, id, title, note || 'פרטים בדף ההערות לשיפור');
+  }
+  if (opts.announce?.title?.trim()) {
+    const title = opts.announce.title.trim().slice(0, 120);
+    const body = (opts.announce.body ?? '').trim().slice(0, 1000) || null;
+    await c.db.from('app_announcements').insert({ title, body, request_id: id, created_by: c.user.id } as never);
+    if (opts.announce.push) {
+      const { data: everyone } = await c.db.from('profiles').select('id').eq('is_active', true).neq('id', c.user.id);
+      const rows = ((everyone ?? []) as { id: string }[]).map((p) => ({
+        user_id: p.id, type: 'DIRECT_NOTE', triggered_by: c.user.id, title: `🆕 מה חדש: ${title}`, body: (body ?? '').slice(0, 300) || null, action_url: '/',
+      }));
+      if (rows.length) await c.db.from('notifications').insert(rows as never);
+    }
+  }
+  revalidatePath('/requests');
   revalidatePath('/bugs');
   revalidatePath('/features');
-  revalidatePath('/requests');
   return { ok: true };
 }
 
@@ -177,7 +223,7 @@ export async function setRequestKind(id: string, kind: RequestKind): Promise<{ o
   const c = await member();
   if (!c?.isCeo) return { error: 'אין הרשאה' };
   if (kind !== 'BUG' && kind !== 'FEATURE') return { error: 'סוג לא תקין' };
-  const { error } = await c.db.from('app_requests').update({ kind } as never).eq('id', id);
+  const { error } = await c.db.from('app_requests').update({ kind, updated_by: c.user.id } as never).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/bugs');
   revalidatePath('/features');
@@ -190,7 +236,7 @@ export async function setRequestPriority(id: string, priority: number | null): P
   const c = await member();
   if (!c?.isCeo) return { error: 'אין הרשאה' };
   if (priority !== null && ![1, 2, 3].includes(priority)) return { error: 'עדיפות לא תקינה' };
-  const { error } = await c.db.from('app_requests').update({ priority } as never).eq('id', id);
+  const { error } = await c.db.from('app_requests').update({ priority, updated_by: c.user.id } as never).eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/bugs');
   revalidatePath('/features');
