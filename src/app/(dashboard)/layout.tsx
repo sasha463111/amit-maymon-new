@@ -9,6 +9,7 @@ import { CaseSearch } from '@/components/CaseSearch';
 import { AutoRefresh } from '@/components/AutoRefresh';
 import { UserMenu } from '@/components/UserMenu';
 import { UpdateBanner } from '@/components/UpdateBanner';
+import { DictationAssist } from '@/components/DictationAssist';
 import { BottomNav } from '@/components/BottomNav';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
@@ -286,6 +287,8 @@ export default async function DashboardLayout({
       {/* Main content — room at the bottom for the phone's bottom bar. */}
       <main className="flex-1 p-3 pb-24 sm:p-6 sm:pb-24 md:pb-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
       <BottomNav role={role} links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
+      {/* 🎤 dictation in every text box (#15) */}
+      {!isPreview && <DictationAssist />}
     </div>
   );
 }
