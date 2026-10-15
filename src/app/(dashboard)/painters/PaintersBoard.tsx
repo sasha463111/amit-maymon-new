@@ -17,6 +17,8 @@ export interface PainterRow {
   customer_name: string | null;
   painter_status: string | null;
   painter_status_other_text: string | null;
+  /** When painter_status last changed (trigger, 16/10) — "יום N בשלב". */
+  painter_status_at?: string | null;
   appraiser_name: string | null;
   opened_at: string | null;
   license_plate: string | null;
@@ -35,6 +37,29 @@ export interface PainterRow {
 function carLineFor(row: Pick<PainterRow, 'car_vehicle_type' | 'car_make' | 'car_model' | 'car_year'>) {
   const desc = shortVehicle(row.car_vehicle_type, row.car_make, row.car_model);
   return [desc, row.car_year].filter(Boolean).join(' · ');
+}
+
+// Days a car may stay in a stage before it shows orange; double = red (16/10,
+// design round: see at a glance where cars are stuck). No target = no colour.
+const STAGE_TARGET_DAYS: Record<string, number> = {
+  WAITING_TRANSPORT: 2,
+  WAITING_APPRAISER: 3,
+  WAITING_PARTS: 5,
+  PARTS_ARRIVED: 2,
+  IN_WORK: 4,
+  READY_FOR_RELEASE: 1,
+};
+const daysIn = (r: Pick<PainterRow, 'painter_status_at'>) => (r.painter_status_at ? Math.max(0, Math.floor((Date.now() - new Date(r.painter_status_at).getTime()) / 86_400_000)) : null);
+function StageDays({ row }: { row: PainterRow }) {
+  const d = daysIn(row);
+  if (d === null) return null;
+  const t = STAGE_TARGET_DAYS[row.painter_status ?? ''];
+  const tone = !t ? 'bg-gray-100 text-gray-700' : d >= t * 2 ? 'bg-red-700 text-white' : d >= t ? 'bg-amber-100 text-amber-900' : 'bg-gray-100 text-gray-700';
+  return (
+    <span className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-full tabular-nums ${tone}`} title={t ? `יעד לשלב: עד ${t} ימים` : undefined}>
+      {d === 0 ? 'היום' : `יום ${d}`}
+    </span>
+  );
 }
 
 const PAINTER_STATUS_ICON: Record<string, string> = {
@@ -174,7 +199,8 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
     (groups[key] ?? groups['']).push(row);
   }
   for (const k of Object.keys(groups)) {
-    groups[k].sort((a, b) => (b.opened_at ?? '').localeCompare(a.opened_at ?? '')); // newest first
+    // Longest in the stage first — the stuck cars on top (16/10); then newest.
+    groups[k].sort((a, b) => (daysIn(b) ?? -1) - (daysIn(a) ?? -1) || (b.opened_at ?? '').localeCompare(a.opened_at ?? ''));
   }
 
   // The four core statuses always show; the others only when a car is in them
@@ -260,6 +286,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
                       {[carLine, branch === 'all' ? row.branch_name : null, row.opened_at ? formatDate(row.opened_at) : null].filter(Boolean).join(' · ')}
                     </span>
                   </span>
+                  <StageDays row={row} />
                 </button>
               );
             })}

@@ -1,6 +1,8 @@
 import { Suspense } from 'react';
 import { listPartReturns } from '@/app/actions/partReturns';
 import { CasePartReturns } from './CasePartReturns';
+import { CaseTrackButton } from './CaseTrackButton';
+import { TRACK_LINK_ROLES } from '@/lib/caseTrack';
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import type { PartsStatus, GeneralStatus } from '@/types/database';
@@ -334,6 +336,8 @@ async function CaseDetailData({
   return (
     <>
     <CasePartReturns rows={partReturns} />
+    {/* "מעקב רכב" link for the customer (16/10; pilot: CEO) — open cases only. */}
+    {TRACK_LINK_ROLES.includes(profile?.role ?? '') && !caseRow.closed_at && <CaseTrackButton caseId={id} />}
     <CaseDetailClientV2
       caseId={id}
       caseKey={caseRow.case_key}
