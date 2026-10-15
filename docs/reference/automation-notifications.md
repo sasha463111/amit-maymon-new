@@ -46,7 +46,7 @@
 - **מייל לכל התראה (2026-10-06):** אותו route שולח גם מייל דרך Resend (`src/lib/notificationEmail.ts`), **רק** למי שמסומן `profiles.email_notifications = true` (כרגע עמית בלבד — לא להפעיל לחשבונות בדיקה). מכסה: **50 ביום לפי שעון ישראל**, נאכפת ב-`claim_notification_email()` עם נעילה; המייל ה-50 כולל הודעה שהמכסה נוצלה. שליחה שנכשלה מחזירה את המקום (`release_notification_email`). `notifications.emailed_at` = סימון וספירה. המייל עם `<meta charset="utf-8">` מפורש — בלעדיו תוכנות דואר הציגו עברית משובשת
 
 ### תזכורות מתוזמנות — `/api/cron/enter-work-reminders` (038, 043)
-Route יחיד עם שישה סבבים. **מופעל כל 30 דקות ע"י `pg_cron` ב-Supabase** (job `tehila-reminders`, מיגרציה `20261011220000`, עם הסוד `push_dispatch_secret` מה-Vault בכותרת `x-dispatch-secret`). עד 2026-10-11 הופעל ע"י GitHub Actions — שבפועל רץ רק 3–4 פעמים ביום (ה-workflow ב-origin נשאר כגיבוי, עם `CRON_SECRET`). כל סבב אידמפוטנטי.
+Route יחיד עם שישה סבבים. **מופעל כל 30 דקות ע"י `pg_cron` ב-Supabase** (job `tehila-reminders`, מיגרציה `20261011220000`, עם הסוד `push_dispatch_secret` מה-Vault בכותרת `x-dispatch-secret`). עד 2026-10-11 הופעל ע"י GitHub Actions — שבפועל רץ רק 3–4 פעמים ביום (ה-workflow הישן עם `CRON_SECRET` **הוצא משימוש ב-15/10** מטעמי אבטחה — `CRON_SECRET` היה בריפו הציבורי. ה-route לא מקבל אותו יותר, וה-workflow `enter-work-reminders.yml` כבוי. הקריאה היחידה: pg_cron עם `x-dispatch-secret`). כל סבב אידמפוטנטי.
 
 | # | מה בודק | תנאי | מגבלה |
 |---|---------|------|--------|

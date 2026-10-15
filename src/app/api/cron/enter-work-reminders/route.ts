@@ -891,20 +891,18 @@ export async function GET(req: NextRequest) {
   const supabase = getServiceClient();
   if (!supabase) return NextResponse.json({ error: 'service client unavailable' }, { status: 500 });
 
-  // Two callers: the Supabase pg_cron job (every 30 min — the real
-  // scheduler since 2026-10-11, migration 20261011220000) sends the Vault
-  // secret it already uses for push; the old GitHub Actions workflow (kept as
-  // a fallback — GitHub ran it only 3–4 times a day) sends CRON_SECRET. Every
-  // round is idempotent, so both running is harmless.
-  const cronSecret = process.env.CRON_SECRET;
-  const bearerOk = !!cronSecret && req.headers.get('authorization') === `Bearer ${cronSecret}`;
+  // One caller: the Supabase pg_cron job (every 30 min — the scheduler since
+  // 2026-10-11, migration 20261011220000) sends the Vault secret it already
+  // uses for push. The old GitHub Actions fallback with CRON_SECRET was
+  // retired on 2026-10-15 (security: CRON_SECRET had been in the public repo;
+  // pg_cron ran 144/144 in the 3 days before) — CRON_SECRET is not accepted.
   let vaultOk = false;
   const dispatchSecret = req.headers.get('x-dispatch-secret');
-  if (!bearerOk && dispatchSecret) {
+  if (dispatchSecret) {
     const { data } = await supabase.rpc('check_push_dispatch_secret' as never, { p_secret: dispatchSecret } as never);
     vaultOk = data === true;
   }
-  if (!bearerOk && !vaultOk) {
+  if (!vaultOk) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
