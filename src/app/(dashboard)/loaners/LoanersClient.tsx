@@ -46,6 +46,31 @@ function F({ label, children, tone }: { label: string; children: React.ReactNode
   );
 }
 
+/** "📷 צילום הרכב" (Amit 15/10): photo after photo from the camera; saved with the
+ *  hand-over's documents, named so the card shows them as car photos. */
+function CarPhotos({ stage, photos, setPhotos }: { stage: 'OUT' | 'IN'; photos: File[]; setPhotos: (f: File[]) => void }) {
+  return (
+    <label className="flex items-center gap-3 rounded-xl border-2 border-dashed border-indigo-300 bg-indigo-50 p-3 cursor-pointer">
+      <span className="text-2xl">📷</span>
+      <span className="flex-1 text-sm">
+        <span className="font-bold text-indigo-900 block">{stage === 'OUT' ? 'צילום הרכב לפני המסירה' : 'צילום הרכב בהחזרה'}</span>
+        <span className="text-gray-600">{photos.length ? `✓ ${photos.length} תמונות — לחיצה לתמונה נוספת` : 'מכל הצדדים, כולל שריטות קיימות'}</span>
+      </span>
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const add = Array.from(e.target.files ?? []).map((f, i) => new File([f], `צילום רכב ${photos.length + i + 1}.jpg`, { type: f.type }));
+          setPhotos([...photos, ...add]);
+          e.target.value = '';
+        }}
+      />
+    </label>
+  );
+}
+
 async function uploadDocsOneByOne(handoverId: string, stage: 'OUT' | 'IN', files: File[]): Promise<number> {
   let failed = 0;
   for (const f of files) {
@@ -246,8 +271,8 @@ function HandoverCard({ h, onDone, onShare }: { h: Handover; onDone: (m: string)
                 📎 מסמך {i + 1}{d.stage === 'IN' ? ' (החזרה)' : ''}
               </a>
             ) : (
-              <button key={d.id} type="button" onClick={() => setView(d.url)} className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs">
-                📎 מסמך {i + 1}{d.stage === 'IN' ? ' (החזרה)' : ''}
+              <button key={d.id} type="button" onClick={() => setView(d.url)} className={`px-2.5 py-1 rounded-lg border text-xs ${d.file_name?.startsWith('צילום רכב') ? 'border-indigo-200 bg-indigo-50 text-indigo-800' : 'border-gray-200'}`}>
+                {d.file_name?.startsWith('צילום רכב') ? `📷 ${d.file_name.replace(/\.jpg$/, '')}` : `📎 מסמך ${i + 1}`}{d.stage === 'IN' ? ' (החזרה)' : ''}
               </button>
             )
           ) : null,
@@ -399,6 +424,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
   const [signature, setSignature] = useState<string | null>(null);
   const [formPhoto, setFormPhoto] = useState<File | null>(null);
   const [docs, setDocs] = useState<File[]>([]);
+  const [carPhotos, setCarPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // Driver's declaration (Amit, 14/10)
@@ -498,7 +524,8 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
       setBusy(false);
       return setErr(r.error ?? 'שגיאה');
     }
-    const failed = docs.length ? await uploadDocsOneByOne(r.id, 'OUT', docs) : 0;
+    const all = [...carPhotos, ...docs];
+    const failed = all.length ? await uploadDocsOneByOne(r.id, 'OUT', all) : 0;
     setBusy(false);
     router.refresh();
     onSaved(failed ? `הרכב נמסר ✓ — אבל ${failed} מסמכים לא נשמרו (אפשר לסרוק שוב מהכרטיס)` : `הרכב ${loanerPlate} נמסר ל${name} ✓`, r.share);
@@ -639,8 +666,9 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
           <span className={lab}>הערות (שריטות קיימות, ציוד ברכב וכו׳)</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} className={input} />
         </label>
+        <CarPhotos stage="OUT" photos={carPhotos} setPhotos={setCarPhotos} />
         <label className="block">
-          <span className={lab}>סריקת מסמכים (רישיון נהיגה של הלקוח, צילומי הרכב וכו׳) — אפשר כמה</span>
+          <span className={lab}>סריקת מסמכים (רישיון נהיגה של הלקוח וכו׳) — אפשר כמה</span>
           <input type="file" accept="image/*,application/pdf" multiple onChange={(e) => setDocs(Array.from(e.target.files ?? []))} className="text-sm" />
           {docs.length > 0 && <span className="text-xs text-green-700"> {docs.length} מסמכים נבחרו</span>}
         </label>
@@ -758,6 +786,7 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
   const [fuel, setFuel] = useState('');
   const [notes, setNotes] = useState('');
   const [docs, setDocs] = useState<File[]>([]);
+  const [carPhotos, setCarPhotos] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -777,7 +806,8 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
       setBusy(false);
       return setErr(r.error);
     }
-    const failed = docs.length ? await uploadDocsOneByOne(h.id, 'IN', docs) : 0;
+    const all = [...carPhotos, ...docs];
+    const failed = all.length ? await uploadDocsOneByOne(h.id, 'IN', all) : 0;
     setBusy(false);
     router.refresh();
     onSaved(failed ? `הרכב הוחזר ✓ — ${failed} מסמכים לא נשמרו` : `הרכב ${h.loaner_plate} הוחזר ✓`, 'share' in r ? r.share : undefined);
@@ -814,8 +844,9 @@ function ReturnDialog({ h, onClose, onSaved }: { h: Handover; onClose: () => voi
         <span className={lab}>הערות (נזק, חוסר דלק, דו״ח וכו׳)</span>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} className={input} />
       </label>
+      <CarPhotos stage="IN" photos={carPhotos} setPhotos={setCarPhotos} />
       <label className="block">
-        <span className={lab}>סריקת מסמכים / צילומי הרכב בהחזרה (רשות)</span>
+        <span className={lab}>סריקת מסמכים (רשות)</span>
         <input type="file" accept="image/*,application/pdf" multiple onChange={(e) => setDocs(Array.from(e.target.files ?? []))} className="text-sm" />
       </label>
       <div className="space-y-1">
