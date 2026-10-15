@@ -764,7 +764,7 @@ function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: s
     <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 space-y-3">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-gray-500">עדכון מצב תביעה בלחיצה:</p>
+          <p className="text-xs text-gray-500">עדכון מצב תביעה — בוחרים ולוחצים &quot;עדכון&quot;:</p>
           {!editing ? (
             <button type="button" onClick={() => { setMine(shortcuts); setEditing(true); }} className="text-xs font-semibold text-indigo-700">✏️ עריכת הקיצורים שלי</button>
           ) : (
@@ -781,8 +781,8 @@ function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: s
                 key={st}
                 type="button"
                 disabled={!!busy}
-                onClick={() => void (st !== c.claim_stage && setStage(st, undefined))}
-                className={`${chip} ${c.claim_stage === st ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'} disabled:opacity-60`}
+                onClick={() => st !== c.claim_stage && pick(st)}
+                className={`${chip} ${c.claim_stage === st ? 'bg-indigo-600 text-white border-indigo-600' : sel === st ? 'bg-amber-100 border-amber-500 text-amber-900' : 'bg-white border-gray-300 text-gray-700'} disabled:opacity-60`}
               >
                 {busy === st ? '…' : st}
               </button>
