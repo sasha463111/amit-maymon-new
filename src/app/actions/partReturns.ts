@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, canUsePartReturns } from '@/lib/partReturns';
-import { readSticker, type StickerFields } from '@/lib/stickerReader';
+import { readStickerDetailed, type StickerFields } from '@/lib/stickerReader';
 
 // Parts returns & credits (Amit's spec, 2026-10-12) — replaces, in parallel
 // at first, his Google Forms/Sheets. Table public.part_returns (migration
@@ -430,7 +430,7 @@ export async function attachInvoicePhoto(formData: FormData) {
 /** Read the sticker photo with Claude and return the fields it found
  *  (Amit, 2026-10-14). null fields = not found; { unavailable } = no API key
  *  or API error — the form just stays manual. */
-export async function readPartSticker(formData: FormData): Promise<{ fields?: StickerFields; unavailable?: true; error?: string }> {
+export async function readPartSticker(formData: FormData): Promise<{ fields?: StickerFields; unavailable?: true; reason?: string; error?: string }> {
   const ctx = await me();
   if (!ctx) return { error: 'לא מחובר' };
   if (!MARK_ROLES.has(ctx.profile.role) || !canUsePartReturns(ctx.profile.role)) return { error: 'אין הרשאה' };
@@ -440,10 +440,10 @@ export async function readPartSticker(formData: FormData): Promise<{ fields?: St
   const base64 = Buffer.from(await photo.arrayBuffer()).toString('base64');
   const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) ? photo.type : 'image/jpeg';
   try {
-    const fields = await readSticker({ base64, mediaType });
-    return fields ? { fields } : { unavailable: true };
+    const r = await readStickerDetailed({ base64, mediaType });
+    return r.fields ? { fields: r.fields } : { unavailable: true, reason: r.failure ?? 'no_result' };
   } catch (e) {
     console.error('[readPartSticker]', e);
-    return { unavailable: true };
+    return { unavailable: true, reason: 'api' };
   }
 }

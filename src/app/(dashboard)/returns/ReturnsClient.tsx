@@ -654,7 +654,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [doc, setDoc] = useState('');
   const [stickerDate, setStickerDate] = useState('');
   // Sticker reading (Claude): 'reading' while it runs, 'done' after it filled something.
-  const [reading, setReading] = useState<'idle' | 'reading' | 'done'>('idle');
+  const [reading, setReading] = useState<'idle' | 'reading' | 'done' | 'empty' | 'off' | 'failed'>('idle');
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -675,7 +675,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
       fd.append('photo', await shrinkImage(f, { maxSide: 1600 }));
       const res = await readPartSticker(fd);
       const x = res.fields;
-      if (!x) return setReading('idle');
+      if (!x) return setReading(res.reason === 'no_key' ? 'off' : res.reason === 'no_result' ? 'empty' : 'failed');
       // Functional updates: the reading takes a few seconds, and anything the
       // user typed meanwhile must win over the sticker.
       let filled = false;
@@ -695,9 +695,9 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         filled = true;
         setQuantity((q) => (q === 1 ? x.quantity! : q));
       }
-      setReading(filled ? 'done' : 'idle');
+      setReading(filled ? 'done' : 'empty');
     } catch {
-      setReading('idle');
+      setReading('failed');
     }
   }
 
@@ -752,6 +752,17 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         </label>
         {reading === 'reading' && <p className="text-sm text-blue-700 font-semibold">🔍 קורא את המדבקה…</p>}
         {reading === 'done' && <p className="text-sm text-green-700 font-semibold">✨ מולא אוטומטית מהמדבקה — בדקו והשלימו מה שחסר</p>}
+        {reading === 'empty' && <p className="text-sm text-amber-700 font-semibold">📷 לא הצלחנו לקרוא את המדבקה — נסו לצלם שוב מקרוב ובאור טוב, או מלאו ידנית</p>}
+        {reading === 'off' && <p className="text-sm text-gray-600">הקריאה האוטומטית של מדבקות עוד לא מחוברת — ממלאים ידנית</p>}
+        {reading === 'failed' && (
+          <p className="text-sm text-amber-700 font-semibold">
+            ⚠️ הקריאה מהמדבקה לא הצליחה הפעם.{' '}
+            {photo && (
+              <button type="button" onClick={() => void readFromSticker(photo)} className="underline">לנסות שוב</button>
+            )}{' '}
+            או למלא ידנית.
+          </p>
+        )}
 
         <div>
           <p className="text-sm font-semibold mb-2">מספר רכב</p>

@@ -62,10 +62,22 @@ const TOOL = {
   },
 } as const;
 
-/** null = reading unavailable (no key / API error) — the caller keeps the form manual. */
-export async function readSticker(image: { base64: string; mediaType: string }): Promise<StickerFields | null> {
+export type StickerFailure = 'no_key' | 'api' | 'no_result';
+
+/** Read a sticker; on failure say why (no key / API error / nothing read) — the caller keeps the form manual. */
+export async function readStickerDetailed(image: { base64: string; mediaType: string }): Promise<{ fields: StickerFields | null; failure?: StickerFailure }> {
   const key = await apiKey();
-  if (!key) return null;
+  if (!key) return { fields: null, failure: 'no_key' };
+  const fields = await readStickerWithKey(key, image);
+  return typeof fields === 'string' ? { fields: null, failure: fields } : { fields };
+}
+
+/** null = reading unavailable (no key / API error / nothing read). */
+export async function readSticker(image: { base64: string; mediaType: string }): Promise<StickerFields | null> {
+  return (await readStickerDetailed(image)).fields;
+}
+
+async function readStickerWithKey(key: string, image: { base64: string; mediaType: string }): Promise<StickerFields | StickerFailure> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
@@ -92,11 +104,11 @@ export async function readSticker(image: { base64: string; mediaType: string }):
   });
   if (!res.ok) {
     console.error('[readSticker] API error', res.status, (await res.text().catch(() => '')).slice(0, 200));
-    return null;
+    return 'api';
   }
   const json = (await res.json()) as { content?: { type: string; input?: Record<string, unknown> }[] };
   const out = json.content?.find((c) => c.type === 'tool_use')?.input;
-  if (!out) return null;
+  if (!out) return 'no_result';
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
   const supplier = str(out.supplier);
   const date = str(out.sticker_date);

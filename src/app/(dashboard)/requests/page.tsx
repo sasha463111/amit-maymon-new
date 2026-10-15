@@ -5,6 +5,9 @@ import { RequestsClient } from './RequestsClient';
 import { getAdvisor } from '@/app/actions/advisor';
 
 export const dynamic = 'force-dynamic';
+// Claude calls run inside this page's server actions (photo reading / the
+// advisor) and can take more than the default ~10 s — give them a minute.
+export const maxDuration = 60;
 
 // "💡 הצעות ייעול" — Amit's improvement requests and the answers (15/10). CEO only.
 export default async function RequestsPage() {

@@ -99,6 +99,14 @@
   - **המספרים:** טבלה `staff_phones`, server-only, ולא עמודה ב-`profiles`, כי את `profiles` כל משתמש מחובר יכול לקרוא. ב"משתמשים" עמית מוסיף ועורך (`setStaffPhone`, CEO בלבד, פורמט `05X-XXXXXXX`), עם קישורי חיוג ווואטסאפ. ב-`PasswordReveal` הוואטסאפ עם הסיסמה החדשה נשלח ישר למספר.
   - **פוש מהמערכת כבר קיים:** "הודעות" ← "+ הודעה חדשה" (`sendGeneralMessage`, DIRECT_NOTE ← פוש).
   - **מה נוסף שם:** "בחירת כולם" / "ניקוי", ו-🔔/🔕 ליד כל נמען: האם יש לו מכשיר רשום לפוש (`push_subscriptions`). מי שמסומן 🔕 רואה את ההודעה רק בתוך המערכת.
+- **📷 קריאת מדבקות לא מילאה כלום (15/10, תומר וניסים: "לא קופץ תיאור פריט, לא פעם ראשונה"):**
+  - **סיבה 1:** server action ב-Vercel נקטע אחרי כ-10 שניות כברירת מחדל. קריאת תמונה ב-Claude, יחד עם העלאת התמונה, יכולה לעבור את הזמן הזה, ואז הקריאה נקטעת.
+  - **סיבה 2:** המסך בלע כל כשל בשקט.
+  - **התיקון:**
+    - `export const maxDuration = 60` ב-`returns/page.tsx` וב-`requests/page.tsx`, כי גם היועץ קורא ל-Claude.
+    - `readStickerDetailed` מחזיר סיבת כשל: `no_key` / `api` / `no_result`, ו-`readPartSticker` מעביר אותה הלאה (`reason`).
+    - הטופס מציג הודעה לכל מקרה: לא מחובר / לא זוהה, לצלם שוב / נכשל, עם "לנסות שוב".
+  - **כלל:** כל קריאה ל-Claude מתוך server action צריכה `maxDuration` מתאים בעמוד שמפעיל אותה.
 - **👩‍💼 מנהלת מחלקת תביעות (15/10, עמית Discussion #2; מיגרציה `20261015140000`):**
   - **הדגל:** `profiles.collections_manager`. הוא דולק אצל גלית וענונו, שנשארת COLLECTIONS עם התביעות שלה.
   - **מה הדגל נותן** (ב-`me()` של `actions/collections.ts` ו-`collectionFile.ts`, `supervisor = CEO/ACCOUNTANT || COLLECTIONS+collections_manager`):

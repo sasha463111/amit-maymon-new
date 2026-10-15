@@ -6,6 +6,9 @@ import { canUsePartReturns } from '@/lib/partReturns';
 import { listSupplierDocs } from '@/app/actions/supplierDocs';
 
 export const dynamic = 'force-dynamic';
+// Claude calls run inside this page's server actions (photo reading / the
+// advisor) and can take more than the default ~10 s — give them a minute.
+export const maxDuration = 60;
 
 // Invoices / delivery notes archive tab — everyone in the module except painters.
 // Painters photograph documents too and see only their own (RLS supplier_documents_own_select).
