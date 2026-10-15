@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
-import { updateSystemUser, startViewAsUser, resetUserPassword, resetUserMfa, setMfaRequired, setStaffPhone, type SystemUser } from '@/app/actions/users';
+import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
@@ -20,10 +20,12 @@ export function UsersTab({
   initialUsers,
   branches,
   currentUserId,
+  smsReady = false,
 }: {
   initialUsers: SystemUser[];
   branches: Branch[];
   currentUserId: string;
+  smsReady?: boolean;
 }) {
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
@@ -49,26 +51,39 @@ export function UsersTab({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Two-step login with Duo (Amit, 15/10): per person, or everyone at once.
-  async function toggleMfa(u: SystemUser | 'ALL', required: boolean) {
-    if (u === 'ALL' && !window.confirm('להפעיל אימות Duo לכל העובדים הפעילים? בכניסה הבאה כל אחד יתבקש לחבר את Duo (פעם אחת) ואז להקליד קוד.')) return;
+  // Login code by SMS (15/10): per person, or everyone who has a mobile number.
+  async function toggleSms(u: SystemUser | 'ALL', required: boolean) {
+    if (u === 'ALL' && !window.confirm('להפעיל קוד SMS בכניסה לכל העובדים שיש להם נייד במערכת? בכניסה הבאה כל אחד יקבל SMS עם קוד.')) return;
     setBusyId(u === 'ALL' ? 'ALL' : u.id);
     setError(null);
-    const r = await setMfaRequired(u === 'ALL' ? 'ALL' : u.id, required);
+    const r = await setSmsRequired(u === 'ALL' ? 'ALL' : u.id, required);
     setBusyId(null);
     if (r.error) return setError(r.error);
-    setUsers((list) => list.map((x) => (u === 'ALL' ? (x.is_active ? { ...x, mfa_required: required } : x) : x.id === u.id ? { ...x, mfa_required: required } : x)));
+    setUsers((list) => list.map((x) => (u === 'ALL' ? (x.is_active && x.phone ? { ...x, sms_required: required } : x) : x.id === u.id ? { ...x, sms_required: required } : x)));
+    if (u === 'ALL' && r.withoutPhone?.length) setError(`הופעל ל-${r.count}. בלי נייד (לא הופעל): ${r.withoutPhone.join(', ')}`);
   }
 
-  async function resetMfa(u: SystemUser) {
-    if (!window.confirm(`לנתק את Duo של ${u.full_name}? בכניסה הבאה יתבקש/תתבקש לחבר מחדש (למשל אחרי החלפת טלפון).`)) return;
+  async function forgetDevices(u: SystemUser) {
+    if (!window.confirm(`לשכוח את הטלפונים שזכרנו של ${u.full_name}? בכניסה הבאה יתבקש/תתבקש קוד SMS.`)) return;
     setBusyId(u.id);
-    setError(null);
-    const r = await resetUserMfa(u.id);
+    const r = await forgetTrustedDevices(u.id);
     setBusyId(null);
-    if (r.error) return setError(r.error);
-    setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, mfa_enrolled: false } : x)));
+    if (r.error) setError(r.error);
   }
+
+  const smsLine = (u: SystemUser) => (
+    <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
+      <span className={u.sms_required ? 'text-green-700' : 'text-gray-400'}>🔐 קוד SMS: {u.sms_required ? 'פעיל' : 'לא פעיל'}</span>
+      <button type="button" disabled={busyId === u.id} onClick={() => void toggleSms(u, !u.sms_required)} className="underline text-indigo-700 disabled:opacity-50">
+        {u.sms_required ? 'ביטול' : 'הפעלה'}
+      </button>
+      {u.sms_required && (
+        <button type="button" disabled={busyId === u.id} onClick={() => void forgetDevices(u)} className="underline text-red-700 disabled:opacity-50">
+          שכחת טלפונים
+        </button>
+      )}
+    </span>
+  );
 
   async function savePhone(u: SystemUser) {
     if (!phoneEdit) return;
@@ -111,21 +126,6 @@ export function UsersTab({
       </span>
     );
 
-  const mfaLine = (u: SystemUser) => (
-    <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
-      <span className={u.mfa_enrolled ? 'text-green-700' : u.mfa_required ? 'text-amber-700' : 'text-gray-400'}>
-        🔐 Duo: {u.mfa_enrolled ? 'מחובר ✓' : u.mfa_required ? 'נדרש — עוד לא חובר' : 'לא נדרש'}
-      </span>
-      <button type="button" disabled={busyId === u.id} onClick={() => void toggleMfa(u, !u.mfa_required)} className="underline text-indigo-700 disabled:opacity-50">
-        {u.mfa_required ? 'ביטול דרישה' : 'לדרוש Duo'}
-      </button>
-      {u.mfa_enrolled && (
-        <button type="button" disabled={busyId === u.id} onClick={() => void resetMfa(u)} className="underline text-red-700 disabled:opacity-50">
-          ניתוק Duo
-        </button>
-      )}
-    </span>
-  );
 
   async function handleTestPush() {
     setPushTestBusy(true);
@@ -233,10 +233,14 @@ export function UsersTab({
       </div>
 
       <div className="flex items-center gap-2 flex-wrap rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm">
-        <span>🔐 אימות Duo: {users.filter((x) => x.is_active && x.mfa_enrolled).length} מחוברים · {users.filter((x) => x.is_active && x.mfa_required).length} נדרשים · {users.filter((x) => x.is_active).length} עובדים פעילים</span>
-        <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleMfa('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
-          להפעיל לכולם
-        </button>
+        <span>🔐 קוד SMS בכניסה: {users.filter((x) => x.is_active && x.sms_required).length} פעילים · {users.filter((x) => x.is_active && x.phone).length} עם נייד · {users.filter((x) => x.is_active).length} עובדים</span>
+        {smsReady ? (
+          <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleSms('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
+            להפעיל לכולם (עם נייד)
+          </button>
+        ) : (
+          <span className="text-xs text-amber-800">⏳ ספק ה-SMS עוד לא מחובר — הקוד לא יידרש מאף אחד עד החיבור</span>
+        )}
       </div>
       {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} phone={revealed.phone} onClose={() => setRevealed(null)} />}
       {error && (
@@ -338,7 +342,7 @@ export function UsersTab({
                       <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
                       <UserMeta u={u} />
                       {phoneLine(u)}
-                      {mfaLine(u)}
+                      {smsLine(u)}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {jobLabel(u.role, u.office_function)}
                         {u.branch_names.length > 0 && ` · ${u.branch_names.join(', ')}`}
@@ -417,7 +421,7 @@ export function UsersTab({
                         <span className="font-semibold text-gray-800">{u.full_name}</span>
                         <UserMeta u={u} />
                       {phoneLine(u)}
-                      {mfaLine(u)}
+                      {smsLine(u)}
                       </>
                     )}
                   </td>

@@ -17,6 +17,7 @@ import { StopViewAsButton } from './StopViewAsButton';
 import { BRAND_NAME } from '@/lib/demo';
 import { DemoBanner } from '@/components/DemoBanner';
 import { PerfBeacon } from '@/components/PerfBeacon';
+import { needsSmsCode } from '@/lib/loginVerify.server';
 
 const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
   SERVICE_MANAGER: [
@@ -125,11 +126,11 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_ids, is_active, office_function, mfa_required')
+    .select('full_name, role, branch_ids, is_active, office_function, mfa_required, sms_required')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null; mfa_required?: boolean } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null; mfa_required?: boolean; sms_required?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
   // Mid-session deactivation: if a CEO disabled this account, kick them out
@@ -145,6 +146,9 @@ export default async function DashboardLayout({
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel !== 'aal2') redirect('/mfa');
   }
+  // Login code by SMS (15/10): required + provider configured + this sign-in
+  // not verified (and the phone not remembered) → /verify.
+  if (!isPreview && (await needsSmsCode(supabase, user.id, !!profile?.sms_required))) redirect('/verify');
 
   const actualRole = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';
 

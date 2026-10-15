@@ -85,6 +85,16 @@
     - בשרת: אי אפשר לפתוח תיק פתוח שני לאותו רכב עם אותו `event_date`.
   - **בתוך התיק:** `StagePicker` לעדכון מצב תביעה (כל שינוי נרשם בטיפול השוטף), ו-`reassignCase` (העברה למסלקת אחרת, למנכ״ל ולחני).
   - **פידבק בטא:** טבלת `beta_feedback`, רכיב `collections/Feedback.tsx`. הכפתור "💡 פידבק / חלום" מופיע ברשימה ובתיק, ונשלח לעמית כ-`DIRECT_NOTE` (פוש + "הודעות"). בלשונית "💡 פידבק" עמית וחני משיבים ומסמנים: בתכנון / בוצע / לא כרגע.
+- **📲 קוד כניסה ב-SMS (15/10; במקום Duo, כי העובדים עובדים מהנייד; מיגרציה `20261015120000`):**
+  - **הזרימה:** אחרי הסיסמה, `(dashboard)/layout.tsx` שולח ל-`/verify` אם `needsSmsCode` (`src/lib/loginVerify.server.ts`).
+  - **מתי הקוד נדרש:** כשמתקיימים שלושה תנאים יחד: `profiles.sms_required`, **ספק ה-SMS מוגדר** (`isSmsConfigured`), ו-session זה עוד לא אומת. מכשיר עם cookie תקף של "זכור מכשיר" (`tehila_td`, 30 יום, ב-`trusted_devices` נשמר רק ה-hash) לא מתבקש קוד.
+  - **המסך `/verify`** (`VerifyClient`): שולח קוד מיד כשהוא נפתח (`requestLoginCode`) ואחר כך בודק אותו (`verifyLoginCode`).
+    - הקוד בן 6 ספרות, נשמר ב-`login_codes` כ-hash בלבד, תקף 5 דקות, עד 5 ניסיונות.
+    - אפשר לשלוח SMS אחד בדקה ועד 5 בשעה.
+    - ה-SMS מסתיים בשורה `@host #code`, כדי שאנדרואיד יציע מילוי אוטומטי. באייפון הקוד מוצע מעל המקלדת.
+  - **הספק** (`src/lib/sms.server.ts`): InforU v2 (`capi.inforu.co.il/api/v2/SMS/SendSms`, Basic auth עם user:token). הגדרות דרך env בלבד: `SMS_PROVIDER=inforu`, `INFORU_USER`, `INFORU_TOKEN`, `SMS_SENDER` (ברירת מחדל "Tehila"), ורשות `LOGIN_CODE_SECRET`. כל עוד המשתנים לא מוגדרים, הקוד לא נדרש מאף אחד, כך שאף עובד לא יינעל מחוץ למערכת.
+  - **ההגדרות של עמית:** "🔐 קוד SMS" לכל עובד (`setSmsRequired`, אפשר רק אם יש לו נייד; `'ALL'` מפעיל לכל מי שיש לו נייד ומחזיר את רשימת מי שאין לו), ו"שכחת טלפונים" (`forgetTrustedDevices`).
+  - **Duo** (`/mfa`, `mfa_required`) נשאר בקוד אבל כבוי, ושורת ה-Duo הוסרה מההגדרות.
 - **📱 נייד לכל עובד + שליחת פוש (15/10, עמית; מיגרציה `20261015110000`):**
   - **המספרים:** טבלה `staff_phones`, server-only, ולא עמודה ב-`profiles`, כי את `profiles` כל משתמש מחובר יכול לקרוא. ב"משתמשים" עמית מוסיף ועורך (`setStaffPhone`, CEO בלבד, פורמט `05X-XXXXXXX`), עם קישורי חיוג ווואטסאפ. ב-`PasswordReveal` הוואטסאפ עם הסיסמה החדשה נשלח ישר למספר.
   - **פוש מהמערכת כבר קיים:** "הודעות" ← "+ הודעה חדשה" (`sendGeneralMessage`, DIRECT_NOTE ← פוש).

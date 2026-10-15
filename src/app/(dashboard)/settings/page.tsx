@@ -7,6 +7,7 @@ import { PermissionsTab } from './PermissionsTab';
 import { ChecklistTab } from './ChecklistTab';
 import { BodyworkAdvisorsTab } from './BodyworkAdvisorsTab';
 import { UsersTab } from './UsersTab';
+import { isSmsConfigured } from '@/lib/sms.server';
 import { AuditTab } from './AuditTab';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 
@@ -130,7 +131,7 @@ export default async function SettingsPage({
         ) : activeTab === 'advisors' ? (
           <BodyworkAdvisorsTab initialAdvisors={advisors} />
         ) : activeTab === 'users' ? (
-          <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} />
+          <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} smsReady={isSmsConfigured()} />
         ) : (
           <AuditTab />
         )}

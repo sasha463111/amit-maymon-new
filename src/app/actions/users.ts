@@ -58,6 +58,8 @@ export interface SystemUser {
   mfa_enrolled: boolean;
   /** Mobile number (staff_phones, CEO only) — "050-1234567". */
   phone: string | null;
+  /** Login code by SMS required for this person. */
+  sms_required: boolean;
 }
 
 export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: string | null }> {
@@ -66,7 +68,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
   const { data, error: queryError } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor, office_function, mfa_required')
+    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor, office_function, mfa_required, sms_required')
     .order('full_name');
 
   if (queryError) return { data: [], error: queryError.message };
@@ -80,6 +82,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     is_bodywork_advisor: boolean;
     office_function: 'REFERRALS' | 'CLOSURE' | null;
     mfa_required: boolean;
+    sms_required: boolean;
   }>;
 
   // Fetch all branches for display mapping
@@ -116,6 +119,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     mfa_required: !!r.mfa_required,
     mfa_enrolled: (authById.get(r.id)?.factors ?? []).some((f) => f.status === 'verified'),
     phone: phoneById.get(r.id) ?? null,
+    sms_required: !!r.sms_required,
   }));
   // Real staff first, test accounts last.
   users.sort((a, b) => Number(b.is_staff) - Number(a.is_staff));
@@ -309,6 +313,42 @@ export async function setStaffPhone(userId: string, raw: string): Promise<{ ok?:
   if (upErr) return { error: upErr.message };
   revalidatePath('/settings');
   return { ok: true, phone };
+}
+
+/** CEO only: require the SMS login code for one person, or for everyone who has a mobile number ('ALL'). */
+export async function setSmsRequired(userId: string, required: boolean): Promise<{ ok?: true; error?: string; count?: number; withoutPhone?: string[] }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const phones = new Set((((await admin.from('staff_phones').select('user_id')).data ?? []) as { user_id: string }[]).map((p) => p.user_id));
+  if (userId !== 'ALL') {
+    if (required && !phones.has(userId)) return { error: 'קודם מוסיפים מספר נייד לעובד' };
+    const { error: upErr } = await admin.from('profiles').update({ sms_required: required } as never).eq('id', userId);
+    if (upErr) return { error: upErr.message };
+    revalidatePath('/settings');
+    return { ok: true, count: 1 };
+  }
+  const { data: active } = await admin.from('profiles').select('id, full_name').eq('is_active', true);
+  const list = (active ?? []) as { id: string; full_name: string | null }[];
+  const ids = list.filter((p) => phones.has(p.id)).map((p) => p.id);
+  if (ids.length) {
+    const { error: upErr } = await admin.from('profiles').update({ sms_required: required } as never).in('id', ids);
+    if (upErr) return { error: upErr.message };
+  }
+  revalidatePath('/settings');
+  return { ok: true, count: ids.length, withoutPhone: list.filter((p) => !phones.has(p.id)).map((p) => p.full_name ?? '—') };
+}
+
+/** CEO only: forget a person's remembered phones (lost phone) — the next sign-in asks for a code. */
+export async function forgetTrustedDevices(userId: string): Promise<{ ok?: true; error?: string }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { error: delErr } = await admin.from('trusted_devices').delete().eq('user_id', userId);
+  if (delErr) return { error: delErr.message };
+  return { ok: true };
 }
 
 /** CEO only: require Duo for one person, or for everyone (userId = 'ALL'). */
