@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { isSchemaCacheError, isVapidConfigured, sendPushToUser, sleep } from '@/lib/pushSend';
+import { getServiceClient, isSchemaCacheError, isVapidConfigured, sendPushToUser, sleep } from '@/lib/pushSend';
 
 // Only what the browser may call: save / remove MY subscription and a test
 // push to MYSELF. The sending code lives in src/lib/pushSend.ts — never
@@ -17,47 +17,29 @@ export async function savePushSubscription(sub: PushSubscriptionPayload, userAge
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'לא מחובר' };
 
-  // PRIMARY PATH: direct fetch to the Edge Function that bypasses PostgREST
-  // entirely. Using raw fetch instead of supabase.functions.invoke() because
-  // the server-side @supabase/ssr client doesn't always pass the user JWT
-  // through the invoke wrapper correctly.
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (accessToken && supabaseUrl && anonKey) {
-      const res = await fetch(`${supabaseUrl}/functions/v1/save-push-subscription`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': anonKey,
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          endpoint: sub.endpoint,
-          p256dh: sub.keys.p256dh,
-          auth: sub.keys.auth,
-          user_agent: userAgent ?? null,
-        }),
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        if (body?.ok) return { ok: true };
-      }
-      const text = await res.text().catch(() => '');
-      console.warn('[savePushSubscription] edge function path failed', res.status, text.slice(0, 200));
-    } else {
-      console.warn('[savePushSubscription] missing token/url/key for edge function path', {
-        hasToken: !!accessToken, hasUrl: !!supabaseUrl, hasKey: !!anonKey,
-      });
-    }
-  } catch (e) {
-    console.warn('[savePushSubscription] edge function threw, falling back', e);
+  // PRIMARY PATH (15/10, security): write with the service client, with the
+  // user id verified above (getUser). The old path went through the Edge
+  // Function save-push-subscription, which trusted an x-user-id header and an
+  // unverified JWT — anyone could register their own device under another
+  // user's id and receive that user's pushes. The function is now retired.
+  const admin = getServiceClient();
+  if (admin) {
+    const { error } = await admin.from('push_subscriptions').upsert(
+      {
+        user_id: user.id,
+        endpoint: sub.endpoint,
+        p256dh: sub.keys.p256dh,
+        auth: sub.keys.auth,
+        user_agent: userAgent ?? null,
+        last_used_at: new Date().toISOString(),
+      } as never,
+      { onConflict: 'endpoint' },
+    );
+    if (!error) return { ok: true };
+    console.warn('[savePushSubscription] service upsert failed, falling back', error.message);
   }
 
-  // FALLBACK PATHS (only used if Edge Function path failed). Same staircase
+  // FALLBACK PATHS (only if the service key is missing or the upsert failed). Same staircase
   // as before: RPC → direct upsert → raw fetch with Accept-Profile.
   const row = {
     user_id: user.id,
