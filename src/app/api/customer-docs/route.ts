@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { resolveToken, serviceClient, requestMeta } from '@/lib/customerDocLinks.server';
 import { CONSENT_VERSION, MAX_FILES_PER_LINK, MAX_FILE_BYTES, docItemsFor } from '@/lib/customerDocs';
+import { KIT_VERSION, cleanKitValues, kitDoc } from '@/lib/claimKit';
 
 // Public endpoint behind the customer documents link (/d/[token]). Upload-only:
 // nothing here returns documents or referral data beyond what the page shows.
-// Actions: consent → upload (repeatable) → done.
+// Actions: consent → upload (repeatable) / kit-sign (one per kit document) → done.
 
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,43 @@ export async function POST(req: Request) {
     }
     // First file of this link → let the clerk know right away.
     if ((count ?? 0) === 0) await notifyClerk(db, link.created_by, referral, 'הלקוח התחיל להעלות מסמכים');
+    return NextResponse.json({ ok: true });
+  }
+
+  // Claim kit, stage 2 (15/10): one signed document — the values as the
+  // customer completed them + the signature image. Once per document.
+  if (action === 'kit-sign') {
+    const docId = String(form.get('doc') ?? '');
+    const doc = kitDoc(docId);
+    if (!doc || !(link.kit_docs ?? []).includes(docId)) return fail('מסמך לא מוכר');
+    let raw: unknown = null;
+    try {
+      raw = JSON.parse(String(form.get('values') ?? '{}'));
+    } catch {
+      return fail('נתונים לא תקינים');
+    }
+    const values = { ...cleanKitValues(link.kit_values), ...cleanKitValues(raw) };
+    const sig = form.get('signature');
+    if (!(sig instanceof File) || sig.size < 200 || sig.size > 600_000 || sig.type !== 'image/png') return fail('נא לחתום במסגרת');
+    const { data: already } = await db.from('kit_signatures').select('id').eq('link_id', link.id).eq('doc_id', docId).maybeSingle();
+    if (already) return NextResponse.json({ ok: true, already: true });
+    const path = `${referral.id}/kit/${link.id}/${docId}-${randomBytes(6).toString('hex')}.png`;
+    const { error: upErr } = await db.storage.from('referral-documents').upload(path, sig, { upsert: false, contentType: 'image/png' });
+    if (upErr) return fail('שגיאה בשמירת החתימה, נסה/י שוב', 500);
+    const { error: insErr } = await db.from('kit_signatures').insert({
+      link_id: link.id, referral_id: referral.id, doc_id: docId, doc_title: doc.title, kit_version: KIT_VERSION,
+      values, signature_path: path, ip: meta.ip, ua: meta.ua,
+    } as never);
+    if (insErr) {
+      await db.storage.from('referral-documents').remove([path]);
+      return fail('שגיאה בשמירה, נסה/י שוב', 500);
+    }
+    const { count } = await db.from('kit_signatures').select('id', { count: 'exact', head: true }).eq('link_id', link.id);
+    const total = (link.kit_docs ?? []).length;
+    if ((count ?? 0) >= total && !link.kit_signed_at) {
+      await db.from('customer_doc_links').update({ kit_signed_at: new Date().toISOString() } as never).eq('id', link.id).is('kit_signed_at', null);
+      await notifyClerk(db, link.created_by, referral, `הלקוח חתם על כל הטפסים (${total})`);
+    }
     return NextResponse.json({ ok: true });
   }
 

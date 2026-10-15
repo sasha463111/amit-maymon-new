@@ -188,3 +188,25 @@ export function claimKindLabel(claimType: string | null, insurer: string | null)
   if (s.includes('guarantee')) return 'צד ג׳ · מוקד ש.י.ר';
   return claimType ? `צד ג׳ / אחר (${claimType})` : 'לא הוגדר סוג תביעה';
 }
+
+/** Bump when a document's text changes — every signature stores the version it signed. */
+export const KIT_VERSION = '2026-10-15';
+
+export type KitValuesData = Partial<Record<KitFieldKey, string>> & { vat_choice?: string };
+
+/** Only known fields, short strings — values come from the browser (staff or the customer link). */
+export function cleanKitValues(raw: unknown): KitValuesData {
+  const out: KitValuesData = {};
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Record<string, unknown>;
+  for (const k of Object.keys(KIT_FIELDS) as KitFieldKey[]) {
+    const v = r[k];
+    if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, 120);
+  }
+  if (typeof r.vat_choice === 'string' && ['1', '2', '3'].includes(r.vat_choice)) out.vat_choice = r.vat_choice;
+  return out;
+}
+
+export function kitDoc(id: string): KitDoc | null {
+  return KIT_DOCS.find((d) => d.id === id) ?? null;
+}

@@ -30,6 +30,10 @@ export interface ResolvedLink {
     opened_at: string | null;
     consent_at: string | null;
     completed_at: string | null;
+    /** Claim kit to sign (stage 2, 15/10): document ids + our prefilled values. */
+    kit_docs: string[] | null;
+    kit_values: Record<string, string> | null;
+    kit_signed_at: string | null;
   };
   referral: { id: string; customer_name: string | null; plate_number: string | null; claim_type: string | null; branch_id: string };
 }
@@ -43,7 +47,7 @@ export async function resolveToken(token: string | null | undefined): Promise<Li
   if (!db) return { ok: false, reason: 'unavailable' };
   const { data } = await db
     .from('customer_doc_links')
-    .select('id, referral_id, created_by, expires_at, revoked_at, opened_at, consent_at, completed_at, referrals(id, customer_name, plate_number, claim_type, branch_id)')
+    .select('id, referral_id, created_by, expires_at, revoked_at, opened_at, consent_at, completed_at, kit_docs, kit_values, kit_signed_at, referrals(id, customer_name, plate_number, claim_type, branch_id)')
     .eq('token_hash', hashToken(token))
     .maybeSingle();
   if (!data) return { ok: false, reason: 'invalid' };

@@ -1,45 +1,58 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment } from 'react';
 import { KIT_DOCS, KIT_FIELDS, VAT_OPTIONS, type KitBlock, type KitDoc, type KitFieldKey } from '@/lib/claimKit';
 
-// The claim document kit as A4 pages (Amit, 15/10): a details page first, then
-// each document typed cleanly with inline fields. A value typed once fills
-// every document. Prints / saves as PDF (one document per page).
+// The claim document kit (Amit, 15/10). One document renderer, three uses:
+//  • staff — A4 pages with inline fields (KitPages), print / PDF;
+//  • customer — the same text on the phone, fields to complete, signature;
+//  • signed — read-only, with the customer's signature and when it was signed.
+// A value typed once fills every document.
 
 export type KitValues = Partial<Record<KitFieldKey, string>> & { vat_choice?: string };
+export type KitMode = 'staff' | 'customer' | 'signed';
 
-function Field({ k, values, set }: { k: KitFieldKey; values: KitValues; set: (k: KitFieldKey, v: string) => void }) {
+type Ctx = { values: KitValues; set?: (k: KitFieldKey, v: string) => void; setVat?: (v: string) => void; mode: KitMode; signature?: string | null; signedLine?: string };
+
+function Field({ k, ctx }: { k: KitFieldKey; ctx: Ctx }) {
   const f = KIT_FIELDS[k];
-  const v = values[k] ?? '';
+  const v = ctx.values[k] ?? '';
+  if (ctx.mode === 'signed' || !ctx.set) {
+    return (
+      <span dir={f.ltr ? 'ltr' : 'rtl'} className="mx-1 inline-block min-w-[5ch] border-b border-dotted border-gray-500 px-1 text-center font-semibold text-gray-900">
+        {v || ' '}
+      </span>
+    );
+  }
   return (
     <input
       value={v}
-      onChange={(e) => set(k, e.target.value)}
+      onChange={(e) => ctx.set!(k, e.target.value)}
       dir={f.ltr ? 'ltr' : 'rtl'}
       aria-label={f.label}
       placeholder={f.label}
-      style={{ width: `${Math.max(f.width ?? 10, v.length + 2)}ch` }}
+      inputMode={f.ltr ? 'numeric' : undefined}
+      style={{ width: `${Math.max(f.width ?? 10, v.length + 2)}ch`, maxWidth: '100%' }}
       className="kit-field mx-1 border-0 border-b border-dotted border-gray-500 bg-sky-50/60 print:bg-transparent px-1 py-0 text-center font-semibold text-gray-900 outline-none focus:bg-sky-100 placeholder:text-gray-300 placeholder:font-normal print:placeholder:text-transparent"
     />
   );
 }
 
-function Text({ text, values, set }: { text: string; values: KitValues; set: (k: KitFieldKey, v: string) => void }) {
+function Text({ text, ctx }: { text: string; ctx: Ctx }) {
   const parts = text.split(/\{\{(\w+)\}\}/);
   return (
     <>
-      {parts.map((p, i) => (i % 2 === 1 && p in KIT_FIELDS ? <Field key={i} k={p as KitFieldKey} values={values} set={set} /> : <Fragment key={i}>{p}</Fragment>))}
+      {parts.map((p, i) => (i % 2 === 1 && p in KIT_FIELDS ? <Field key={i} k={p as KitFieldKey} ctx={ctx} /> : <Fragment key={i}>{p}</Fragment>))}
     </>
   );
 }
 
-function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set: (k: KitFieldKey, v: string) => void; setVat: (v: string) => void }) {
+function Block({ b, ctx }: { b: KitBlock; ctx: Ctx }) {
   switch (b.t) {
     case 'p':
       return (
         <p className={`leading-9 ${b.bold ? 'font-bold' : ''}`}>
-          <Text text={b.text} values={values} set={set} />
+          <Text text={b.text} ctx={ctx} />
         </p>
       );
     case 'list':
@@ -54,11 +67,17 @@ function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set
       return (
         <ol className="space-y-3">
           {VAT_OPTIONS.map((o, i) => {
-            const on = values.vat_choice === String(i + 1);
+            const on = ctx.values.vat_choice === String(i + 1);
             return (
               <li key={i}>
                 <label className="flex gap-3 items-start cursor-pointer">
-                  <input type="checkbox" checked={on} onChange={() => setVat(on ? '' : String(i + 1))} className="mt-2 w-5 h-5 shrink-0 accent-red-700" />
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={ctx.mode === 'signed' || !ctx.setVat}
+                    onChange={() => ctx.setVat?.(on ? '' : String(i + 1))}
+                    className="mt-2 w-5 h-5 shrink-0 accent-red-700"
+                  />
                   <span className="leading-8">
                     <b>{i + 1}.</b> {o}
                   </span>
@@ -75,7 +94,7 @@ function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set
             <Fragment key={k}>
               <dt className="text-gray-600 pt-1">{KIT_FIELDS[k].label}:</dt>
               <dd>
-                <Field k={k} values={values} set={set} />
+                <Field k={k} ctx={ctx} />
               </dd>
             </Fragment>
           ))}
@@ -87,9 +106,9 @@ function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set
           <tbody>
             {b.keys.map((k) => (
               <tr key={k}>
-                <th className="border border-gray-400 bg-gray-50 px-2 py-2 text-right font-semibold w-40">{KIT_FIELDS[k].label}</th>
+                <th className="border border-gray-400 bg-gray-50 px-2 py-2 text-right font-semibold w-36">{KIT_FIELDS[k].label}</th>
                 <td className="border border-gray-400 px-1 py-1">
-                  <Field k={k} values={values} set={set} />
+                  <Field k={k} ctx={ctx} />
                 </td>
               </tr>
             ))}
@@ -97,6 +116,8 @@ function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set
         </table>
       );
     case 'handwrite':
+      // Card details are never typed or stored — on paper only, in the garage.
+      if (ctx.mode !== 'staff') return <p className="text-sm text-gray-600 rounded-lg bg-gray-50 px-3 py-2">פרטי אשראי (אם נדרש) נמסרים במוסך בלבד ולא דרך הקישור.</p>;
       return (
         <div className="rounded-lg border border-dashed border-gray-400 p-3 space-y-2">
           <p className="text-sm font-semibold text-gray-700">{b.label}</p>
@@ -108,14 +129,21 @@ function Block({ b, values, set, setVat }: { b: KitBlock; values: KitValues; set
         </div>
       );
     case 'sign':
+      if (ctx.mode === 'customer') return null; // the signature pad is under the document
       return (
-        <div className="pt-8">
-          <span className="inline-block w-64 border-b border-gray-700 h-10" />
+        <div className="pt-6">
+          {ctx.signature ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ctx.signature} alt="חתימה" className="h-20 w-auto border-b border-gray-700" />
+          ) : (
+            <span className="inline-block w-64 border-b border-gray-700 h-10" />
+          )}
           <p className="text-sm text-gray-600 mt-1">{b.label ?? 'חתימה'}</p>
+          {ctx.signedLine && <p className="text-[11px] text-gray-500 mt-1">{ctx.signedLine}</p>}
         </div>
       );
     case 'draft':
-      return <p className="print:hidden rounded-lg bg-amber-100 text-amber-900 text-sm px-3 py-2 font-semibold">⚠️ {b.text}</p>;
+      return ctx.mode === 'staff' ? <p className="print:hidden rounded-lg bg-amber-100 text-amber-900 text-sm px-3 py-2 font-semibold">⚠️ {b.text}</p> : null;
   }
 }
 
@@ -146,9 +174,53 @@ function Letterhead({ kind }: { kind: KitDoc['letterhead'] }) {
   );
 }
 
+/** One kit document (letterhead, title, body) — for every mode. */
+export function KitDocument({
+  doc,
+  values,
+  setValues,
+  mode,
+  signature,
+  signedLine,
+}: {
+  doc: KitDoc;
+  values: KitValues;
+  setValues?: (v: KitValues) => void;
+  mode: KitMode;
+  signature?: string | null;
+  signedLine?: string;
+}) {
+  const ctx: Ctx = {
+    values,
+    mode,
+    signature,
+    signedLine,
+    set: setValues && mode !== 'signed' ? (k, v) => setValues({ ...values, [k]: v }) : undefined,
+    setVat: setValues && mode !== 'signed' ? (v) => setValues({ ...values, vat_choice: v }) : undefined,
+  };
+  return (
+    <div className="text-[15px] text-gray-900">
+      <Letterhead kind={doc.letterhead} />
+      <div className="flex justify-between mt-5 text-sm gap-2">
+        <span>{doc.to ? <Text text={doc.to} ctx={ctx} /> : null}</span>
+        <span className="whitespace-nowrap">
+          תאריך: <Field k="date" ctx={ctx} />
+        </span>
+      </div>
+      <h2 className="text-xl font-black text-center mt-6 underline underline-offset-4">{doc.title}</h2>
+      {doc.subtitle && <p className="text-center text-gray-700 font-semibold">{doc.subtitle}</p>}
+      <div className="mt-6 space-y-4">
+        {doc.blocks.map((b, j) => (
+          <Block key={j} b={b} ctx={ctx} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const FOOTER = 'מוסך תהילה בע״מ · ח.פ. 513539148 · סוכנות מורשית טויוטה · הקציר 857, נתיבות · www.toyota-tehila.co.il · 08-9933818';
 
-function Page({ children, n, total }: { children: React.ReactNode; n: number; total: number }) {
+export function KitPage({ children, n, total }: { children: React.ReactNode; n: number; total: number }) {
   return (
     <section className="kit-page relative bg-white mx-auto shadow-md print:shadow-none border border-gray-200 print:border-0 w-full max-w-[210mm] min-h-[297mm] px-[16mm] pt-[14mm] pb-[22mm] text-[15px] text-gray-900">
       {children}
@@ -162,15 +234,16 @@ function Page({ children, n, total }: { children: React.ReactNode; n: number; to
   );
 }
 
+export const KIT_PRINT_CSS = `@media print { @page { size: A4; margin: 0; } .kit-page { page-break-after: always; break-after: page; } .kit-page:last-child { page-break-after: auto; } }`;
+
+/** Staff: details page + every selected document as A4 pages. */
 export function KitPages({ selected, values, setValues, summary }: { selected: string[]; values: KitValues; setValues: (v: KitValues) => void; summary: { label: string; value: string }[] }) {
   const docs = KIT_DOCS.filter((d) => selected.includes(d.id));
-  const set = (k: KitFieldKey, v: string) => setValues({ ...values, [k]: v });
-  const setVat = (v: string) => setValues({ ...values, vat_choice: v });
   const total = docs.length + 1;
   return (
     <div className="space-y-6 print:space-y-0" dir="rtl">
-      <style>{`@media print { @page { size: A4; margin: 0; } .kit-page { page-break-after: always; break-after: page; } .kit-page:last-child { page-break-after: auto; } }`}</style>
-      <Page n={1} total={total}>
+      <style>{KIT_PRINT_CSS}</style>
+      <KitPage n={1} total={total}>
         <Letterhead kind="tehila" />
         <h1 className="text-2xl font-black mt-6">קיט מסמכים לתביעה</h1>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 mt-4 text-sm">
@@ -205,24 +278,11 @@ export function KitPages({ selected, values, setValues, summary }: { selected: s
             </li>
           ))}
         </ol>
-      </Page>
+      </KitPage>
       {docs.map((d, i) => (
-        <Page key={d.id} n={i + 2} total={total}>
-          <Letterhead kind={d.letterhead} />
-          <div className="flex justify-between mt-5 text-sm">
-            <span>{d.to ? <Text text={d.to} values={values} set={set} /> : null}</span>
-            <span>
-              תאריך: <Field k="date" values={values} set={set} />
-            </span>
-          </div>
-          <h2 className="text-xl font-black text-center mt-6 underline underline-offset-4">{d.title}</h2>
-          {d.subtitle && <p className="text-center text-gray-700 font-semibold">{d.subtitle}</p>}
-          <div className="mt-6 space-y-4">
-            {d.blocks.map((b, j) => (
-              <Block key={j} b={b} values={values} set={set} setVat={setVat} />
-            ))}
-          </div>
-        </Page>
+        <KitPage key={d.id} n={i + 2} total={total}>
+          <KitDocument doc={d} values={values} setValues={setValues} mode="staff" />
+        </KitPage>
       ))}
     </div>
   );

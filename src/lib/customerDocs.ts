@@ -74,7 +74,7 @@ export function firstName(full: string | null | undefined): string {
   return (full ?? '').trim().split(/\s+/)[0] ?? '';
 }
 
-export function customerMessage(opts: { customerName: string | null; clerkName: string | null; branchName: string | null; plate: string | null; url: string }): string {
+export function customerMessage(opts: { customerName: string | null; clerkName: string | null; branchName: string | null; plate: string | null; url: string; kitCount?: number }): string {
   const hello = firstName(opts.customerName) ? `שלום ${firstName(opts.customerName)} 👋` : 'שלום 👋';
   const clerk = firstName(opts.clerkName);
   const from = `${clerk ? `כאן ${clerk} ` : ''}ממרכז שירות תהילה${opts.branchName ? ` סניף ${opts.branchName}` : ''}.`;
@@ -82,6 +82,7 @@ export function customerMessage(opts: { customerName: string | null; clerkName: 
     `${hello} ${from}`,
     `כדי שנוכל לקדם את הטיפול ברכב${opts.plate ? ` ${opts.plate}` : ''} מול חברת הביטוח, נשמח שתעלה/י את המסמכים בקישור המאובטח הבא:`,
     opts.url,
+    ...(opts.kitCount ? [`בקישור יש גם ${opts.kitCount === 1 ? 'טופס קצר' : `${opts.kitCount} טפסים קצרים`} לחתימה דיגיטלית — ממלאים מה שחסר וחותמים באצבע.`] : []),
     `הקישור אישי ובתוקף ל-${LINK_VALID_HOURS} שעות. לכל שאלה אנחנו זמינים כאן.`,
   ].join('\n');
 }

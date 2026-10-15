@@ -47,6 +47,13 @@ export default async function CustomerDocsPage({ params }: { params: { token: st
   const uploaded: Record<string, number> = {};
   for (const d of (done ?? []) as { doc_kind: string | null }[]) if (d.doc_kind) uploaded[d.doc_kind] = (uploaded[d.doc_kind] ?? 0) + 1;
 
+  // Claim kit to sign (stage 2): which documents are already signed.
+  let kit: { docs: string[]; values: Record<string, string>; signed: string[] } | null = null;
+  if (link.kit_docs?.length) {
+    const { data: sigs } = await serviceClient()!.from('kit_signatures').select('doc_id').eq('link_id', link.id);
+    kit = { docs: link.kit_docs, values: link.kit_values ?? {}, signed: ((sigs ?? []) as { doc_id: string }[]).map((x) => x.doc_id) };
+  }
+
   return (
     <Shell>
       <CustomerDocsForm
@@ -59,6 +66,7 @@ export default async function CustomerDocsPage({ params }: { params: { token: st
         completed={!!link.completed_at}
         initialUploaded={uploaded}
         expiresAt={link.expires_at}
+        kit={kit}
       />
     </Shell>
   );

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import type { DocItem } from '@/lib/customerDocs';
+import { KitSign } from './KitSign';
 
 type Consent = { title: string; intro: string; sections: { head: string; body: string[] }[]; checkbox: string };
 
@@ -26,6 +27,8 @@ export function CustomerDocsForm(props: {
   completed: boolean;
   initialUploaded: Record<string, number>;
   expiresAt: string;
+  /** Claim kit to sign (stage 2) — null when the link carries none. */
+  kit?: { docs: string[]; values: Record<string, string>; signed: string[] } | null;
 }) {
   const [consented, setConsented] = useState(props.consented);
   const [agree, setAgree] = useState(false);
@@ -138,6 +141,7 @@ export function CustomerDocsForm(props: {
   return (
     <>
       {header}
+      {props.kit && <KitSign token={props.token} docs={props.kit.docs} initialValues={props.kit.values} initialSigned={props.kit.signed} />}
       <p className="text-sm text-gray-600 mb-3">צלם/י או העלה/י כל מסמך. מסמך שהתקבל יסומן ב-✓.</p>
       <div className="space-y-2">
         {props.items.map((item) => {

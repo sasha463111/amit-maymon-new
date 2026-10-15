@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { hasPermission } from '@/lib/permissions';
 import { canSendCustomerLink, customerMessage, whatsAppUrl } from '@/lib/customerDocs';
 import { APP_ORIGIN, newToken, hashToken, serviceClient } from '@/lib/customerDocLinks.server';
+import { KIT_DOCS, cleanKitValues, kitDoc } from '@/lib/claimKit';
 
 // Customer documents link — staff side (Amit, 2026-10-14). The referral must
 // be visible to the caller under RLS; writes go through the service client.
@@ -28,8 +29,9 @@ async function staff(referralId: string) {
   return { user, me, referral: { ...r, branchName: branch?.name ?? null } };
 }
 
-/** New link for the referral (any earlier open link is revoked — one live link). */
-export async function createCustomerDocLink(referralId: string): Promise<
+/** New link for the referral (any earlier open link is revoked — one live link).
+ *  With `kit`: the link also carries claim-kit documents to fill and sign (stage 2). */
+export async function createCustomerDocLink(referralId: string, kit?: { docs: string[]; values: Record<string, unknown> }): Promise<
   { error: string } | { error: null; url: string; message: string; whatsapp: string | null; expiresAt: string }
 > {
   const ctx = await staff(referralId);
@@ -45,10 +47,17 @@ export async function createCustomerDocLink(referralId: string): Promise<
     .is('revoked_at', null)
     .gt('expires_at', now);
 
+  const kitDocs = kit ? KIT_DOCS.map((d) => d.id).filter((id) => kit.docs.includes(id)) : [];
+  if (kit && !kitDocs.length) return { error: 'לא נבחרו מסמכים לחתימה' };
   const token = newToken();
   const { data, error } = await db
     .from('customer_doc_links')
-    .insert({ referral_id: referralId, token_hash: hashToken(token), created_by: ctx.user.id } as never)
+    .insert({
+      referral_id: referralId,
+      token_hash: hashToken(token),
+      created_by: ctx.user.id,
+      ...(kitDocs.length ? { kit_docs: kitDocs, kit_values: cleanKitValues(kit?.values) } : {}),
+    } as never)
     .select('expires_at')
     .single();
   if (error || !data) return { error: `שגיאה ביצירת הקישור: ${error?.message ?? ''}` };
@@ -60,6 +69,7 @@ export async function createCustomerDocLink(referralId: string): Promise<
     branchName: ctx.referral.branchName,
     plate: ctx.referral.plate_number,
     url,
+    kitCount: kitDocs.length,
   });
   revalidatePath(`/referrals/${referralId}`);
   return { error: null, url, message, whatsapp: whatsAppUrl(ctx.referral.phone, message), expiresAt: (data as { expires_at: string }).expires_at };
@@ -79,4 +89,40 @@ export async function revokeCustomerDocLink(referralId: string, linkId: string):
   if (error) return { error: error.message };
   revalidatePath(`/referrals/${referralId}`);
   return { error: null };
+}
+
+// ---- claim kit, stage 2: what the customer signed (staff view) -------------------
+
+export type KitSigned = { docId: string; title: string; values: Record<string, string>; signatureUrl: string | null; signedAt: string; ip: string | null; ua: string | null; version: string };
+export type KitLinkStatus = { linkId: string; sentAt: string; expiresAt: string; docs: { id: string; title: string }[]; signed: KitSigned[]; done: boolean } | null;
+
+/** The latest kit sent to the customer for this referral, and what was signed. */
+export async function getKitStatus(referralId: string): Promise<KitLinkStatus> {
+  const ctx = await staff(referralId);
+  if ('error' in ctx) return null;
+  const db = serviceClient();
+  if (!db) return null;
+  const { data: link } = await db
+    .from('customer_doc_links')
+    .select('id, created_at, expires_at, kit_docs, kit_signed_at')
+    .eq('referral_id', referralId)
+    .not('kit_docs', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const l = link as { id: string; created_at: string; expires_at: string; kit_docs: string[]; kit_signed_at: string | null } | null;
+  if (!l) return null;
+  const { data: rows } = await db.from('kit_signatures').select('doc_id, doc_title, values, signature_path, signed_at, ip, ua, kit_version').eq('link_id', l.id).order('signed_at');
+  type R = { doc_id: string; doc_title: string; values: Record<string, string>; signature_path: string; signed_at: string; ip: string | null; ua: string | null; kit_version: string };
+  const rs = (rows ?? []) as R[];
+  const signedUrls = rs.length ? (await db.storage.from('referral-documents').createSignedUrls(rs.map((r) => r.signature_path), 3600)).data ?? [] : [];
+  const urlByPath = new Map((signedUrls as { path: string | null; signedUrl: string }[]).map((x) => [x.path, x.signedUrl]));
+  return {
+    linkId: l.id,
+    sentAt: l.created_at,
+    expiresAt: l.expires_at,
+    docs: l.kit_docs.map((id) => ({ id, title: kitDoc(id)?.title ?? id })),
+    signed: rs.map((r) => ({ docId: r.doc_id, title: r.doc_title, values: r.values ?? {}, signatureUrl: urlByPath.get(r.signature_path) ?? null, signedAt: r.signed_at, ip: r.ip, ua: r.ua, version: r.kit_version })),
+    done: !!l.kit_signed_at,
+  };
 }

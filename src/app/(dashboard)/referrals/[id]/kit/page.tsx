@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { canSendCustomerLink } from '@/lib/customerDocs';
 import { suggestDocs, claimKindLabel } from '@/lib/claimKit';
 import { KitClient } from './KitClient';
+import { getKitStatus } from '@/app/actions/customerDocLinks';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +29,12 @@ export default async function ReferralKitPage({ params }: { params: { id: string
   const ilDate = (iso: string | null | undefined) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
   const branch = (Array.isArray(r.branches) ? r.branches[0] : r.branches)?.name ?? '';
+  const status = await getKitStatus(r.id);
   return (
     <KitClient
+      referralId={r.id}
+      status={status}
+      hasPhone={!!(r.phone ?? '').replace(/\D/g, '').match(/^(05\d{8}|9725\d{8})$/)}
       backHref={`/referrals/${r.id}`}
       suggested={suggestDocs({ claimType: r.claim_type, insurer: r.insurance_company })}
       initial={{
