@@ -19,7 +19,7 @@ import { SignaturePad } from '@/components/SignaturePad';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import type { SupplierDocRow } from '@/app/actions/supplierDocs';
 import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
-import { BranchFilter, StatCard, StatGrid, ils } from '@/components/ui/kit';
+import { BranchFilter, StatCard, StatGrid, ils, EmptyState } from '@/components/ui/kit';
 import { reportError } from '@/components/ErrorReporter';
 
 type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
@@ -230,7 +230,7 @@ export function ReturnsClient({
       {tab === 'credit' && <CreditTab rows={forCredit} canCredit={canCredit} onDone={done_} />}
       {tab === 'done' && (
         <div className="grid gap-3 md:grid-cols-2">
-          {done.length === 0 && <p className="text-gray-400 py-8 text-center md:col-span-2">אין עדיין זיכויים</p>}
+          {done.length === 0 && <EmptyState className="md:col-span-2" title="אין עדיין זיכויים" hint="החזרות שהספק זיכה עליהן יופיעו כאן" />}
           {done.map((r) => (
             <PartCard key={r.id} r={r}>
               <Fields className="mt-1 pt-1 border-t border-gray-100">
@@ -408,7 +408,7 @@ function PickupTab({ rows, canHandOver, onDone, onHandedOver }: { rows: PartRetu
   const [signing, setSigning] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
 
-  if (rows.length === 0) return <p className="text-gray-400 py-8 text-center">אין חלקים שממתינים לאיסוף 👍</p>;
+  if (rows.length === 0) return <EmptyState good title="אין חלקים שממתינים לאיסוף" hint="כל החלקים נאספו. חלק חדש להחזרה — בכפתור למעלה" />;
 
   const shown = supplier ? groups.find(([s]) => s === supplier)?.[1] ?? [] : rows;
 
@@ -720,6 +720,11 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [dups, setDups] = useState<{ created_at: string; status: string; plate: string | null; quantity: number; branch_name: string | null }[] | null>(null);
+  // Fields filled from the sticker get a "זוהה" mark until the user edits them;
+  // after a failed save, the missing required fields are outlined (16/10, design round).
+  const [auto, setAuto] = useState<Set<string>>(new Set());
+  const [tried, setTried] = useState(false);
+  const edited = (k: string) => setAuto((a) => (a.has(k) ? new Set(Array.from(a).filter((x) => x !== k)) : a));
 
   function onPhoto(f: File | null) {
     setPhoto(f);
@@ -745,18 +750,21 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
       // Functional updates: the reading takes a few seconds, and anything the
       // user typed meanwhile must win over the sticker.
       let filled = false;
-      const fill = (val: string | null, set: React.Dispatch<React.SetStateAction<string>>) => {
+      const got = new Set<string>();
+      const fill = (key: string, val: string | null, cur: string, set: React.Dispatch<React.SetStateAction<string>>) => {
         if (!val) return;
         filled = true;
-        set((cur) => (cur.trim() ? cur : val));
+        if (!cur.trim()) got.add(key);
+        set((c) => (c.trim() ? c : val));
       };
-      if (!general) fill(x.plate, setPlate);
-      fill(x.supplier, setSupplier);
-      if (x.supplier === 'אחר') fill(x.supplier_other, setSupplierOther);
-      fill(x.sku, setSku);
-      fill(x.description, setDescription);
-      fill(x.document_number, setDoc);
-      fill(x.sticker_date, setStickerDate);
+      if (!general) fill('plate', x.plate, plate, setPlate);
+      fill('supplier', x.supplier, supplier, setSupplier);
+      if (x.supplier === 'אחר') fill('supplier_other', x.supplier_other, supplierOther, setSupplierOther);
+      fill('sku', x.sku, sku, setSku);
+      fill('description', x.description, description, setDescription);
+      fill('doc', x.document_number, doc, setDoc);
+      fill('date', x.sticker_date, stickerDate, setStickerDate);
+      setAuto(got);
       if (x.quantity && x.quantity > 1) {
         filled = true;
         setQuantity((q) => (q === 1 ? x.quantity! : q));
@@ -772,6 +780,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   async function save(confirmDuplicate = false) {
     setErr(null);
     setDups(null);
+    setTried(true);
     if (!photo) return setErr('חובה לצלם את המדבקה');
     if (!supplier) return setErr('נא לבחור ספק');
     if (!reason) return setErr('נא לבחור סיבת החזרה');
@@ -799,20 +808,41 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
     onSaved('linkedToCase' in res ? !!res.linkedToCase : false);
   }
 
-  const chip = (on: boolean) => `px-3 py-2 rounded-xl border-2 text-sm font-semibold ${on ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-300'}`;
+  const chip = (on: boolean) => `min-h-[44px] px-3 py-2 rounded-xl border-2 text-sm font-semibold ${on ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-800 border-gray-300'}`;
+  // After a save attempt: which required fields are missing (outlined in red).
+  const missing = {
+    supplier: tried && !supplier,
+    reason: tried && !reason,
+    item: tried && !sku.trim() && !description.trim(),
+    branch: tried && !general && !plate.trim() && !branchId,
+  };
+  const box = (bad: boolean) => `h-12 px-3 rounded-xl border text-base w-full ${bad ? 'border-red-500 ring-2 ring-red-100' : 'border-gray-300'}`;
+  // A field's label: "זוהה מהתמונה" when it came from the sticker, "חובה" when missing.
+  const label = (text: string, k?: string, need?: boolean) => (
+    <span className="flex items-center gap-2 text-sm font-semibold mb-1.5 text-gray-800">
+      {text}
+      {k && auto.has(k) && <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-px">זוהה מהתמונה</span>}
+      {need && <span className="text-[11px] font-bold text-red-700">חובה</span>}
+    </span>
+  );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-2 sm:p-6 overflow-y-auto" dir="rtl">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">📷 חלק להחזרה</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 text-xl">✕</button>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center sm:p-6 overflow-y-auto" dir="rtl">
+      {/* Phone: full screen, the save button pinned to the bottom (16/10). */}
+      <div className="w-full max-w-lg bg-white sm:rounded-2xl shadow-2xl min-h-full sm:min-h-0 flex flex-col">
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between sm:rounded-t-2xl">
+          <h2 className="text-lg font-bold">החזרת חלק</h2>
+          <button type="button" onClick={onClose} aria-label="סגירה" className="w-11 h-11 -me-2 rounded-full hover:bg-gray-100 text-gray-500 text-xl">✕</button>
         </div>
+        <div className="p-4 space-y-4 flex-1">
 
         <label className="block">
           {preview ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={preview} alt="מדבקה" className="w-full max-h-64 object-contain rounded-xl border border-gray-200" />
+            <span className="relative block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview} alt="מדבקה" className="w-full max-h-64 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+              <span className="absolute bottom-2 left-2 h-10 px-3 rounded-full bg-white/95 border border-gray-300 text-sm font-semibold flex items-center shadow-sm">📷 לצלם שוב</span>
+            </span>
           ) : (
             <div className="w-full h-36 rounded-xl border-2 border-dashed border-red-300 bg-red-50 flex flex-col items-center justify-center text-red-700 font-bold">
               <span className="text-3xl">📷</span>
@@ -836,15 +866,18 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         )}
 
         <div>
-          <p className="text-sm font-semibold mb-2">מספר רכב</p>
+          {label('מספר רכב', 'plate')}
           <div className="flex gap-2 items-center">
             <input
               value={plate}
-              onChange={(e) => setPlate(e.target.value)}
+              onChange={(e) => {
+                setPlate(e.target.value);
+                edited('plate');
+              }}
               disabled={general}
               inputMode="numeric"
               placeholder="מהמדבקה (אם יש)"
-              className="flex-1 h-11 px-3 rounded-lg border border-gray-300 text-base disabled:bg-gray-100"
+              className="flex-1 h-12 px-3 rounded-xl border border-gray-300 text-base disabled:bg-gray-100"
               dir="ltr"
             />
             <button type="button" onClick={() => setGeneral((v) => !v)} className={chip(general)}>
@@ -854,10 +887,18 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         </div>
 
         <div>
-          <p className="text-sm font-semibold mb-2">ספק</p>
-          <div className="flex flex-wrap gap-2">
+          {label('ספק', 'supplier', missing.supplier)}
+          <div className={`flex flex-wrap gap-2 ${missing.supplier ? 'rounded-xl ring-2 ring-red-200 p-1' : ''}`}>
             {PART_RETURN_SUPPLIERS.map((s) => (
-              <button key={s} type="button" onClick={() => setSupplier(s)} className={chip(supplier === s)}>
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  setSupplier(s);
+                  edited('supplier');
+                }}
+                className={chip(supplier === s)}
+              >
                 {s}
               </button>
             ))}
@@ -867,24 +908,56 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <input value={sku} onChange={(e) => setSku(e.target.value)} placeholder='מק"ט' className="h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="ltr" />
-          <div className="flex items-center gap-1">
-            <span className="text-sm text-gray-600">כמות</span>
-            <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-10 h-11 rounded-lg border border-gray-300 text-lg">−</button>
-            <span className="w-8 text-center font-bold">{quantity}</span>
-            <button type="button" onClick={() => setQuantity((q) => q + 1)} className="w-10 h-11 rounded-lg border border-gray-300 text-lg">+</button>
+        <div className="grid grid-cols-[1fr_auto] gap-3">
+          <label className="block min-w-0">
+            {label('מק"ט', 'sku', missing.item)}
+            <input
+              value={sku}
+              onChange={(e) => {
+                setSku(e.target.value);
+                edited('sku');
+              }}
+              className={box(missing.item)}
+              dir="ltr"
+            />
+          </label>
+          <div>
+            {label('כמות')}
+            <div className="flex items-center gap-1">
+              <button type="button" aria-label="פחות" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-11 h-12 rounded-xl border border-gray-300 text-lg">−</button>
+              <span className="w-8 text-center font-bold text-lg">{quantity}</span>
+              <button type="button" aria-label="עוד" onClick={() => setQuantity((q) => q + 1)} className="w-11 h-12 rounded-xl border border-gray-300 text-lg">+</button>
+            </div>
           </div>
         </div>
-        <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="תיאור החלק" className="w-full h-11 px-3 rounded-lg border border-gray-300 text-sm" />
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-gray-600 shrink-0">תאריך על המדבקה</span>
-          <input type="date" value={stickerDate} onChange={(e) => setStickerDate(e.target.value)} className="flex-1 h-10 px-3 rounded-lg border border-gray-300 text-sm" />
+        <label className="block">
+          {label('תיאור החלק', 'description', missing.item)}
+          <input
+            value={description}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              edited('description');
+            }}
+            className={box(missing.item)}
+          />
+          {missing.item && <span className="block text-xs text-red-700 mt-1">צריך מק&quot;ט או תיאור (אחד מהם מספיק)</span>}
+        </label>
+        <label className="block">
+          {label('תאריך על המדבקה', 'date')}
+          <input
+            type="date"
+            value={stickerDate}
+            onChange={(e) => {
+              setStickerDate(e.target.value);
+              edited('date');
+            }}
+            className={box(false)}
+          />
         </label>
 
         <div>
-          <p className="text-sm font-semibold mb-2">סיבת החזרה</p>
-          <div className="flex flex-wrap gap-2">
+          {label('סיבת החזרה', undefined, missing.reason)}
+          <div className={`flex flex-wrap gap-2 ${missing.reason ? 'rounded-xl ring-2 ring-red-200 p-1' : ''}`}>
             {PART_RETURN_REASONS.map((s) => (
               <button key={s} type="button" onClick={() => setReason(s)} className={chip(reason === s)}>
                 {s}
@@ -897,14 +970,24 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold">מספר חשבונית <span className="text-xs text-gray-400 font-normal">(מהמדבקה — החשבונית עצמה מצולמת בלשונית &quot;חשבוניות / ת. משלוח&quot;)</span></p>
-          <input value={doc} onChange={(e) => setDoc(e.target.value)} placeholder="מספר חשבונית / תעודת משלוח" className="w-full h-11 px-3 rounded-lg border border-gray-300 text-sm" dir="auto" />
+          {label('מספר חשבונית / תעודת משלוח', 'doc')}
+          <input
+            value={doc}
+            onChange={(e) => {
+              setDoc(e.target.value);
+              edited('doc');
+            }}
+            className={box(false)}
+            dir="auto"
+          />
+          <p className="text-xs text-gray-500">החשבונית עצמה מצולמת בלשונית &quot;חשבוניות / ת. משלוח&quot;</p>
         </div>
 
         {branches.length > 1 && (
           <div>
-            <p className="text-sm font-semibold mb-2">סניף <span className="text-xs text-gray-400 font-normal">(אם הרכב בתיק פתוח, נלקח מהתיק)</span></p>
-            <div className="flex gap-2">
+            {label('סניף', undefined, missing.branch)}
+            <p className="text-xs text-gray-500 -mt-1 mb-1.5">אם הרכב בתיק פתוח, הסניף נלקח מהתיק</p>
+            <div className={`flex gap-2 ${missing.branch ? 'rounded-xl ring-2 ring-red-200 p-1' : ''}`}>
               {branches.map((b) => (
                 <button key={b.id} type="button" onClick={() => setBranchId(b.id)} className={chip(branchId === b.id)}>
                   {b.name}
@@ -933,14 +1016,17 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
             </div>
           </div>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void save()}
-          className="w-full h-12 rounded-xl bg-red-600 text-white text-base font-bold disabled:opacity-50"
-        >
-          {busy ? 'שומר…' : 'שמור החזרה'}
-        </button>
+        </div>
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:rounded-b-2xl">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="w-full h-14 rounded-2xl bg-brand-red hover:bg-brand-red-dark text-white text-lg font-bold disabled:opacity-50"
+          >
+            {busy ? 'שומר…' : 'שמירת ההחזרה'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1062,7 +1148,7 @@ function ReturnsTable({ rows: input, onDone, canCredit }: { rows: PartReturnRow[
     return (
       <div className="space-y-2">
         {filters}
-        <p className="text-gray-400 py-8 text-center">אין החזרות בסטטוס הזה</p>
+        <EmptyState title="אין החזרות בסטטוס הזה" hint="בחרו סטטוס אחר בסינון למעלה" />
       </div>
     );
   const pic = (url: string | null, label: string) =>

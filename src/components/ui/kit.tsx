@@ -133,3 +133,18 @@ export function DayBars({ days, label }: { days: { date: string; value: number }
 }
 
 export const ils = (n: number) => `₪${Math.round(n).toLocaleString('he-IL')}`;
+
+/** An empty list that says why it is empty and what to do next (16/10, design
+ *  round — NN/g: no blank screens, no dead ends). `good` = "nothing waiting"
+ *  is good news (a check mark instead of the neutral circle). */
+export function EmptyState({ title, hint, good = false, className = '' }: { title: string; hint?: string; good?: boolean; className?: string }) {
+  return (
+    <div className={`flex flex-col items-center justify-center text-center gap-1.5 py-10 px-4 ${className}`} role="status">
+      <span className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold ${good ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`} aria-hidden="true">
+        {good ? '✓' : '—'}
+      </span>
+      <p className="font-semibold text-gray-800">{title}</p>
+      {hint && <p className="text-sm text-gray-600 max-w-sm">{hint}</p>}
+    </div>
+  );
+}

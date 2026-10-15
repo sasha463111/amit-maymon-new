@@ -1,7 +1,7 @@
 'use client';
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
-import { StatCard, StatGrid } from '@/components/ui/kit';
+import { StatCard, StatGrid, EmptyState } from '@/components/ui/kit';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -170,7 +170,7 @@ export function LoanersClient({ fleet, handovers, branches, error, canEdit = fal
             className="w-full h-10 px-3 rounded-xl border border-gray-300 text-sm"
             dir="auto"
           />
-          {shown.length === 0 && <p className="text-gray-400 py-8 text-center">{tab === 'out' ? 'אין כרגע רכבים חליפיים שנמסרו ללקוחות' : 'אין החזרות'}</p>}
+          {shown.length === 0 && (tab === 'out' ? <EmptyState good title="כל הרכבים החליפיים במוסך" hint="אין כרגע רכב חליפי אצל לקוח. מסירה חדשה — בכפתור למעלה" /> : <EmptyState title="אין החזרות להצגה" hint="רכבים שהלקוחות מחזירים יופיעו כאן" />)}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {shown.map((h) => (
               <HandoverCard key={h.id} h={h} onDone={done} onShare={setShare} />
@@ -1050,7 +1050,7 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
         ))}
       </div>
       {fleet.length === 0 && <p className="text-gray-400 py-6 text-center">עוד לא הוזנו רכבים חליפיים. מוסיפים כאן לכל סניף, או שולחים רשימה ונזין אותה.</p>}
-      {fleet.length > 0 && shownCars.length === 0 && <p className="text-gray-400 py-6 text-center">אין רכבים להצגה בסניף הזה</p>}
+      {fleet.length > 0 && shownCars.length === 0 && <EmptyState title="אין רכבים להצגה" hint="בסניף או בסינון שנבחרו אין רכבים — נסו &quot;הכל&quot;" />}
       <div className="grid gap-2 md:grid-cols-2">
         {shownCars.map((f) => {
           const at = handovers.find((h) => h.fleet_id === f.id);

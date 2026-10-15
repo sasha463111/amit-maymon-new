@@ -9,6 +9,7 @@ import { SegmentedControl } from '@/components/design/SegmentedControl';
 import { shortVehicle } from '@/lib/vehicleLabel';
 import { SearchField } from '@/components/design/SearchField';
 import { matchesCaseQuery } from '@/lib/caseQuery';
+import { EmptyState } from '@/components/ui/kit';
 
 export interface PainterRow {
   id: string;
@@ -232,7 +233,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
       )}
 
       {/* Sections — full height, no inner scroll */}
-      {shownKeys.length === 0 && <p className="text-sm text-gray-400 text-center py-10">אין תיקים</p>}
+      {shownKeys.length === 0 && <EmptyState title="אין תיקים להצגה" hint="תיקים שמוקצים לפחחים יופיעו כאן" />}
       {shownKeys.map((k) => (
         <section key={k} className="space-y-2">
           <h2 className={`sticky top-[env(safe-area-inset-top,0px)] z-10 flex items-center justify-between rounded-lg border-b-2 px-3 py-2 text-sm font-bold ${headFor(k)}`}>

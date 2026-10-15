@@ -26,7 +26,7 @@ import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toColle
 import { formatDate } from '@/lib/dates';
 import { shortVehicle } from '@/lib/vehicleLabel';
 import { LicensePlate } from '@/components/ui/LicensePlate';
-import { StatCard, StatGrid } from '@/components/ui/kit';
+import { StatCard, StatGrid, EmptyState } from '@/components/ui/kit';
 import { LEGAL_REASONS, OTHER } from '@/lib/collectionStages';
 
 type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback' | 'summary';
@@ -207,7 +207,7 @@ export function CollectionsClient({
 
       {view === 'cards' ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-          {shown.length === 0 && <p className="text-gray-400 py-8 text-center col-span-full">אין תיקים בתצוגה הזו</p>}
+          {shown.length === 0 && <EmptyState className="col-span-full" title="אין תיקים בתצוגה הזו" hint="נסו לשנות את הסינון או את החיפוש למעלה" />}
           {shown.map(({ c, exp }) => (
             <ClaimCard key={c.id} c={c} exp={exp} late={overdue({ c, exp })} t0={t0} showCollector={isCeo} />
           ))}
@@ -939,7 +939,7 @@ function ShirBatch({ invoices, terms }: { invoices: ShirInvoice[]; terms: Record
     if (!r.error) router.refresh();
   }
 
-  if (!invoices.length) return <p className="text-gray-400 py-8 text-center">אין חשבוניות ש.י.ר</p>;
+  if (!invoices.length) return <EmptyState title="אין חשבוניות ש.י.ר" hint="חשבוניות שמתווספות לתיקים יופיעו כאן" />;
 
   return (
     <div className="space-y-3">

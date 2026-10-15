@@ -13,6 +13,7 @@ import {
 } from '@/app/actions/caseNotes';
 import { markRead } from '@/app/actions/notifications';
 import { formatDateTime } from '@/lib/dates';
+import { EmptyState } from '@/components/ui/kit';
 
 type Tab = 'inbox' | 'sent';
 
@@ -76,7 +77,7 @@ export function MessagesClient({ inbox, sent, error }: { inbox: InboxMessage[]; 
 
       {tab === 'inbox' ? (
         inbox.length === 0 ? (
-          <p className="text-center text-gray-400 py-10">אין הודעות עדיין</p>
+          <EmptyState title="אין הודעות עדיין" hint="הודעות ושאלות שנשלחות אליך מהתיקים יופיעו כאן" />
         ) : (
           <ul className="space-y-3">
             {inbox.map((m) => (
