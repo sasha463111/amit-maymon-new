@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Heebo, JetBrains_Mono } from 'next/font/google';
 import { PushSubscriber } from '@/components/PushSubscriber';
+import { ErrorReporter } from '@/components/ErrorReporter';
 import { BRAND_NAME, DEMO_MODE } from '@/lib/demo';
 
 // Design system (Tehila Bodyshop): Heebo is the Hebrew-first workhorse, with
@@ -98,6 +99,7 @@ export default function RootLayout({
       <body className={`antialiased ${heebo.className}`}>
         {children}
         <PushSubscriber />
+        <ErrorReporter />
       </body>
     </html>
   );

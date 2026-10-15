@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { reportError } from '@/components/ErrorReporter';
 
 export default function RootError({
   error,
@@ -12,6 +13,7 @@ export default function RootError({
 }) {
   useEffect(() => {
     console.error('[root error boundary]', error);
+    reportError('boundary', error, error.digest); // #43 → app_errors + auto BUG ticket
   }, [error]);
 
   return <ErrorState reset={reset} digest={error.digest} />;
