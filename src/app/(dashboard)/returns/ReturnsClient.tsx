@@ -48,6 +48,10 @@ export function ReturnsClient({
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('pickup');
   const [adding, setAdding] = useState(false);
+  // ?new=1 (the main button on "היום", 16/10) opens the new-return form straight away.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setAdding(true);
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   const canHandOver = HANDOVER_ROLES.has(role);
   // Painters (Amit, 14/10): mark returns + photograph documents. No tracking,

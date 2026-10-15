@@ -19,11 +19,12 @@ export default async function TodayPage({ searchParams }: { searchParams?: { as?
   if (!user) redirect('/login');
   const { data: prof } = await supabase.from('profiles').select('role, full_name, branch_ids, collections_manager').eq('id', user.id).maybeSingle();
   const p = prof as { role: string; full_name: string | null; branch_ids: string[] | null; collections_manager: boolean | null } | null;
-  if (!p || !ROLE_VIEW[p.role]) redirect('/');
+  // Not '/': that lands on /today again (ROLE_HOME) — a loop.
+  if (!p || !ROLE_VIEW[p.role]) redirect('/cases');
   const isCeo = p.role === 'CEO';
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) redirect('/');
+  if (!url || !key) redirect('/cases');
   const db = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   // The CEO may preview any role (company-wide); everyone else sees only their own.
   const role = isCeo ? ((ROLE_TABS.find(([k]) => k === searchParams?.as)?.[0] ?? 'ceo') as TodayRole) : ROLE_VIEW[p.role];

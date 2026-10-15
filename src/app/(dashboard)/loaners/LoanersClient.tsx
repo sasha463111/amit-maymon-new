@@ -2,7 +2,7 @@
 
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatCard, StatGrid } from '@/components/ui/kit';
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -89,6 +89,10 @@ export function LoanersClient({ fleet, handovers, branches, error, canEdit = fal
   const [tab, setTab] = useState<Tab>('out');
   const [query, setQuery] = useState('');
   const [giving, setGiving] = useState(false);
+  // ?new=1 (the main button on "היום", 16/10) opens a new handover straight away.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') setGiving(true);
+  }, []);
   const [toast, setToast] = useState<string | null>(null);
   // The customer's copy of the signed documents — sent on WhatsApp (Amit, 14/10).
   const [share, setShare] = useState<ShareLink | null>(null);

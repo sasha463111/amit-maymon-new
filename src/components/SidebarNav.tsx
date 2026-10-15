@@ -34,7 +34,7 @@ import {
 // סמלים"), and — for a long menu (the CEO has ~20) — groups that open as a
 // dropdown, so everything fits without scrolling sideways.
 
-const NAV_ICONS: Record<string, React.ElementType> = {
+export const NAV_ICONS: Record<string, React.ElementType> = {
   '/today': Home,
   '/dashboards': BarChart3,
   '/cases': FolderOpen,
@@ -71,11 +71,11 @@ const GROUPS: { title: string; icon: React.ElementType; hrefs: string[] }[] = [
 const GROUP_FROM = 9; // a menu longer than this is grouped
 
 // "🏠 היום" → "היום" when there is an icon (no double symbols).
-const cleanLabel = (label: string, hasIcon: boolean) => (hasIcon ? label.replace(/^[^A-Za-z0-9֐-׿]+\s*/, '') : label);
+export const cleanLabel = (label: string, hasIcon: boolean) => (hasIcon ? label.replace(/^[^A-Za-z0-9֐-׿]+\s*/, '') : label);
 
 type NavLink = { label: string; href: string };
 
-function isActiveHref(pathname: string, href: string) {
+export function isActiveHref(pathname: string, href: string) {
   return pathname === href || (href !== '/cases' && href.length > 1 && pathname.startsWith(href + '/')) || (href === '/cases' && pathname === '/cases');
 }
 

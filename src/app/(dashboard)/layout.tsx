@@ -7,13 +7,14 @@ import { PreviewRoleSwitcher } from '@/components/preview/PreviewRoleSwitcher';
 import { NotificationsBell } from '@/components/NotificationsBell';
 import { CaseSearch } from '@/components/CaseSearch';
 import { AutoRefresh } from '@/components/AutoRefresh';
-import { SendReportButton } from '@/components/SendReportButton';
+import { UserMenu } from '@/components/UserMenu';
+import { BottomNav } from '@/components/BottomNav';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
 import { SidebarNav } from '@/components/SidebarNav';
 import { jobLabel } from '@/lib/staffJobs';
 import { canUsePartReturns } from '@/lib/partReturns';
-import { LogOut, Eye, KeyRound } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { getViewAsState } from '@/app/actions/users';
 import { StopViewAsButton } from './StopViewAsButton';
 import { BRAND_NAME } from '@/lib/demo';
@@ -253,60 +254,34 @@ export default async function DashboardLayout({
         </div>
       )}
 
-      {/* Prominent push-enable nudge — shows for anyone not yet subscribed */}
-      {!isPreview && <PushEnableBanner />}
+      {/* One banner at a time (16/10, design round): "מה חדש" first; the
+          push-enable nudge only when there is nothing new to announce. */}
+      {!isPreview && !viewAs && announcements.length > 0 ? <WhatsNewBanner items={announcements} /> : !isPreview && <PushEnableBanner />}
 
-      {/* "🆕 מה חדש" — announcements of changes that affect everyone (15/10) */}
-      {!isPreview && !viewAs && announcements.length > 0 && <WhatsNewBanner items={announcements} />}
-
-      {/* Top header with brand + nav + user */}
+      {/* Header (16/10): one clean row — brand, a wide search (Ctrl+K), the
+          bell and one personal menu; the menu row below it on a computer. On a
+          phone the menu is the bottom bar (BottomNav). */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
-        {/* Upper row: brand + user info */}
-        <div className="px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
-          {/* Right side (in RTL): role badge + name + bell + logout */}
-          <div className="flex items-center gap-1.5 sm:gap-2 text-sm min-w-0 flex-1">
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-2 sm:px-3 py-1.5 rounded-lg min-w-0">
-              {/* Role label hidden on mobile to save space; name only */}
-              <span className="text-gray-400 text-xs hidden sm:inline">{roleLabel}</span>
-              <span className="text-gray-300 text-xs hidden sm:inline">·</span>
-              <span className="font-semibold text-gray-800 text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">
-                {profile?.full_name ?? user.email}
-              </span>
-              {branchName !== '—' && (
-                <>
-                  <span className="text-gray-300 text-xs hidden sm:inline">·</span>
-                  <span className="text-gray-500 text-xs hidden sm:inline">{branchName}</span>
-                </>
-              )}
-            </div>
-            {!isPreview && <CaseSearch />}
-            <NotificationsBell userId={user.id} role={actualRole} />
-            <SendReportButton isCeo={actualRole === 'CEO'} />
-            <a href="/account/password" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0" title="החלפת סיסמה">
-              <KeyRound size={16} className="text-gray-500" />
-            </a>
-            <a href="/logout" className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0" title="התנתק">
-              <LogOut size={16} className="text-gray-500" />
-            </a>
-          </div>
-
-          {/* Left side: Logo/branding — full on desktop, compact on mobile */}
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="px-3 sm:px-6 h-14 md:h-16 flex items-center gap-2 sm:gap-3">
+          <a href="/today" className="flex items-baseline gap-2 shrink-0">
             <span className="text-xl sm:text-2xl font-black text-primary-container tracking-tight">{BRAND_NAME}</span>
-            <span className="text-xs text-gray-400 font-medium hidden sm:inline">ניהול מוסך</span>
-          </div>
+            <span className="text-xs text-gray-400 font-medium hidden lg:inline">ניהול מוסך</span>
+          </a>
+          <div className="flex-1 flex justify-center min-w-0">{!isPreview && <CaseSearch />}</div>
+          {!isPreview && <NotificationsBell userId={user.id} role={actualRole} />}
+          <UserMenu name={profile?.full_name ?? user.email ?? ''} roleLabel={roleLabel} branchName={branchName} email={user.email ?? ''} isCeo={actualRole === 'CEO'} />
         </div>
 
-        {/* Lower row: horizontal nav — scrolls on mobile */}
-        <div className="px-3 sm:px-6 border-t border-gray-100 bg-gray-50">
+        <div className="hidden md:block px-6 border-t border-gray-100 bg-gray-50">
           <div className="py-2">
             <SidebarNav links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
           </div>
         </div>
       </header>
 
-      {/* Main content — no more sidebar */}
-      <main className="flex-1 p-3 sm:p-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
+      {/* Main content — room at the bottom for the phone's bottom bar. */}
+      <main className="flex-1 p-3 pb-24 sm:p-6 sm:pb-24 md:pb-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
+      <BottomNav role={role} links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
     </div>
   );
 }

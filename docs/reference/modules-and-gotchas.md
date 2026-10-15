@@ -392,3 +392,10 @@ supabase/
 | PAINTER | `/painters` (רשימה), `/painters/[id]` (תיק פחח), `/extras/new`, `/extras/mine` |
 | SERVICE_ADVISOR | `/cases` (read-only), `/notifications` |
 
+
+- **🎨 סבב עיצוב — שלב א׳ (16/10, תומר; הצעה: canvas "תהילה — שיפורי עיצוב מוצעים"):**
+  - **דף הבית = "🏠 היום" לכל התפקידים** (`ROLE_HOME` ב-`src/lib/roleHome.ts`). ב-`/today` יש לכל תפקיד כפתור פעולה ראשי גדול + עד 2 משניים (`ACTIONS` ב-`TodayClient.tsx`), שמובילים למסך שהתפקיד נחת בו קודם. `/returns?new=1` ו-`/loaners?new=1` פותחים ישר טופס החזרה חדשה / מסירה חדשה. תפקיד שלא מוכר ב-`/today` עובר ל-`/cases` (לא ל-`/`, כי זה היה יוצר לולאה).
+  - **כותרת:** שורה אחת — לוגו (קישור ל"היום"), חיפוש רחב במחשב (`CaseSearch`; Ctrl+K / ⌘K פותח מכל מקום, ובנייד אייקון), פעמון, ו-`UserMenu` (שם / תפקיד / סניף, החלפת סיסמה, דוח יומי ל-CEO, יציאה). `SendReportButton` כבר לא בכותרת (ה-modal נפתח מהתפריט). שורת התפריט (`SidebarNav`) מוצגת רק במחשב (`md+`).
+  - **נייד: `BottomNav`** — 4 לשוניות קבועות לפי תפקיד (`TABS`) + "עוד": גיליון עם כל שאר המסכים, החלפת סיסמה ויציאה. `main` מקבל `pb-24` עד `md`. `NAV_ICONS`, `cleanLabel` ו-`isActiveHref` מיוצאים מ-`SidebarNav`.
+  - **באנר אחד בכל פעם:** אם יש "מה חדש" — רק הוא; אחרת הבאנר של הפעלת התראות.
+  - במצב preview (`NEXT_PUBLIC_PREVIEW_MODE`) הפעמון לא מוצג: ה-mock של supabase לא תומך ב-realtime. מצב preview שבור גם בלי זה (`rpc` חסר ב-mock), אז לבדיקה ויזואלית עדיף דף harness זמני.

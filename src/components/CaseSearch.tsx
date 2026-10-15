@@ -29,6 +29,11 @@ export function CaseSearch() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
+      // Ctrl+K / ⌘K opens the search from anywhere (16/10, design round).
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setOpen(true);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -69,14 +74,25 @@ export function CaseSearch() {
 
   return (
     <>
+      {/* Phone: an icon. Computer: a wide search field in the header (16/10). */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2 rounded-lg transition-colors flex items-center shrink-0"
+        className="md:hidden w-10 h-10 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors flex items-center justify-center shrink-0"
         title="חיפוש תיק"
         aria-label="חיפוש תיק"
       >
-        <Search size={16} className="text-gray-600" />
+        <Search size={18} className="text-gray-600" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="hidden md:flex flex-1 max-w-md h-10 items-center gap-2.5 px-3 rounded-xl border border-gray-300 bg-gray-50 hover:bg-white hover:border-gray-400 text-gray-500 text-sm transition-colors"
+        aria-label="חיפוש תיק"
+      >
+        <Search size={17} className="shrink-0" />
+        <span className="flex-1 text-start truncate">חיפוש לפי לוחית או שם לקוח</span>
+        <kbd className="font-mono text-[11px] border border-gray-300 rounded px-1.5 py-px bg-white" dir="ltr">Ctrl K</kbd>
       </button>
 
       {open && (

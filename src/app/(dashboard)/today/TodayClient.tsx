@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Camera, Car, CheckSquare, FolderOpen, Lock, Plus, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { ROLE_TABS, type TodayCard, type TodayRole } from '@/lib/todayTypes';
 
@@ -13,6 +14,20 @@ const TONE: Record<TodayCard['tone'], string> = {
   warn: 'border-s-amber-500',
   ok: 'border-s-green-500',
   info: 'border-s-gray-300',
+};
+
+// The one main action of each role, big, right under the greeting (16/10,
+// design round: "היום" is everyone's home page now, so the page each role used
+// to land on is one tap away) + up to two secondary ones.
+type Action = { label: string; href: string; icon: LucideIcon };
+const ACTIONS: Record<TodayRole, { main: Action; more: Action[] }> = {
+  ceo: { main: { label: 'אישורים ממתינים', href: '/approvals', icon: CheckSquare }, more: [{ label: 'תיקים', href: '/cases', icon: FolderOpen }] },
+  advisor: { main: { label: 'לרשימת התיקים', href: '/cases', icon: FolderOpen }, more: [{ label: 'החזרת חלק', href: '/returns?new=1', icon: Camera }] },
+  painter: { main: { label: 'תוספת חדשה', href: '/extras/new', icon: Plus }, more: [{ label: 'התיקים שלי', href: '/painters', icon: FolderOpen }, { label: 'החזרת חלק', href: '/returns?new=1', icon: Camera }] },
+  office: { main: { label: 'סגירת תיקים', href: '/closure', icon: Lock }, more: [{ label: 'הפניות', href: '/referrals', icon: FolderOpen }, { label: 'רכב חליפי', href: '/loaners', icon: Car }] },
+  warehouse: { main: { label: 'החזרה חדשה — צילום מדבקה', href: '/returns?new=1', icon: Camera }, more: [{ label: 'כל ההחזרות', href: '/returns', icon: FolderOpen }] },
+  collections: { main: { label: 'תביעות ביטוח', href: '/collections', icon: ShieldCheck }, more: [{ label: 'טיפול משפטי', href: '/legal', icon: FolderOpen }] },
+  driver: { main: { label: 'מסירת רכב חליפי', href: '/loaners?new=1', icon: Car }, more: [{ label: 'כל הרכבים', href: '/loaners', icon: FolderOpen }] },
 };
 
 function greeting() {
@@ -30,6 +45,31 @@ export function TodayClient({ role, cards, name, preview }: { role: TodayRole; c
           <h1 className="text-2xl font-extrabold text-gray-900">{!preview || role === 'ceo' ? `${name}, זה מה שמחכה לך היום` : `ככה נראה המסך של ${roleLabel}`}</h1>
         </div>
       </div>
+
+      {(() => {
+        const a = ACTIONS[role];
+        if (!a) return null;
+        const Main = a.main.icon;
+        return (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link href={a.main.href} className="h-14 px-6 rounded-2xl bg-brand-red hover:bg-brand-red-dark text-white text-lg font-bold inline-flex items-center justify-center gap-2.5 shadow-sm">
+              <Main size={22} aria-hidden="true" />
+              {a.main.label}
+            </Link>
+            <div className={`grid ${a.more.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} sm:flex gap-2`}>
+              {a.more.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <Link key={m.href} href={m.href} className="h-14 px-4 rounded-2xl border-2 border-gray-200 bg-white hover:bg-gray-50 text-gray-800 font-semibold inline-flex items-center justify-center gap-2">
+                    <Icon size={18} aria-hidden="true" />
+                    {m.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {preview && (
       <div className="flex gap-1.5 overflow-x-auto pb-1">
