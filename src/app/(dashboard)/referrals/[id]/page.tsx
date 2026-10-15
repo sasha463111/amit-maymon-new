@@ -86,7 +86,15 @@ export default async function ReferralDetailPage({ params }: { params: { id: str
         .eq('via_link_id', last.id);
       latest = { ...last, files: count ?? 0 };
     }
-    customerLinkSlot = <CustomerLinkPanel referralId={params.id} latest={latest} hasPhone={!!whatsAppUrl(row.phone, 'x')} />;
+    customerLinkSlot = (
+      <>
+        <a href={`/referrals/${params.id}/kit`} className="flex items-center justify-between gap-2 rounded-2xl border-2 border-indigo-200 bg-indigo-50 px-4 py-3 text-indigo-900 font-bold">
+          <span>📄 קיט מסמכים לתביעה</span>
+          <span className="text-xs font-normal text-indigo-700">מולא מההפניה · להקלדה ולהדפסה ←</span>
+        </a>
+        <CustomerLinkPanel referralId={params.id} latest={latest} hasPhone={!!whatsAppUrl(row.phone, 'x')} />
+      </>
+    );
   }
 
   return (
