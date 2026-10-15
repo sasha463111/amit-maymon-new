@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setCollectionClosed, updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
-import { addCaseEvent, addStatusUpdate, finishReminder, reassignCase, saveStageShortcuts, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
+import { addCaseEvent, addStatusUpdate, deleteCaseEvent, finishReminder, reassignCase, saveStageShortcuts, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
 import { FeedbackButton } from '../Feedback';
 import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
@@ -151,6 +151,7 @@ export function CaseFileClient({
           title="פרטי תביעה"
           fields={[
             { k: 'claim_number', label: 'מספר תביעה בחברה', type: 'text', ltr: true },
+            { k: 'tp_claim_number', label: 'מספר תביעה צד ג׳', type: 'text', ltr: true },
             { k: 'claim_stage', label: 'מצב תביעה', type: 'text', list: 'stages' },
             { k: 'work_source', label: 'מקור עבודה', type: 'select', options: Object.entries(WORK_SOURCE_LABEL) },
             { k: 'insurer', label: 'חברת ביטוח', type: 'text', list: 'insurers' },
@@ -174,13 +175,13 @@ export function CaseFileClient({
             { k: 'appraiser_fee', label: 'שכ״ט שמאי', type: 'money' },
             { k: 'depreciation', label: 'ירידת ערך', type: 'money' },
             { k: 'deductible', label: 'השתתפות עצמית', type: 'money' },
-            { k: 'salvage_value', label: 'ערך ניצולת', type: 'money' },
             { k: 'extra_expenses', label: 'הוצאות נוספות', type: 'money' },
             { k: 'amount_due', label: 'סכום חשבונית לתשלום', type: 'money' },
             { k: 'vat_offset', label: 'קיזוז מע״מ', type: 'money' },
             { k: 'reinstatement', label: 'כינון', type: 'money' },
             { k: 'claimed_amount', label: 'סכום שנתבע', type: 'money' },
             { k: 'approved_amount', label: 'סכום שאושר', type: 'money' },
+            { k: 'appraiser_note', label: 'הערות', type: 'text' },
           ]}
         />
       )}
@@ -394,8 +395,9 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
           <div key={e.id} className="rounded-xl border border-gray-200 bg-white p-3">
             <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
               <span className="font-semibold text-gray-700">{KIND_LABEL[e.kind]}</span>
-              <span>
+              <span className="flex items-center gap-2">
                 {at(e.created_at)} · {e.created_by_name ?? ''}
+                {e.can_delete && <DeleteEvent id={e.id} />}
               </span>
             </div>
             <p className="text-sm text-gray-900 whitespace-pre-wrap mt-1">{e.body}</p>
@@ -434,12 +436,18 @@ function show(c: CollectionCase, f: FieldSpec): React.ReactNode {
         {String(v)}
       </a>
     );
-  if (f.type === 'email')
+  if (f.type === 'email') {
+    // Subject ready with plate + claim number (Sapir 15/10: "שליחת מייל לשמאי בלחיצת כפתור").
+    const subject = `רכב ${c.plate}${c.claim_number ? ` · תביעה ${c.claim_number}` : ''}${c.customer_name ? ` · ${c.customer_name}` : ''}`;
     return (
-      <a href={`mailto:${String(v)}`} className="text-indigo-700" dir="ltr">
-        {String(v)}
-      </a>
+      <span className="inline-flex items-center gap-2 flex-wrap">
+        <span dir="ltr">{String(v)}</span>
+        <a href={`mailto:${String(v)}?subject=${encodeURIComponent(subject)}`} className="h-8 px-3 inline-flex items-center rounded-lg bg-indigo-600 text-white text-xs font-bold">
+          📧 שליחת מייל
+        </a>
+      </span>
     );
+  }
   return String(v);
 }
 
@@ -545,11 +553,17 @@ function DetailsTab({ c, title, fields, note }: { c: CollectionCase; title: stri
 
 // ---- documents ---------------------------------------------------------------
 
-const DOC_LABELS = ['דוח שמאי', 'חשבונית', 'צ׳ק / קבלה', 'מייל / תכתובת', 'דרישת תשלום', 'ת״ז / רישיון', 'תמונות', 'אחר'];
+// Galit + Sapir 15/10: the BAFI document set.
+const DOC_LABELS = [
+  'דוח שמאי', 'חשבונית', 'טופס הודעה', 'אי הגשה', 'עבר ביטוחי',
+  'הסכמה למסירת מידע – נהג', 'הסכמה למסירת מידע – בעל הרכב', 'אישור רו״ח', 'אישור ניהול חשבון / צילום צ׳ק', 'הסרת שיעבוד',
+  'ת״ז', 'רישיון רכב', 'רישיון נהיגה', 'צ׳ק / קבלה', 'מייל / תכתובת', 'דרישת תשלום', 'תמונות', 'אחר',
+];
 
 function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
   const router = useRouter();
   const [label, setLabel] = useState(DOC_LABELS[0]);
+  const [view, setView] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const own = files.filter((f) => f.source === 'CASE');
@@ -642,7 +656,17 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
       </div>
       <div className="space-y-2">
         <p className="font-semibold text-sm">מסמכי תיק התביעה ({own.length})</p>
-        {own.length ? <List items={own} /> : <p className="text-sm text-gray-400">עוד לא הועלו מסמכים</p>}
+        {/* By type, one tap (Sapir 15/10). */}
+        {own.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {[['', `הכל (${own.length})`] as const, ...Array.from(new Set(own.map((f) => f.label ?? 'מסמך'))).map((l) => [l, `${l} (${own.filter((f) => (f.label ?? 'מסמך') === l).length})`] as const)].map(([k, text]) => (
+              <button key={k || 'all'} type="button" onClick={() => setView(k)} className={`h-8 px-3 rounded-lg border text-xs font-semibold ${view === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300'}`}>
+                {text}
+              </button>
+            ))}
+          </div>
+        )}
+        {own.length ? <List items={view ? own.filter((f) => (f.label ?? 'מסמך') === view) : own} /> : <p className="text-sm text-gray-400">עוד לא הועלו מסמכים</p>}
       </div>
       {repair.length > 0 && (
         <div className="space-y-2">
@@ -871,6 +895,7 @@ function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: s
                 <span className="text-gray-400 whitespace-nowrap">{at(e.created_at)}</span>
                 <span className="text-gray-800 min-w-0 break-words">{e.body}</span>
                 {e.created_by_name && <span className="text-gray-400 whitespace-nowrap">· {e.created_by_name}</span>}
+                {e.can_delete && <DeleteEvent id={e.id} />}
               </li>
             ))}
           </ul>
@@ -878,6 +903,24 @@ function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: s
       </div>
       {msg && <p className="text-sm">{msg}</p>}
     </div>
+  );
+}
+
+function DeleteEvent({ id }: { id: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    if (!window.confirm('למחוק את העדכון?')) return;
+    setBusy(true);
+    const r = await deleteCaseEvent(id);
+    setBusy(false);
+    if (r.error) return alert(r.error);
+    router.refresh();
+  }
+  return (
+    <button type="button" disabled={busy} onClick={() => void go()} className="text-red-500 hover:text-red-700 text-xs shrink-0 disabled:opacity-40" aria-label="מחיקת העדכון" title="מחיקת העדכון">
+      🗑️
+    </button>
   );
 }
 

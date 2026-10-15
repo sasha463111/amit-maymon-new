@@ -48,7 +48,7 @@ async function me() {
 const CASE_COLS =
   'id, finance_closure_id, assigned_to, opened_at, closed_at, branch_id, plate, customer_name, work_source, insurer, claim_type, case_closed_on, invoice_number, amount_due, vat_offset, reinstatement, claim_check_due_date, claim_check_amount, payment_approved_on, status, received_amount, received_on, partial_reason, offset_amount, note, legal_sent_on, legal_lawyer, legal_claim_amount, legal_closed_on, legal_recovered_amount, legal_reason, vehicle_type, updated_at, updated_by, ' +
   // the case file (20261014350000)
-  'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, external_ref, source, case_id, referral_id';
+  'claim_number, claim_stage, event_date, customer_phone, claimed_amount, approved_amount, appraiser_name, appraiser_phone, appraiser_email, appraiser_damage, appraiser_fee, depreciation, deductible, salvage_value, extra_expenses, insurer_handler, insurer_handler_phone, insurer_handler_email, tp_plate, tp_insurer, tp_claim_number, tp_owner_name, tp_owner_phone, legal_claim_number, appraiser_note, external_ref, source, case_id, referral_id';
 
 export type CollectionCase = {
   id: string;
@@ -114,6 +114,7 @@ export type CaseFileFields = {
   tp_owner_name: string | null;
   tp_owner_phone: string | null;
   legal_claim_number: string | null;
+  appraiser_note: string | null;
   external_ref?: string | null;
   source?: string;
   /** The repair case / referral this claim belongs to (documents + data come from there). */
@@ -431,6 +432,7 @@ export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'exte
   partial_reason?: string | null;
   offset_amount?: number | null;
   note?: string | null;
+  appraiser_note?: string | null;
   legal_sent_on?: string | null;
   legal_lawyer?: string | null;
   legal_claim_amount?: number | null;
@@ -494,6 +496,7 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   for (const k of ['claim_check_due_date', 'payment_approved_on', 'received_on', 'legal_sent_on', 'legal_closed_on'] as const) set(k, u[k] || null);
   set('partial_reason', txt(u.partial_reason, 500));
   set('note', txt(u.note, 500));
+  set('appraiser_note', txt(u.appraiser_note, 500));
   set('legal_lawyer', txt(u.legal_lawyer, 80));
   set('legal_reason', txt(u.legal_reason, 200));
   for (const k of FILE_TEXT) set(k, txt(u[k], 120));

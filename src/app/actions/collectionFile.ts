@@ -66,7 +66,30 @@ export type CaseEvent = {
   remind_done_at: string | null;
   created_by_name: string | null;
   created_at: string;
+  can_delete: boolean;
 };
+
+// Hand-written lines only (Galit 15/10: "אין אפשרות למחוק עדכון"); automatic
+// stage changes ("מצב תביעה: X ← Y", "✅ התביעה נסגרה") stay as the claim's history.
+function deletable(e: { kind: string; body: string }) {
+  return ['NOTE', 'CALL', 'EMAIL', 'DOC'].includes(e.kind) || (e.kind === 'STATUS' && e.body.startsWith('📝'));
+}
+
+export async function deleteCaseEvent(eventId: string): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const { data } = await ctx.db.from('collection_case_events').select('id, case_id, kind, body, created_by').eq('id', eventId).maybeSingle();
+  const ev = data as { case_id: string; kind: string; body: string; created_by: string | null } | null;
+  if (!ev || !(await caseFor(ctx, ev.case_id))) return { error: 'לא נמצא' };
+  if (!deletable(ev)) return { error: 'שינוי מצב אוטומטי לא נמחק — הוא ההיסטוריה של התביעה' };
+  if (!ctx.supervisor && ev.created_by !== ctx.user.id) return { error: 'אפשר למחוק רק עדכון שכתבת' };
+  const { error } = await ctx.db.from('collection_case_events').delete().eq('id', eventId);
+  if (error) return { error: error.message };
+  await ctx.db.from('notifications').update({ read: true } as never).eq('type', 'COLLECTION_REMINDER').eq('action_url', `/collections/${ev.case_id}#r-${eventId}`);
+  revalidatePath(`/collections/${ev.case_id}`);
+  revalidatePath('/collections');
+  return { ok: true };
+}
 export type CaseFile = { id: string; name: string; label: string | null; url: string | null; mime: string | null; size: number | null; by: string | null; at: string; source: 'CASE' | 'REPAIR' | 'REFERRAL' };
 
 export async function getCollectionFile(id: string): Promise<{
@@ -154,6 +177,7 @@ export async function getCollectionFile(id: string): Promise<{
       remind_done_at: e.remind_done_at,
       created_by_name: e.created_by ? nameById.get(e.created_by) ?? null : null,
       created_at: e.created_at,
+      can_delete: deletable(e) && (ctx.supervisor || e.created_by === ctx.user.id),
     })),
     files: [
       ...fls.map((f) => ({ id: f.id, name: f.file_name ?? 'מסמך', label: f.label, url: ownUrl.get(f.file_path) ?? null, mime: f.mime_type, size: f.file_size, by: f.uploaded_by ? nameById.get(f.uploaded_by) ?? null : null, at: f.created_at, source: 'CASE' as const })),

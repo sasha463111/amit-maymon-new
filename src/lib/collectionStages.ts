@@ -18,6 +18,7 @@ export const CLAIM_STAGES: ClaimStage[] = [
   { stage: 'עובר לטיפול עו"ד', days: 14, check: 'לבדוק מול עורך הדין מה המצב' },
   { stage: 'טיפול משפטי', days: 30, check: 'לבדוק מול עורך הדין מה המצב' },
   { stage: 'מטופל ע"י גורם חיצוני', days: 14, check: 'לבדוק מול הגורם החיצוני' },
+  { stage: 'תביעה שולמה – נשלח שיק קרוע ללקוח', days: null, check: '' },
   { stage: 'טיפול הסתיים', days: null, check: '' },
 ];
 
