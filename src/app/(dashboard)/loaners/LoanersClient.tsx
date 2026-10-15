@@ -967,36 +967,93 @@ function testTone(iso: string): string {
 /** Send the customer his copy of the signed documents on WhatsApp. */
 function ShareDialog({ share, onClose }: { share: ShareLink; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'customer' | 'team'>('customer');
+
   return (
-    <Modal title="📲 עותק ללקוח בוואטסאפ" onClose={onClose}>
-      <p className="text-sm text-gray-600">הלקוח מקבל קישור אישי למסמכים שחתם עליהם — כך אין מצב של &quot;לא ידעתי, לא הבנתי&quot;.</p>
-      <pre className="whitespace-pre-wrap text-sm bg-gray-50 rounded-lg p-3 font-[inherit]">{share.message}</pre>
-      <div className="flex gap-2 flex-wrap">
-        {share.whatsapp ? (
-          <a href={share.whatsapp} target="_blank" rel="noopener noreferrer" className="h-11 px-5 rounded-xl bg-green-600 text-white font-bold inline-flex items-center">
-            📲 שליחה בוואטסאפ
-          </a>
-        ) : (
-          <p className="text-sm text-amber-700">אין מספר נייד תקין — העתיקו את ההודעה ושלחו ידנית.</p>
-        )}
+    <Modal title="📲 שליחה בוואטסאפ" onClose={onClose}>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4 border-b border-gray-200">
         <button
-          type="button"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(share.message);
-              setCopied(true);
-            } catch {
-              /* manual copy */
-            }
-          }}
-          className="h-11 px-4 rounded-xl border border-gray-300 text-sm"
+          onClick={() => setActiveTab('customer')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'customer'
+              ? 'border-red-600 text-red-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
         >
-          {copied ? '✓ הועתק' : 'העתקת ההודעה'}
+          👤 ללקוח
         </button>
-        <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-gray-300 text-sm">
-          סגירה
+        <button
+          onClick={() => setActiveTab('team')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'team'
+              ? 'border-red-600 text-red-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          👥 לצוות
         </button>
       </div>
+
+      {/* Customer tab */}
+      {activeTab === 'customer' && (
+        <>
+          <p className="text-sm text-gray-600 mb-3">הלקוח מקבל קישור אישי למסמכים שחתם עליהם — כך אין מצב של &quot;לא ידעתי, לא הבנתי&quot;.</p>
+          <pre className="whitespace-pre-wrap text-sm bg-gray-50 rounded-lg p-3 font-[inherit] mb-4">{share.message}</pre>
+          <div className="flex gap-2 flex-wrap">
+            {share.whatsapp ? (
+              <a href={share.whatsapp} target="_blank" rel="noopener noreferrer" className="h-11 px-5 rounded-xl bg-green-600 text-white font-bold inline-flex items-center">
+                📲 שליחה בוואטסאפ
+              </a>
+            ) : (
+              <p className="text-sm text-amber-700">אין מספר נייד תקין — העתיקו את ההודעה ושלחו ידנית.</p>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(share.message);
+                  setCopied(true);
+                } catch {
+                  /* manual copy */
+                }
+              }}
+              className="h-11 px-4 rounded-xl border border-gray-300 text-sm"
+            >
+              {copied ? '✓ הועתק' : 'העתקת ההודעה'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Team tab */}
+      {activeTab === 'team' && (
+        <>
+          <p className="text-sm text-gray-600 mb-3">הודעה קצרה לצוות עם קישור לעמוד בתהילה.</p>
+          <pre className="whitespace-pre-wrap text-sm bg-gray-50 rounded-lg p-3 font-[inherit] mb-4">{share.team_message}</pre>
+          <div className="flex gap-2 flex-wrap">
+            <p className="text-sm text-amber-600">💡 העתיקו את ההודעה והדביקו לקבוצת ה-WhatsApp של הצוות</p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(share.team_message || '');
+                  setCopied(true);
+                } catch {
+                  /* manual copy */
+                }
+              }}
+              className="h-11 px-4 rounded-xl border border-gray-300 text-sm"
+            >
+              {copied ? '✓ הועתק' : 'העתקת ההודעה'}
+            </button>
+          </div>
+        </>
+      )}
+
+      <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-gray-300 text-sm mt-4">
+        סגירה
+      </button>
     </Modal>
   );
 }

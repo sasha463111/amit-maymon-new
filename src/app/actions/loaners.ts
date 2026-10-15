@@ -316,17 +316,25 @@ export async function createHandover(fd: FormData): Promise<{ error?: string; ok
 // A personal link to the signed documents, opened on WhatsApp to the phone the
 // customer gave. Only the SHA-256 is stored; a new link replaces the old one.
 
-export type ShareLink = { url: string; whatsapp: string | null; message: string };
+export type ShareLink = {
+  url: string;
+  whatsapp: string | null;
+  message: string;
+  team_whatsapp?: string | null;
+  team_message?: string;
+};
 
 async function issueShareLink(db: NonNullable<ReturnType<typeof serviceClient>>, id: string, stage: 'OUT' | 'IN'): Promise<ShareLink | null> {
-  const { data: h } = await db.from('loaner_handovers').select('customer_name, customer_phone, driver_details, loaner_plate').eq('id', id).maybeSingle();
+  const { data: h } = await db.from('loaner_handovers').select('customer_name, customer_phone, driver_details, loaner_plate, loaner_type, given_at').eq('id', id).maybeSingle();
   if (!h) return null;
-  const row = h as { customer_name: string | null; customer_phone: string | null; driver_details: { phone?: string } | null; loaner_plate: string };
+  const row = h as { customer_name: string | null; customer_phone: string | null; driver_details: { phone?: string } | null; loaner_plate: string; loaner_type: string | null; given_at: string };
   const token = newToken();
   const expires = new Date(Date.now() + SHARE_LINK_DAYS * 86_400_000).toISOString();
   const { error } = await db.from('loaner_handovers').update({ share_token_hash: hashToken(token), share_expires_at: expires } as never).eq('id', id);
   if (error) return null;
   const url = `${APP_ORIGIN}/l/${token}`;
+
+  // Customer message (personal link)
   const first = (row.customer_name ?? '').trim().split(/\s+/)[0];
   const message = [
     `${first ? `שלום ${first}` : 'שלום'}, כאן מרכז שירות תהילה.`,
@@ -337,7 +345,24 @@ async function issueShareLink(db: NonNullable<ReturnType<typeof serviceClient>>,
     `הקישור אישי ובתוקף ל-${SHARE_LINK_DAYS} יום. לכל שאלה אנחנו כאן.`,
   ].join('\n');
   const phone = row.driver_details?.phone || row.customer_phone;
-  return { url, message, whatsapp: whatsAppUrl(phone, message) };
+
+  // Team message (link to handover page in Tehila, for internal team)
+  const teamPageUrl = `${APP_ORIGIN}/loaners`;
+  const teamMessage = [
+    `🚗 מסירת רכב חליפי`,
+    `רכב: ${row.loaner_plate}${row.loaner_type ? ` (${row.loaner_type})` : ''}`,
+    `לקוח: ${row.customer_name || '(לא הוזן)'}`,
+    `תאריך: ${new Date(row.given_at).toLocaleDateString('he-IL')}`,
+    `👁️ צפה בפרטים בתהילה: ${teamPageUrl}`,
+  ].join('\n');
+
+  return {
+    url,
+    message,
+    whatsapp: whatsAppUrl(phone, message),
+    team_message: teamMessage,
+    team_whatsapp: whatsAppUrl(null, teamMessage), // Will return null (needs group link or phone)
+  };
 }
 
 /** A fresh link for the customer (e.g. lost the message). */
