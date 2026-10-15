@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
-import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, type SystemUser } from '@/app/actions/users';
+import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, sendTestSmsToMe, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
@@ -32,6 +32,7 @@ export function UsersTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ role: UserRole; office_function: OfficeFunction | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [smsTest, setSmsTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -235,9 +236,25 @@ export function UsersTab({
       <div className="flex items-center gap-2 flex-wrap rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm">
         <span>🔐 קוד SMS בכניסה: {users.filter((x) => x.is_active && x.sms_required).length} פעילים · {users.filter((x) => x.is_active && x.phone).length} עם נייד · {users.filter((x) => x.is_active).length} עובדים</span>
         {smsReady ? (
-          <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleSms('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
-            להפעיל לכולם (עם נייד)
-          </button>
+          <>
+            <button
+              type="button"
+              disabled={busyId === 'SMS_TEST'}
+              onClick={async () => {
+                setBusyId('SMS_TEST');
+                const r = await sendTestSmsToMe();
+                setBusyId(null);
+                setSmsTest(r.error ? `⚠️ ${r.error}` : `✓ נשלחה הודעת בדיקה ל-${r.sentTo}`);
+              }}
+              className="h-8 px-3 rounded-lg border border-indigo-300 bg-white text-indigo-800 text-xs font-semibold disabled:opacity-50"
+            >
+              📱 SMS בדיקה אליי
+            </button>
+            <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleSms('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
+              להפעיל לכולם (עם נייד)
+            </button>
+            {smsTest && <span className="text-xs">{smsTest}</span>}
+          </>
         ) : (
           <span className="text-xs text-amber-800">⏳ ספק ה-SMS עוד לא מחובר — הקוד לא יידרש מאף אחד עד החיבור</span>
         )}

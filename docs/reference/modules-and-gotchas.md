@@ -93,7 +93,8 @@
     - הקוד בן 6 ספרות, נשמר ב-`login_codes` כ-hash בלבד, תקף 5 דקות, עד 5 ניסיונות.
     - אפשר לשלוח SMS אחד בדקה ועד 5 בשעה.
     - ה-SMS מסתיים בשורה `@host #code`, כדי שאנדרואיד יציע מילוי אוטומטי. באייפון הקוד מוצע מעל המקלדת.
-  - **הספק** (`src/lib/sms.server.ts`): InforU v2 (`capi.inforu.co.il/api/v2/SMS/SendSms`, Basic auth עם user:token). הגדרות דרך env בלבד: `SMS_PROVIDER=inforu`, `INFORU_USER`, `INFORU_TOKEN`, `SMS_SENDER` (ברירת מחדל "Tehila"), ורשות `LOGIN_CODE_SECRET`. כל עוד המשתנים לא מוגדרים, הקוד לא נדרש מאף אחד, כך שאף עובד לא יינעל מחוץ למערכת.
+  - **הספק — 019 (תומר, 15/10)** (`src/lib/sms.server.ts`): `SMS_PROVIDER=019`, `SMS019_USER` (שם המשתמש בחשבון), `SMS019_TOKEN` (טוקן API מהממשק של 019: הגדרות → ניהול Token API; לטוקן יש **תאריך תפוגה** — לחדש לפניו). JSON POST ל-`https://019sms.co.il/api` עם Bearer, `status` 0 = התקבל. `sendSms(..., {dryRun})` שולח ל-`/api/test` (בדיקה בלי שליחה). שגיאה מחזירה את הטקסט של 019 (טוקן / שם שולח / יתרה). בהגדרות → עובדים: "📱 SMS בדיקה אליי" (`sendTestSmsToMe`, CEO, לנייד של עצמו) — לבדוק לפני "להפעיל לכולם".
+  - **הספק הקודם / חלופי:** InforU v2 (`capi.inforu.co.il/api/v2/SMS/SendSms`, Basic auth עם user:token). הגדרות דרך env בלבד: `SMS_PROVIDER=inforu`, `INFORU_USER`, `INFORU_TOKEN`, `SMS_SENDER` (ברירת מחדל "Tehila"), ורשות `LOGIN_CODE_SECRET`. כל עוד המשתנים לא מוגדרים, הקוד לא נדרש מאף אחד, כך שאף עובד לא יינעל מחוץ למערכת.
   - **ההגדרות של עמית:** "🔐 קוד SMS" לכל עובד (`setSmsRequired`, אפשר רק אם יש לו נייד; `'ALL'` מפעיל לכל מי שיש לו נייד ומחזיר את רשימת מי שאין לו), ו"שכחת טלפונים" (`forgetTrustedDevices`).
   - **Duo** (`/mfa`, `mfa_required`) נשאר בקוד אבל כבוי, ושורת ה-Duo הוסרה מההגדרות.
 - **📱 נייד לכל עובד + שליחת פוש (15/10, עמית; מיגרציה `20261015110000`):**

@@ -342,6 +342,22 @@ export async function setSmsRequired(userId: string, required: boolean): Promise
   return { ok: true, count: ids.length, withoutPhone: list.filter((p) => !phones.has(p.id)).map((p) => p.full_name ?? '—') };
 }
 
+/** CEO only: a test SMS to MY OWN mobile (staff_phones) — to check the provider
+ *  (token, sender name, balance) before requiring the code from anyone. */
+export async function sendTestSmsToMe(): Promise<{ ok?: true; error?: string; sentTo?: string }> {
+  const { error, userId } = await requireCeo();
+  if (error || !userId) return { error: error ?? 'אין הרשאה' };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { data: ph } = await admin.from('staff_phones').select('phone').eq('user_id', userId).maybeSingle();
+  const phone = (ph as { phone: string } | null)?.phone;
+  if (!phone) return { error: 'אין לך מספר נייד במערכת — הוסף אותו בשורה שלך למטה' };
+  const { sendSms } = await import('@/lib/sms.server');
+  const r = await sendSms(phone, 'בדיקת SMS ממערכת תהילה ✓ אם ההודעה הגיעה — הספק מחובר.');
+  if (r.error) return { error: r.error };
+  return { ok: true, sentTo: phone.replace(/\D/g, '').replace(/^(\d{3})\d+(\d{3})$/, '$1-•••-$2') };
+}
+
 /** CEO only: forget a person's remembered phones (lost phone) — the next sign-in asks for a code. */
 export async function forgetTrustedDevices(userId: string): Promise<{ ok?: true; error?: string }> {
   const { error } = await requireCeo();
