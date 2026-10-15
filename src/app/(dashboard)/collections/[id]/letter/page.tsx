@@ -21,5 +21,6 @@ export default async function CollectionLetterPage({ params }: { params: { id: s
     );
   }
   const { data: me } = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle();
-  return <LetterClient c={r.c} senderName={(me as { full_name: string | null } | null)?.full_name ?? ''} />;
+  const docLabels = r.files.filter((f) => f.source === 'CASE').map((f) => f.label ?? '');
+  return <LetterClient c={r.c} senderName={(me as { full_name: string | null } | null)?.full_name ?? ''} docLabels={docLabels} />;
 }

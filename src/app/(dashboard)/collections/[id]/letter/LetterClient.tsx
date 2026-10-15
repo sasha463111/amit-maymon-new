@@ -10,9 +10,27 @@ import { formatDate } from '@/lib/dates';
 import { ils, toCollect, today } from '../../shared';
 
 const SENT_STAGE = 'הוגשה דרישת תשלום';
-const ATTACH = ['חשבונית מס', 'דוח שמאי', 'צילום רישיון רכב', 'כתב הרשאה / המחאת זכות', 'תמונות הנזק'];
+// Each attachment ↔ the document types in the claim's "מסמכים" that prove it.
+// Sapir 15/10: what was already scanned into the claim is ticked by itself.
+const ATTACH: { name: string; labels: string[] }[] = [
+  { name: 'חשבונית מס', labels: ['חשבונית'] },
+  { name: 'דוח שמאי', labels: ['דוח שמאי'] },
+  { name: 'טופס הודעה', labels: ['טופס הודעה'] },
+  { name: 'אי הגשה', labels: ['אי הגשה'] },
+  { name: 'עבר ביטוחי', labels: ['עבר ביטוחי'] },
+  { name: 'תעודת זהות', labels: ['ת״ז', 'ת״ז / רישיון'] },
+  { name: 'רישיון רכב', labels: ['רישיון רכב'] },
+  { name: 'רישיון נהיגה', labels: ['רישיון נהיגה'] },
+  { name: 'הסכמות למסירת מידע', labels: ['הסכמה למסירת מידע – נהג', 'הסכמה למסירת מידע – בעל הרכב'] },
+  { name: 'אישור ניהול חשבון / המחאה', labels: ['אישור ניהול חשבון / צילום צ׳ק'] },
+  { name: 'הסרת שיעבוד', labels: ['הסרת שיעבוד'] },
+  { name: 'אישור רואה חשבון', labels: ['אישור רו״ח'] },
+  { name: 'כתב הרשאה / המחאת זכות', labels: [] },
+  { name: 'תמונות הנזק', labels: ['תמונות'] },
+];
 
-export function LetterClient({ c, senderName }: { c: CollectionCase; senderName: string }) {
+export function LetterClient({ c, senderName, docLabels = [] }: { c: CollectionCase; senderName: string; docLabels?: string[] }) {
+  const inCase = (a: (typeof ATTACH)[number]) => a.labels.some((l) => docLabels.includes(l));
   const router = useRouter();
   const tp = c.claim_type === THIRD_PARTY;
   const [to, setTo] = useState((tp ? c.tp_insurer : null) || payerOf(c));
@@ -22,7 +40,10 @@ export function LetterClient({ c, senderName }: { c: CollectionCase; senderName:
   const [sender, setSender] = useState(senderName);
   const [phone, setPhone] = useState('');
   const [extra, setExtra] = useState('');
-  const [attach, setAttach] = useState<string[]>(['חשבונית מס', 'דוח שמאי']);
+  const [attach, setAttach] = useState<string[]>(() => {
+    const scanned = ATTACH.filter(inCase).map((a) => a.name);
+    return scanned.length ? scanned : ['חשבונית מס', 'דוח שמאי'];
+  });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -93,13 +114,17 @@ export function LetterClient({ c, senderName }: { c: CollectionCase; senderName:
           <label className={label}>טלפון לבירורים<input value={phone} onChange={(e) => setPhone(e.target.value)} dir="ltr" className={input} /></label>
           <label className={label}>פסקה נוספת (רשות)<textarea value={extra} onChange={(e) => setExtra(e.target.value)} rows={3} className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm" /></label>
           <div className="space-y-1">
-            <p className="text-xs text-gray-500">מצורפים</p>
-            {ATTACH.map((a) => (
-              <label key={a} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="w-4 h-4" checked={attach.includes(a)} onChange={(e) => setAttach((p) => (e.target.checked ? [...p, a] : p.filter((x) => x !== a)))} />
-                {a}
-              </label>
-            ))}
+            <p className="text-xs text-gray-500">מצורפים — ✓ = כבר נסרק לתיק (מסומן לבד)</p>
+            {ATTACH.map((a) => {
+              const has = inCase(a);
+              return (
+                <label key={a.name} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="w-4 h-4" checked={attach.includes(a.name)} onChange={(e) => setAttach((p) => (e.target.checked ? [...p, a.name] : p.filter((x) => x !== a.name)))} />
+                  <span className="flex-1">{a.name}</span>
+                  {has ? <span className="text-[11px] font-semibold text-green-700">✓ בתיק</span> : a.labels.length > 0 && <span className="text-[11px] text-gray-400">חסר</span>}
+                </label>
+              );
+            })}
           </div>
           <div className="space-y-2 pt-2">
             <button type="button" onClick={() => window.print()} className="w-full h-11 rounded-xl bg-gray-900 text-white font-bold">🖨️ הדפסה / שמירה כ-PDF</button>
