@@ -27,5 +27,9 @@ export const INSURER_CHECKS: InsurerCheck[] = [
   { name: 'WeSure', url: 'https://www.we-sure.co.il/%d7%91%d7%93%d7%99%d7%a7%d7%aa-%d7%aa%d7%95%d7%a7%d7%a3-%d7%94%d7%91%d7%99%d7%98%d7%95%d7%97/' },
   { name: 'קש', url: 'https://user.kesh-ins.co.il/Check_insurance' },
   { name: 'חקלאי', url: 'https://www.bth.co.il/check-insurance/' },
+  // Galit 15/10. These three have no plate check like the others — the note says what to do.
+  { name: 'סקוריטס', url: 'https://customers.securitas.co.il/SecuriNet/?Public=Y', note: 'רכב כבד בלבד (משאיות, אוטובוסים, נגררים) — "בירור קיום רכב מבוטח"' },
+  { name: 'שלמה סיקסט', url: 'https://www.shlomo.co.il/road', note: 'רכב שכור / ליסינג — אין בדיקה אונליין; שירות תביעות ‎*6448' },
+  { name: 'משרד הביטחון', url: 'https://mod.gov.il/%D7%A9%D7%99%D7%A8%D7%95%D7%AA-%D7%9C%D7%90%D7%96%D7%A8%D7%97/%D7%AA%D7%91%D7%99%D7%A2%D7%95%D7%AA-%D7%95%D7%95%D7%A2%D7%93%D7%95%D7%AA/%D7%AA%D7%91%D7%99%D7%A2%D7%95%D7%AA-%D7%A0%D7%96%D7%99%D7%A7%D7%99%D7%9F', note: 'רכב צבאי — אין בדיקה אונליין; נוהל התביעה והמסמכים בעמוד, מידע 03-7380805' },
   { name: 'קרנית', url: 'https://www.karnit.co.il/inquiry/', note: 'כשלא נמצא ביטוח בשום חברה' },
 ];
