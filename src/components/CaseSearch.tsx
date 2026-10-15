@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { searchCases, type CaseHit } from '@/app/actions/search';
+import { searchCollectionCases } from '@/app/actions/collections';
 import { formatDate } from '@/lib/dates';
+
+type Claim = Awaited<ReturnType<typeof searchCollectionCases>>[number];
 
 /** 🔍 in the header, on every page: find a case by plate or customer name and
  *  open it (through /go, so each role lands on its own case page). */
@@ -13,6 +16,7 @@ export function CaseSearch() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<CaseHit[]>([]);
+  const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +40,7 @@ export function CaseSearch() {
     const term = q.trim();
     if (term.length < 2) {
       setHits([]);
+      setClaims([]);
       setError(null);
       setLoading(false);
       return;
@@ -43,9 +48,13 @@ export function CaseSearch() {
     setLoading(true);
     const id = ++seq.current;
     const t = setTimeout(async () => {
-      const res = await searchCases(term).catch(() => ({ hits: [], error: 'שגיאה בחיפוש' }));
+      const [res, cl] = await Promise.all([
+        searchCases(term).catch(() => ({ hits: [] as CaseHit[], error: 'שגיאה בחיפוש' })),
+        searchCollectionCases(term).catch(() => [] as Claim[]),
+      ]);
       if (id !== seq.current) return;
       setHits(res.hits);
+      setClaims(cl);
       setError(res.error ?? null);
       setLoading(false);
     }, 250);
@@ -80,7 +89,9 @@ export function CaseSearch() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && hits[0]) go(hits[0]);
+                  if (e.key !== 'Enter') return;
+                  if (claims[0]) { setOpen(false); setQ(''); router.push(`/collections/${claims[0].id}`); }
+                  else if (hits[0]) go(hits[0]);
                 }}
                 inputMode="search"
                 placeholder="מספר רכב או שם לקוח…"
@@ -94,14 +105,32 @@ export function CaseSearch() {
             <div className="max-h-[65vh] overflow-y-auto">
               {q.trim().length < 2 ? (
                 <p className="px-4 py-6 text-sm text-gray-400 text-center">הקלידו לפחות 2 תווים — מספר רכב (גם חלקי) או שם לקוח</p>
-              ) : loading && hits.length === 0 ? (
+              ) : loading && hits.length === 0 && claims.length === 0 ? (
                 <p className="px-4 py-6 text-sm text-gray-400 text-center">מחפש…</p>
-              ) : error ? (
-                <p className="px-4 py-6 text-sm text-red-600 text-center">⚠️ {error}</p>
-              ) : hits.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-gray-500 text-center">לא נמצא תיק</p>
+              ) : hits.length === 0 && claims.length === 0 ? (
+                error ? <p className="px-4 py-6 text-sm text-red-600 text-center">⚠️ {error}</p> : <p className="px-4 py-6 text-sm text-gray-500 text-center">לא נמצא תיק</p>
               ) : (
                 <ul>
+                  {claims.map((c) => (
+                    <li key={`claim-${c.id}`}>
+                      <button
+                        type="button"
+                        onClick={() => { setOpen(false); setQ(''); router.push(`/collections/${c.id}`); }}
+                        className="w-full text-right px-4 py-3 border-b border-gray-100 hover:bg-gray-50 flex items-center justify-between gap-3"
+                      >
+                        <span className="min-w-0">
+                          <span className="font-bold text-gray-900 tracking-wide">{c.plate}</span>
+                          {c.customer && <span className="text-gray-700"> · {c.customer}</span>}
+                          <span className="block text-xs text-gray-500 mt-0.5">
+                            תביעת ביטוח{c.stage ? ` · ${c.stage}` : ''}{c.openedAt ? ` · נפתח ${formatDate(c.openedAt)}` : ''}
+                          </span>
+                        </span>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${c.closed ? 'bg-gray-100 text-gray-500' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
+                          {c.closed ? 'סגורה' : 'תביעה'}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
                   {hits.map((h) => (
                     <li key={h.id}>
                       <button

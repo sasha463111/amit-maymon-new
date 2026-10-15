@@ -126,6 +126,29 @@ const FILE_MONEY = ['claimed_amount', 'approved_amount', 'appraiser_damage', 'ap
 
 const NUMS = ['amount_due', 'vat_offset', 'reinstatement', 'claim_check_amount', 'received_amount', 'offset_amount', 'legal_claim_amount', 'legal_recovered_amount', ...FILE_MONEY] as const;
 
+/** Header 🔍: claims by customer name or plate, same visibility as the claims list. */
+export async function searchCollectionCases(raw: string): Promise<{ id: string; plate: string; customer: string | null; stage: string | null; openedAt: string | null; closed: boolean }[]> {
+  const ctx = await me();
+  const db = serviceClient();
+  if (!ctx || !db) return [];
+  const q = raw.replace(/[%_,()*\\]/g, ' ').trim().slice(0, 60);
+  if (q.length < 2) return [];
+  const digits = q.replace(/\D/g, '');
+  const isPlate = digits.length >= 3 && digits.length === q.replace(/[\s-]/g, '').length;
+  let s = db.from('collection_cases').select('id, plate, customer_name, claim_stage, opened_at, closed_at').limit(20);
+  s = isPlate ? s.ilike('plate', `%${digits}%`) : s.ilike('customer_name', `%${q}%`);
+  if (!ctx.supervisor) s = s.eq('assigned_to', ctx.user.id);
+  const { data } = await s;
+  return ((data ?? []) as { id: string; plate: string | null; customer_name: string | null; claim_stage: string | null; opened_at: string | null; closed_at: string | null }[]).map((r) => ({
+    id: r.id,
+    plate: r.plate || '—',
+    customer: r.customer_name,
+    stage: r.claim_stage,
+    openedAt: r.opened_at,
+    closed: !!r.closed_at,
+  }));
+}
+
 export async function listCollectionCases(): Promise<{
   cases: CollectionCase[];
   collectors: { id: string; name: string }[];
