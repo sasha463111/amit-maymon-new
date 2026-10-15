@@ -56,6 +56,8 @@ export interface SystemUser {
   /** Two-step login (Duo): required for this person / already enrolled. */
   mfa_required: boolean;
   mfa_enrolled: boolean;
+  /** Mobile number (staff_phones, CEO only) — "050-1234567". */
+  phone: string | null;
 }
 
 export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: string | null }> {
@@ -93,6 +95,8 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
         admin.from('push_subscriptions').select('user_id').then((r) => (r.data ?? []) as { user_id: string }[]),
       ])
     : [[], []];
+  const phoneRows = admin ? (((await admin.from('staff_phones').select('user_id, phone')).data ?? []) as { user_id: string; phone: string }[]) : [];
+  const phoneById = new Map(phoneRows.map((p) => [p.user_id, p.phone]));
   const authById = new Map(usersPage.map((u) => [u.id, u]));
   const pushSet = new Set(pushRows.map((r) => r.user_id));
 
@@ -111,6 +115,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     is_staff: (authById.get(r.id)?.email ?? '').toLowerCase().endsWith(STAFF_EMAIL_DOMAIN),
     mfa_required: !!r.mfa_required,
     mfa_enrolled: (authById.get(r.id)?.factors ?? []).some((f) => f.status === 'verified'),
+    phone: phoneById.get(r.id) ?? null,
   }));
   // Real staff first, test accounts last.
   users.sort((a, b) => Number(b.is_staff) - Number(a.is_staff));
@@ -283,6 +288,27 @@ export async function createNewSystemUser(params: {
 
   revalidatePath('/settings');
   return { ok: true, userId: authUser.user.id, email, password };
+}
+
+/** CEO only: a staff member's mobile number (Amit, 15/10). Empty = remove. */
+export async function setStaffPhone(userId: string, raw: string): Promise<{ ok?: true; error?: string; phone?: string | null }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  let d = (raw ?? '').replace(/\D/g, '');
+  if (d.startsWith('972')) d = '0' + d.slice(3);
+  if (!d) {
+    await admin.from('staff_phones').delete().eq('user_id', userId);
+    revalidatePath('/settings');
+    return { ok: true, phone: null };
+  }
+  if (!/^05\d{8}$/.test(d)) return { error: 'מספר נייד לא תקין (05X-XXXXXXX)' };
+  const phone = `${d.slice(0, 3)}-${d.slice(3)}`;
+  const { error: upErr } = await admin.from('staff_phones').upsert({ user_id: userId, phone, updated_at: new Date().toISOString() } as never, { onConflict: 'user_id' });
+  if (upErr) return { error: upErr.message };
+  revalidatePath('/settings');
+  return { ok: true, phone };
 }
 
 /** CEO only: require Duo for one person, or for everyone (userId = 'ALL'). */

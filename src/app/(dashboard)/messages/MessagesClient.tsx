@@ -258,7 +258,12 @@ function NewMessage({ onSent }: { onSent: () => void }) {
         placeholder="כתבו כאן את ההודעה…"
         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-y"
       />
-      <p className="text-sm font-medium text-gray-700 mt-3 mb-2">למי לשלוח?</p>
+      <div className="flex items-center gap-3 mt-3 mb-2 flex-wrap">
+        <p className="text-sm font-medium text-gray-700">למי לשלוח?</p>
+        <button type="button" onClick={() => setSelected(new Set(recipients.map((r) => r.id)))} className="text-xs text-indigo-700 underline">בחירת כולם</button>
+        {selected.size > 0 && <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-gray-500 underline">ניקוי</button>}
+        <span className="text-[11px] text-gray-400">🔔 = תגיע התראה לטלפון · 🔕 = רק בתוך המערכת (לא אישר התראות)</span>
+      </div>
       <div className="flex flex-wrap gap-2">
         {recipients.length === 0 && <span className="text-xs text-gray-400">טוען רשימה…</span>}
         {recipients.map((r) => {
@@ -273,7 +278,7 @@ function NewMessage({ onSent }: { onSent: () => void }) {
               }`}
             >
               {on ? '✓ ' : ''}
-              {r.name} <span className={on ? 'text-indigo-100' : 'text-gray-400'}>· {r.role}</span>
+              {r.name} <span className={on ? 'text-indigo-100' : 'text-gray-400'}>· {r.role}</span> {r.has_push ? '🔔' : '🔕'}
             </button>
           );
         })}

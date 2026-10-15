@@ -24,7 +24,7 @@ function serviceClient() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-export type NoteRecipient = { id: string; name: string; role: string };
+export type NoteRecipient = { id: string; name: string; role: string; has_push?: boolean };
 
 const ROLE_LABEL: Record<string, string> = {
   CEO: 'מנכ"ל',
@@ -37,14 +37,16 @@ const ROLE_LABEL: Record<string, string> = {
 async function staffList(): Promise<NoteRecipient[]> {
   const db = serviceClient();
   if (!db) return [];
-  const [{ data: profiles }, { data: usersPage }] = await Promise.all([
+  const [{ data: profiles }, { data: usersPage }, { data: subs }] = await Promise.all([
     db.from('profiles').select('id, full_name, role').eq('is_active', true),
     db.auth.admin.listUsers({ perPage: 1000 }),
+    db.from('push_subscriptions').select('user_id'),
   ]);
+  const pushSet = new Set(((subs ?? []) as { user_id: string }[]).map((s) => s.user_id));
   const emailById = new Map((usersPage?.users ?? []).map((u) => [u.id, (u.email ?? '').toLowerCase()]));
   return ((profiles ?? []) as { id: string; full_name: string | null; role: string }[])
     .filter((p) => (emailById.get(p.id) ?? '').endsWith(STAFF_EMAIL_DOMAIN))
-    .map((p) => ({ id: p.id, name: p.full_name || '—', role: ROLE_LABEL[p.role] ?? p.role }))
+    .map((p) => ({ id: p.id, name: p.full_name || '—', role: ROLE_LABEL[p.role] ?? p.role, has_push: pushSet.has(p.id) }))
     .sort((a, b) => a.role.localeCompare(b.role, 'he') || a.name.localeCompare(b.name, 'he'));
 }
 

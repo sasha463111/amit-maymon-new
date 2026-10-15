@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
-import { updateSystemUser, startViewAsUser, resetUserPassword, resetUserMfa, setMfaRequired, type SystemUser } from '@/app/actions/users';
+import { updateSystemUser, startViewAsUser, resetUserPassword, resetUserMfa, setMfaRequired, setStaffPhone, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
@@ -35,7 +35,8 @@ export function UsersTab({
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
   const [pushTestBusy, setPushTestBusy] = useState(false);
   // Personal passwords (Amit, 15/10): only the CEO resets; shown once.
-  const [revealed, setRevealed] = useState<{ name: string; email: string; password: string } | null>(null);
+  const [revealed, setRevealed] = useState<{ name: string; email: string; password: string; phone?: string | null } | null>(null);
+  const [phoneEdit, setPhoneEdit] = useState<{ id: string; value: string } | null>(null);
 
   async function resetPassword(u: SystemUser) {
     if (!window.confirm(`לאפס את הסיסמה של ${u.full_name}? הסיסמה הקודמת תפסיק לעבוד מיד.`)) return;
@@ -44,7 +45,7 @@ export function UsersTab({
     const r = await resetUserPassword(u.id);
     setBusyId(null);
     if (r.error || !r.password) return setError(r.error ?? 'האיפוס נכשל');
-    setRevealed({ name: r.name || u.full_name, email: r.email ?? '', password: r.password });
+    setRevealed({ name: r.name || u.full_name, email: r.email ?? '', password: r.password, phone: u.phone });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -68,6 +69,47 @@ export function UsersTab({
     if (r.error) return setError(r.error);
     setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, mfa_enrolled: false } : x)));
   }
+
+  async function savePhone(u: SystemUser) {
+    if (!phoneEdit) return;
+    setBusyId(u.id);
+    setError(null);
+    const r = await setStaffPhone(u.id, phoneEdit.value);
+    setBusyId(null);
+    if (r.error) return setError(r.error);
+    setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, phone: r.phone ?? null } : x)));
+    setPhoneEdit(null);
+  }
+
+  // Mobile number (Amit, 15/10): call / WhatsApp, edit inline.
+  const phoneLine = (u: SystemUser) =>
+    phoneEdit?.id === u.id ? (
+      <span className="inline-flex items-center gap-1.5 text-[11px]">
+        <input
+          value={phoneEdit.value}
+          onChange={(e) => setPhoneEdit({ id: u.id, value: e.target.value })}
+          onKeyDown={(e) => e.key === 'Enter' && void savePhone(u)}
+          inputMode="tel"
+          dir="ltr"
+          placeholder="050-1234567"
+          autoFocus
+          className="w-32 border border-gray-300 rounded px-2 py-0.5 text-xs"
+        />
+        <button type="button" disabled={busyId === u.id} onClick={() => void savePhone(u)} className="text-green-700 font-semibold">שמירה</button>
+        <button type="button" onClick={() => setPhoneEdit(null)} className="text-gray-500">ביטול</button>
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
+        <span className={u.phone ? 'text-gray-700' : 'text-gray-400'}>📱 {u.phone ?? 'אין נייד'}</span>
+        {u.phone && (
+          <>
+            <a href={`tel:${u.phone.replace(/\D/g, '')}`} className="underline text-indigo-700">חיוג</a>
+            <a href={`https://wa.me/972${u.phone.replace(/\D/g, '').slice(1)}`} target="_blank" rel="noreferrer" className="underline text-green-700">וואטסאפ</a>
+          </>
+        )}
+        <button type="button" onClick={() => setPhoneEdit({ id: u.id, value: u.phone ?? '' })} className="underline text-indigo-700">{u.phone ? 'עריכה' : 'הוספה'}</button>
+      </span>
+    );
 
   const mfaLine = (u: SystemUser) => (
     <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
@@ -196,7 +238,7 @@ export function UsersTab({
           להפעיל לכולם
         </button>
       </div>
-      {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} onClose={() => setRevealed(null)} />}
+      {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} phone={revealed.phone} onClose={() => setRevealed(null)} />}
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
           ⚠️ {error}
@@ -295,6 +337,7 @@ export function UsersTab({
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{u.full_name}</p>
                       <UserMeta u={u} />
+                      {phoneLine(u)}
                       {mfaLine(u)}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {jobLabel(u.role, u.office_function)}
@@ -373,6 +416,7 @@ export function UsersTab({
                       <>
                         <span className="font-semibold text-gray-800">{u.full_name}</span>
                         <UserMeta u={u} />
+                      {phoneLine(u)}
                       {mfaLine(u)}
                       </>
                     )}

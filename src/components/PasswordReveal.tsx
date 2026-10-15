@@ -9,7 +9,7 @@ import { passwordMessage } from '@/lib/passwordMessage';
 
 const SITE = 'https://amit-maymon-new-psi.vercel.app';
 
-export function PasswordReveal({ name, email, password, onClose }: { name: string; email: string; password: string; onClose: () => void }) {
+export function PasswordReveal({ name, email, password, phone, onClose }: { name: string; email: string; password: string; phone?: string | null; onClose: () => void }) {
   const [copied, setCopied] = useState<string | null>(null);
   const msg = passwordMessage(name, email, password, SITE);
 
@@ -39,8 +39,8 @@ export function PasswordReveal({ name, email, password, onClose }: { name: strin
         <button type="button" onClick={() => void copy(msg, 'msg')} className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-xs font-semibold">
           {copied === 'msg' ? '✓ ההודעה הועתקה' : '📋 העתקת הודעה מוכנה'}
         </button>
-        <a href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer" className="h-9 px-3 inline-flex items-center rounded-lg bg-green-600 text-white text-xs font-semibold">
-          💬 שליחה בוואטסאפ
+        <a href={`https://wa.me/${phone ? `972${phone.replace(/\D/g, '').slice(1)}` : ''}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer" className="h-9 px-3 inline-flex items-center rounded-lg bg-green-600 text-white text-xs font-semibold">
+          💬 {phone ? `שליחה בוואטסאפ ל-${phone}` : 'שליחה בוואטסאפ'}
         </a>
         <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg text-xs text-gray-600">
           סגירה
