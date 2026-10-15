@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -30,7 +30,7 @@ function daysSince(iso: string): number {
 }
 
 export function ReturnsClient({
-  rows,
+  rows: allRows,
   role,
   branches,
   error,
@@ -52,6 +52,28 @@ export function ReturnsClient({
   // no table, no search — the warehouse and Roey do the rest.
   const isPainter = role === 'PAINTER';
   const canCredit = CREDIT_ROLES.has(role);
+
+  // Branch filter (Liron 15/10: "אין סינון בין הסניפים") — every tab, count and
+  // search follows it; remembered on this device.
+  const branchNames = useMemo(() => Array.from(new Set(allRows.map((r) => r.branch_name).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'he')), [allRows]);
+  const [branch, setBranchState] = useState('');
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('returns-branch') ?? '';
+      if (saved && branchNames.includes(saved)) setBranchState(saved);
+    } catch {
+      /* no storage — show all */
+    }
+  }, [branchNames]);
+  function setBranch(b: string) {
+    setBranchState(b);
+    try {
+      localStorage.setItem('returns-branch', b);
+    } catch {
+      /* ignore */
+    }
+  }
+  const rows = useMemo(() => (branch ? allRows.filter((r) => r.branch_name === branch) : allRows), [allRows, branch]);
 
   const waiting = rows.filter((r) => r.status === 'WAITING_PICKUP');
   const forCredit = rows.filter((r) => r.status === 'COLLECTED' || r.status === 'DISPUTE');
@@ -99,6 +121,17 @@ export function ReturnsClient({
           📷 חלק להחזרה
         </button>
       </div>
+
+      {branchNames.length > 1 && (
+        <div className="flex gap-1.5 flex-wrap items-center">
+          <span className="text-xs text-gray-500">סניף:</span>
+          {[['', `כל הסניפים (${allRows.length})`], ...branchNames.map((b) => [b, `${b} (${allRows.filter((r) => r.branch_name === b).length})`])].map(([k, text]) => (
+            <button key={k || 'all'} type="button" onClick={() => setBranch(k)} className={`h-9 px-4 rounded-lg border text-sm font-semibold ${branch === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300 text-gray-700'}`}>
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
 
       {toast && <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-4 py-2 text-sm font-semibold">{toast}</div>}
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
