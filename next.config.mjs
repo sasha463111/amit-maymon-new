@@ -8,6 +8,10 @@ const nextConfig = {
   // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.
   experimental: {
     serverActions: { bodySizeLimit: '4mb' },
+    // The advisor chat (/requests) reads the system docs at runtime (~95KB, traced into every function — the per-route key did not match the route group).
+    outputFileTracingIncludes: {
+      '/**': ['./docs/reference/modules-and-gotchas.md', './docs/reference/automation-notifications.md'],
+    },
   },
 };
 

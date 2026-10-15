@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { addRequestMessage, createAppRequest, setRequestStatus, type AppRequest, type RequestStatus } from '@/app/actions/appRequests';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { AdvisorChat } from './AdvisorChat';
+import type { AdvisorMessage } from '@/app/actions/advisor';
 
 // "💡 הצעות ייעול" (Amit, 15/10): write a request (+ a screenshot), see every
 // answer from the development team in the same thread, and its status.
@@ -57,10 +59,15 @@ function Composer({ requestId, onDone, placeholder, cta }: { requestId?: string;
   );
 }
 
-export function RequestsClient({ items }: { items: AppRequest[] }) {
+export function RequestsClient({ items, advisor }: { items: AppRequest[]; advisor: { available: boolean; messages: AdvisorMessage[] } }) {
   const router = useRouter();
   const [hash, setHash] = useState('');
-  useEffect(() => setHash(window.location.hash.slice(1)), []);
+  const [tab, setTab] = useState<'chat' | 'requests'>(advisor.available ? 'chat' : 'requests');
+  useEffect(() => {
+    const h = window.location.hash.slice(1);
+    setHash(h);
+    if (h) setTab('requests');
+  }, []);
   const open = items.filter((r) => r.status === 'NEW' || r.status === 'IN_PROGRESS');
   const closed = items.filter((r) => r.status === 'DONE' || r.status === 'NO');
 
@@ -103,8 +110,19 @@ export function RequestsClient({ items }: { items: AppRequest[] }) {
     <div className="max-w-3xl mx-auto space-y-5" dir="rtl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">💡 הצעות ייעול</h1>
-        <p className="text-sm text-gray-500">כותבים כאן כל שינוי או רעיון למערכת. צוות הפיתוח עונה כאן, ומקבלים התראה לטלפון כשיש תשובה או כשמשהו בוצע.</p>
+        <p className="text-sm text-gray-500">מתייעצים עם היועץ של המערכת, או כותבים בקשה לשינוי. כל שינוי עובר לאישור תומר, ומקבלים התראה לטלפון כשמשהו בוצע.</p>
       </div>
+      <div className="flex gap-2 border-b border-gray-200">
+        {([['chat', '🤖 התייעצות'], ['requests', `💡 בקשות (${open.length} פתוחות)`]] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setTab(k)} className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {tab === 'chat' ? (
+        <AdvisorChat available={advisor.available} messages={advisor.messages} />
+      ) : (
+      <>
       <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-4 space-y-2">
         <p className="font-bold text-amber-900">➕ בקשה חדשה</p>
         <Composer onDone={() => router.refresh()} placeholder="מה לשנות / להוסיף? למשל: במקום ״מכתב דרישת תשלום״ ← ״צור מכתב דרישת תשלום״" cta="שליחת הבקשה" />
@@ -119,6 +137,8 @@ export function RequestsClient({ items }: { items: AppRequest[] }) {
           <h2 className="font-bold text-gray-800">הסתיימו ({closed.length})</h2>
           {closed.map(card)}
         </section>
+      )}
+      </>
       )}
     </div>
   );

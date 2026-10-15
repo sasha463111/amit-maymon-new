@@ -99,6 +99,13 @@
   - **המספרים:** טבלה `staff_phones`, server-only, ולא עמודה ב-`profiles`, כי את `profiles` כל משתמש מחובר יכול לקרוא. ב"משתמשים" עמית מוסיף ועורך (`setStaffPhone`, CEO בלבד, פורמט `05X-XXXXXXX`), עם קישורי חיוג ווואטסאפ. ב-`PasswordReveal` הוואטסאפ עם הסיסמה החדשה נשלח ישר למספר.
   - **פוש מהמערכת כבר קיים:** "הודעות" ← "+ הודעה חדשה" (`sendGeneralMessage`, DIRECT_NOTE ← פוש).
   - **מה נוסף שם:** "בחירת כולם" / "ניקוי", ו-🔔/🔕 ליד כל נמען: האם יש לו מכשיר רשום לפוש (`push_subscriptions`). מי שמסומן 🔕 רואה את ההודעה רק בתוך המערכת.
+- **🤖 התייעצות: עמית מדבר עם Claude (15/10; מיגרציה `20261015130000`; מנכ"ל בלבד):** לשונית ראשונה ב-`/requests` (`AdvisorChat`).
+  - **הצ'אט:** `actions/advisor.ts` (`getAdvisor`, `askAdvisor`, `clearAdvisor`) ו-`src/lib/advisor.server.ts` (`claude-sonnet-5-5`).
+    - הידע שלו הוא קבצי התיעוד `modules-and-gotchas.md` ו-`automation-notifications.md`, שנקראים מהדיסק. ב-`next.config.mjs` הם מוגדרים ב-`outputFileTracingIncludes` כדי שייכללו בשרת, והם נשמרים ב-cache (prompt caching).
+    - הוא עונה בעברית פשוטה, לא רואה נתונים חיים ולא משנה כלום.
+  - **בקשות:** הכלי `file_request` נקרא רק אחרי שעמית אישר. הוא רושם את הבקשה ב-`app_requests`, ותומר מקבל פוש "ממתינה לאישורך". כלל: כל שינוי עובר דרך תומר (אפשרות ב׳).
+  - **השיחה** נשמרת ב-`advisor_messages`, ונשלחות למודל 30 ההודעות האחרונות. "שיחה חדשה" מוחק את השיחה, והבקשות שנרשמו נשארות.
+  - **המפתח:** אותו מפתח של קריאת המדבקות (`apiKey()` ב-`stickerReader.ts`: `ANTHROPIC_API_KEY` ב-env או ב-Vault). בלי מפתח מוצגת ההודעה "היועץ עוד לא מחובר".
 - **💡 הצעות ייעול (`/requests`, 15/10, עמית; מיגרציה `20261015100000`; מנכ"ל בלבד):** מחליף את GitHub Discussions, שנסגרו כשהריפו הפך לפרטי.
   - **טבלאות:** `app_requests` (סטטוס NEW / IN_PROGRESS / DONE / NO) ו-`app_request_messages` (`author_id` null = צוות הפיתוח). שתיהן server-only. צילומי מסך נשמרים ב-bucket פרטי `app-requests`.
   - **פעולות** (`actions/appRequests.ts`):
