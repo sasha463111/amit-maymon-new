@@ -139,6 +139,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 ## DB — כללים (סכמה מלאה: `docs/reference/db-schema.md`; RLS: `docs/reference/rls-code-patterns.md`)
 
 1. `npx supabase migration new <name>` → SQL עם `DROP ... IF EXISTS` לפני `CREATE` → בדיקה מקומית (`npx supabase db reset`, דורש Docker) → **גיבוי לפרוד** → `npx supabase db push` (גיבוי: SQL Editor + `migration repair --status applied`).
+1א. **ההיסטוריה חייבת להתאים לקבצים** (תוקן 15/10 — 63 קבצים / 54 רשומות לא תאמו): מיגרציה שהורצה **לא** ב-`db push` (MCP `apply_migration` רושם חותמת זמן משלו, `db query`, SQL Editor) → מיד אחר כך `npx supabase migration repair --linked --status applied <מספר-הקובץ>`, ואם נוצרה רשומה יתומה — `--status reverted <החותמת>`. בדיקה: `npx supabase migration list --linked` בלי שורות לא תואמות, ו-`npx supabase db push --linked --dry-run` = "up to date". **מספר קובץ ייחודי** — לבדוק `ls supabase/migrations` לפני שבוחרים (שני סשנים בחרו 20261015210000).
 2. כל שינוי schema → לעדכן `src/types/database.ts` ראשון, ולבדוק policies. עמודה חדשה **לפני** הורדת הישנה, BACKFILL לפני כן, ולבדוק data loss אחריו.
 3. RLS: `branch_id = ANY(get_my_branch_ids())` (לא `get_my_branch_id`). הרשאות — Standing Rule #5.
 4. כל מיגרציה שרצה בפרוד מורצת גם על garage-demo (`xzeyxoagzeddadalfkym`), חוץ מ-pg_cron של התזכורות.
