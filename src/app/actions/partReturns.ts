@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, canUsePartReturns } from '@/lib/partReturns';
 import { readStickerDetailed, type StickerFields } from '@/lib/stickerReader';
+import { recordAppError } from '@/lib/errorLog.server';
 
 // Parts returns & credits (Amit's spec, 2026-10-12) — replaces, in parallel
 // at first, his Google Forms/Sheets. Table public.part_returns (migration
@@ -467,9 +468,36 @@ export async function readPartSticker(formData: FormData): Promise<{ fields?: St
   const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) ? photo.type : 'image/jpeg';
   try {
     const r = await readStickerDetailed({ base64, mediaType });
-    return r.fields ? { fields: r.fields } : { unavailable: true, reason: r.failure ?? 'no_result', detail: r.detail };
+    const f = r.fields;
+    // #9 (Liron): a reading that fails — or reads nothing useful — goes to the
+    // error monitor on ticket #9, with the reason and the photo itself.
+    if (!f) await logStickerFailure(ctx.user.id, photo, `קריאת מדבקה נכשלה: ${r.failure ?? 'no_result'}${r.detail ? ` — ${r.detail}` : ''}`, null);
+    else if (!f.sku && !f.description) await logStickerFailure(ctx.user.id, photo, 'קריאת מדבקה: לא זוהו מק"ט ותיאור', JSON.stringify(f));
+    return f ? { fields: f } : { unavailable: true, reason: r.failure ?? 'no_result', detail: r.detail };
   } catch (e) {
     console.error('[readPartSticker]', e);
+    await logStickerFailure(ctx.user.id, photo, `קריאת מדבקה נכשלה: חריגה — ${e instanceof Error ? e.message : String(e)}`, e instanceof Error ? e.stack ?? null : null);
     return { unavailable: true, reason: 'api' };
   }
+}
+
+/** Keep the photo of a failed reading (part-returns/failed-reads/…) and record the failure on #9. */
+async function logStickerFailure(userId: string, photo: File, message: string, extra: string | null) {
+  let attachment: string | null = null;
+  const db = serviceClient();
+  if (db) {
+    const ext = (photo.type.split('/')[1] ?? 'jpg').replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'jpg';
+    const path = `failed-reads/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${ext}`;
+    const up = await db.storage.from(BUCKET).upload(path, photo, { contentType: photo.type, upsert: false });
+    if (!up.error) attachment = `${BUCKET}/${path}`;
+  }
+  await recordAppError({
+    source: 'server',
+    message,
+    path: '/returns',
+    stack: [`photo: ${photo.type || '?'} · ${Math.round(photo.size / 1024)}KB`, extra].filter(Boolean).join(' | '),
+    userId,
+    attachment,
+    ticketNo: 9,
+  });
 }

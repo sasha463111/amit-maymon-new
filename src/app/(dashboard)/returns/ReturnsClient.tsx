@@ -20,6 +20,7 @@ import { formatDate, formatDateTime } from '@/lib/dates';
 import type { SupplierDocRow } from '@/app/actions/supplierDocs';
 import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
 import { BranchFilter, StatCard, StatGrid, ils } from '@/components/ui/kit';
+import { reportError } from '@/components/ErrorReporter';
 
 type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
 
@@ -757,7 +758,9 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         setQuantity((q) => (q === 1 ? x.quantity! : q));
       }
       setReading(filled ? 'done' : 'empty');
-    } catch {
+    } catch (e) {
+      // #9: a failure before the server could log it (e.g. the upload itself) → the error monitor.
+      reportError('promise', new Error(`קריאת מדבקה (דפדפן): ${e instanceof Error ? e.message : String(e)} · ${f.type || '?'} ${Math.round(f.size / 1024)}KB`));
       setReading('failed');
     }
   }
