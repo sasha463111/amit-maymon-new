@@ -405,54 +405,65 @@ async function runEnterWorkReminders(supabase: ServiceClient, todayIso: string) 
     cars: { license_plate: string | null } | { license_plate: string | null }[] | null;
   }>).filter((c) => !c.painter_reminder_sent_at || israelDate(c.painter_reminder_sent_at) !== todayIso);
 
-  let notified = 0;
+  // ONE summary reminder per person per day (Tomer 15/10, notification
+  // overload): it used to be one notification per car per painter — 55–142 a
+  // day for the painters (1,347 in 14 days, half of all notifications). Now
+  // each recipient gets a single "תזכורת — רכב ממתין לעבודה (N רכבים)" listing
+  // the cars. The title keeps its prefix, so notification_kind still sees
+  // PAINTER_REMINDER (relevance) and the CEO tier still DROPs it.
+  const BASE_TITLE = 'תזכורת — רכב ממתין לעבודה';
+  const byRecipient = new Map<string, { id: string; line: string }[]>();
+  const recipientsCache = new Map<string, string[]>();
   for (const c of due) {
-    const { data: branchUsers } = await supabase.rpc('branch_recipients' as never, { p_branch: c.branch_id } as never);
-    const users = (branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[];
-    let recipients = users.filter((p) => p.role === 'PAINTER').map((p) => p.id);
-    if (recipients.length === 0) {
-      recipients = users
-        .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
-        .map((p) => p.id);
+    let recipients = recipientsCache.get(c.branch_id);
+    if (!recipients) {
+      const { data: branchUsers } = await supabase.rpc('branch_recipients' as never, { p_branch: c.branch_id } as never);
+      const users = (branchUsers ?? []) as { id: string; role: string; is_bodywork_advisor: boolean | null }[];
+      recipients = users.filter((p) => p.role === 'PAINTER').map((p) => p.id);
+      if (recipients.length === 0) {
+        recipients = users
+          .filter((p) => p.role === 'SERVICE_MANAGER' || p.role === 'SERVICE_ADVISOR' || p.is_bodywork_advisor === true)
+          .map((p) => p.id);
+      }
+      recipientsCache.set(c.branch_id, recipients);
     }
     if (recipients.length === 0) continue;
-
     const car = Array.isArray(c.cars) ? c.cars[0] : c.cars;
     const plate = car?.license_plate ?? c.case_key ?? 'תיק';
     const customer = c.customer_name?.trim() || plate;
-    const title = 'תזכורת — רכב ממתין לעבודה';
-    const body = `${customer} · ${plate} - עדיין לא סומן כנכנס לעבודה`;
-
-    // Only the newest reminder per car stays open (Amit, 2026-10-09, "1ב"):
-    // every two hours a fresh reminder arrived while the earlier ones stayed
-    // unread, so one car the painter never marked filled the bell (33 open
-    // for Amit). Close this car's earlier reminders, for everyone, first.
-    await supabase.from('notifications').update({ read: true } as never)
-      .eq('case_id', c.id).eq('title', title).eq('read', false);
-
-    // Sequential, not Promise.all: concurrent inserts race the DB fan-out
-    // trigger's (031/032) 10-second de-dup check against each other, so
-    // several can all pass the "not already sent" check before any of their
-    // fan-out copies commit — real duplicate notifications to CEOs/
-    // cross-branch advisors. Confirmed live: the first run of the escalation
-    // loops below (same pattern) sent some overseers 3-4 copies each.
     for (const userId of recipients) {
-      const { error: notifErr } = await supabase.from('notifications').insert({
-        user_id: userId,
-        case_id: c.id,
-        type: 'OTHER',
-        title,
-        body,
-        action_url: `/painters/${c.id}`,
-      } as never);
-      if (notifErr) console.error('[enter-work-reminders] notification insert failed', notifErr);
+      const list = byRecipient.get(userId) ?? [];
+      list.push({ id: c.id, line: `${customer} · ${plate}` });
+      byRecipient.set(userId, list);
     }
-
-    await supabase.from('cases').update({ painter_reminder_sent_at: new Date().toISOString() } as never).eq('id', c.id);
-    notified++;
   }
 
-  return { notified, checked: due.length };
+  // Sequential, not Promise.all: concurrent inserts race the DB fan-out
+  // trigger's (031/032) 10-second de-dup check against each other.
+  let notified = 0;
+  for (const [userId, cars] of Array.from(byRecipient.entries())) {
+    // Only the newest reminder stays open (Amit, 2026-10-09, "1ב").
+    await supabase.from('notifications').update({ read: true } as never)
+      .eq('user_id', userId).like('title', `${BASE_TITLE}%`).eq('read', false);
+    const one = cars.length === 1;
+    const shown = cars.slice(0, 12).map((x) => x.line).join('\n');
+    const { error: notifErr } = await supabase.from('notifications').insert({
+      user_id: userId,
+      case_id: one ? cars[0].id : null,
+      type: 'OTHER',
+      title: one ? BASE_TITLE : `${BASE_TITLE} (${cars.length} רכבים)`,
+      body: `${shown}${cars.length > 12 ? `\nועוד ${cars.length - 12}` : ''}\nעדיין לא סומנו כנכנסים לעבודה`,
+      action_url: one ? `/painters/${cars[0].id}` : '/painters',
+    } as never);
+    if (notifErr) console.error('[enter-work-reminders] notification insert failed', notifErr);
+    else notified++;
+  }
+
+  if (due.length) {
+    await supabase.from('cases').update({ painter_reminder_sent_at: new Date().toISOString() } as never).in('id', due.map((c) => c.id));
+  }
+
+  return { notified, cars: due.length, checked: due.length };
 }
 
 /**
