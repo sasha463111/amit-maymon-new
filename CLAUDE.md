@@ -154,6 +154,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 
 - `main` = פרודקשן. **שני remotes:** `origin` (sasha463111, לא מדפלוי) ו-`tomer` (tdavidyan85, **Vercel מצפה לו**). פוש = `git push origin main && git push tomer main`; **אחריו** `./scripts/check-deploy-remote.sh`. "push הצליח" ≠ "עלה" — הוכחה = HEAD של `tomer` זהה למקומי או Ready ב-Vercel (Standing Rule #7).
 - לפני פוש: `npx tsc --noEmit` + `npm run build` + בדיקה חיה. build עובר מקומית → דיפלוי אוטונומי, בלי אישור ידני (Rule #1).
+- **בדיקות אוטומטיות (#42, 16/10):** `npm run build` מריץ קודם את `vitest run` (`tests/*.test.ts`: חוקי פתיחת תיק, תשלום תביעה, החזרת חלק, מסירת רכב חליפי, תאריכים/שעון ישראל, דף בית, סיסמאות). בדיקה שנכשלת עוצרת את ה-build ב-Vercel, כלומר העדכון לא עולה. `npm run test:db` מריץ את `tests/db/checks.sql` מול המסד המקושר בתוך טרנזקציה שמתבטלת: הגנות ה-DB (מסירה כפולה, החזרה לפני מסירה, סגירת טיקט בלי "מה בוצע") ובדיקות אבטחה (RLS בכל טבלה, אין SECURITY DEFINER פתוח ל-anon, פונקציות רגישות סגורות, אין policy עם `true`, buckets פרטיים). להריץ לפני כל פוש שנוגע ב-DB. שינוי בחוק עסקי → לעדכן או להוסיף בדיקה באותו פוש.
 - **גיבוי DB לפני כל פוש:** `.\SqlBackup\backup-before-push.ps1`; נכשל — לא דוחפים. (גיבוי יומי אוטומטי ב-GitHub Actions 02:00 UTC.)
 - מיגרציות DB הן שלב נפרד — פוש קוד לא מריץ SQL.
 - Vercel region **`bom1`** ליד Supabase (`ap-south-1`) — לא להחזיר ל-iad1. בדיקה: `GET /api/health/db`.
