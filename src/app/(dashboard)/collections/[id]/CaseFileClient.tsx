@@ -12,6 +12,7 @@ import { formatDate } from '@/lib/dates';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStageDays, israelWorkDateIn } from '@/lib/collectionStages';
 import { WhatsAppDocs } from './WhatsAppDocs';
+import { InsurerCheckPanel } from './InsurerCheckPanel';
 import { shortVehicle } from '@/lib/vehicleLabel';
 import { STATUS_CHIP, STATUS_LABEL, StatusEditor, ils, isClosed, num, toCollect, today } from '../shared';
 
@@ -179,6 +180,7 @@ export function CaseFileClient({
           ]}
         />
       )}
+      {tab === 'tp' && <InsurerCheckPanel c={c} events={events} />}
       {tab === 'tp' && (
         <DetailsTab
           c={c}
