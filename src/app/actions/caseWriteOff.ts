@@ -9,12 +9,11 @@ import { createClient } from '@/lib/supabase/server';
 // every open list, workflows end — and is kept in the archive tab "מושבתים",
 // apart from cases that were repaired and closed. Reversible: "↩️ החזר לטיפול".
 // Who (Amit, 2026-10-13: "לכל מי שרלוונטי"): whoever runs a case — CEO,
-// service manager, advisors, office — and the same people can undo it; the
+// service manager, advisors, collections — and the same people can undo it; the
 // CEO is told (push) whenever someone else brings a case back.
 // Branch reach is enforced by RLS (an update outside it changes 0 rows).
 // (A 'use server' file may export only async functions — keep this private.)
-// Amit, 2026-10-14: only he or a service advisor may write off / bring back.
-const WRITE_OFF_ROLES = ['CEO', 'SERVICE_ADVISOR'];
+const WRITE_OFF_ROLES = ['CEO', 'SERVICE_ADVISOR', 'COLLECTIONS'];
 
 async function actor(roles: string[]) {
   const supabase = await createClient();

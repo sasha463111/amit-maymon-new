@@ -1,0 +1,14 @@
+# graphify scope: keep the graph about live code + current docs
+docs/archive/
+docs/legacy/
+SqlBackup/
+public/
+*.sql
+*.tsbuildinfo
+dev.log
+AUDIT-*.md
+QA-TEST-GAPS-*.md
+REFACTOR_COMPLETION_SUMMARY.txt
+NOTIFICATION_ROUTING_SUMMARY.txt
+src/db/migrations/
+supabase/_archive/
