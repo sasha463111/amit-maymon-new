@@ -10,6 +10,7 @@ import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, ty
 import { CLAIM_TYPES, INSURERS, WORK_SOURCE_LABEL } from '@/lib/finance';
 import { formatDate } from '@/lib/dates';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { DocScanner } from '@/components/DocScanner';
 import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStageDays, israelWorkDateIn } from '@/lib/collectionStages';
 import { WhatsAppDocs } from './WhatsAppDocs';
 import { InsurerCheckPanel } from './InsurerCheckPanel';
@@ -574,6 +575,24 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
     router.refresh();
   }
 
+  // "📄 סריקת מסמך" (15/10): the pages arrive as one PDF.
+  async function saveScan(pdf: File): Promise<boolean> {
+    setMsg(null);
+    const fd = new FormData();
+    fd.append('case_id', c.id);
+    fd.append('label', label);
+    fd.append('file', pdf);
+    const r = await uploadCaseFile(fd).catch(() => ({ error: 'שגיאת רשת' }));
+    if ('error' in r && r.error) {
+      setMsg(`⚠️ הסריקה לא נשמרה — ${r.error}`);
+      return false;
+    }
+    setMsg('✓ הסריקה נשמרה בתיק');
+    router.refresh();
+    return true;
+  }
+  const scanName = `סריקה - ${label.replace(/[\\/:*?"<>|]/g, '-')} - ${new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' }).replace(/\./g, '-')}.pdf`;
+
   const List = ({ items }: { items: CaseFile[] }) => (
     <div className="grid gap-2 md:grid-cols-2">
       {items.map((f) => (
@@ -599,11 +618,22 @@ function DocsTab({ c, files }: { c: CollectionCase; files: CaseFile[] }) {
             </button>
           ))}
         </div>
-        <label className={`inline-flex items-center h-11 px-5 rounded-xl bg-red-600 text-white text-sm font-bold cursor-pointer ${busy ? 'opacity-50' : ''}`}>
-          {busy ? 'מעלה…' : `📎 בחירת קבצים (${label})`}
-          <input type="file" multiple accept="image/*,application/pdf,.eml,.msg" className="hidden" disabled={busy} onChange={(e) => void upload(e.target.files)} />
-        </label>
-        <p className="text-xs text-gray-500">מייל: שומרים אותו מ-Outlook (שמירה בשם / הדפסה ל-PDF) ומעלים כאן. תמונה, PDF או קובץ מייל, עד 4MB לקובץ.</p>
+        <div className="flex gap-2 flex-wrap">
+          <DocScanner
+            onSave={saveScan}
+            fileName={scanName}
+            disabled={busy}
+            label={`📄 סריקת מסמך (${label})`}
+            className="inline-flex items-center h-11 px-5 rounded-xl bg-indigo-600 text-white text-sm font-bold"
+          />
+          <label className={`inline-flex items-center h-11 px-5 rounded-xl bg-red-600 text-white text-sm font-bold cursor-pointer ${busy ? 'opacity-50' : ''}`}>
+            {busy ? 'מעלה…' : `📎 בחירת קבצים (${label})`}
+            <input type="file" multiple accept="image/*,application/pdf,.eml,.msg" className="hidden" disabled={busy} onChange={(e) => void upload(e.target.files)} />
+          </label>
+        </div>
+        <p className="text-xs text-gray-500">
+          סריקה: בוחרים סוג מסמך, מצלמים עמוד ועוד עמוד, ושומרים — נשמר כ-PDF אחד, בשחור-לבן קריא. מייל: שומרים אותו מ-Outlook (שמירה בשם / הדפסה ל-PDF) ומעלים כאן. תמונה, PDF או קובץ מייל, עד 4MB לקובץ.
+        </p>
         {msg && <p className="text-sm">{msg}</p>}
       </div>
       <div className="space-y-2">
