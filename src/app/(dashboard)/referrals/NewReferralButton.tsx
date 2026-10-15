@@ -8,6 +8,8 @@ import { getFilteredBranches } from '@/app/actions/branchFiltering';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, X, Loader2, Check } from 'lucide-react';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { PickOrOther } from '@/components/PickOrOther';
+import { APPRAISERS } from '@/lib/finance';
 
 interface Branch {
   id: string;
@@ -16,7 +18,7 @@ interface Branch {
 
 const INSURANCE_COMPANIES = [
   'מנורה מבטחים', 'הראל ביטוח', 'כלל ביטוח', 'הפניקס', 'איילון',
-  'מגדל ביטוח', 'שלמה רשת מוסכים', 'ביטוח ישיר', 'AIG', 'אנקור', 'הכשרה ביטוח', 'אחר',
+  'מגדל ביטוח', 'שלמה רשת מוסכים', 'ביטוח ישיר', 'AIG', 'אנקור', 'הכשרה ביטוח', 'ביטוח חקלאי', 'שומרה', 'ליברה', 'ווישור',
 ];
 
 export function NewReferralButton({
@@ -356,10 +358,7 @@ export function NewReferralButton({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={labelCls}>חברת ביטוח</label>
-                    <select value={form.insurance_company} onChange={(e) => set('insurance_company', e.target.value)} className={inputCls}>
-                      <option value="">— בחר חברה —</option>
-                      {INSURANCE_COMPANIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <PickOrOther value={form.insurance_company} onChange={(v) => set('insurance_company', v)} options={INSURANCE_COMPANIES} placeholder="— בחר חברה —" otherPlaceholder="שם חברת הביטוח" className={inputCls} />
                   </div>
                   <div>
                     <label className={labelCls}>סוג תביעה</label>
@@ -367,7 +366,7 @@ export function NewReferralButton({
                   </div>
                   <div>
                     <label className={labelCls}>שמאי</label>
-                    <input type="text" value={form.appraiser_name} onChange={(e) => set('appraiser_name', e.target.value)} className={inputCls} placeholder="שם השמאי" autoComplete="off" />
+                    <PickOrOther value={form.appraiser_name} onChange={(v) => set('appraiser_name', v)} options={APPRAISERS} placeholder="— בחר שמאי —" otherPlaceholder="שם השמאי" className={inputCls} />
                   </div>
                 </div>
               </div>
