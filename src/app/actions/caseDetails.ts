@@ -74,7 +74,8 @@ export async function updateCaseDetails(
   const safeCarUpdates: Record<string, string | number | null> = {};
   if (carUpdates) {
     for (const [k, v] of Object.entries(carUpdates)) {
-      if (ALLOWED_CAR_COLS.has(k)) safeCarUpdates[k] = v;
+      // Plates are stored digits-only; every lookup compares digits.
+      if (ALLOWED_CAR_COLS.has(k)) safeCarUpdates[k] = k === 'license_plate' && typeof v === 'string' && /^[\d\s-]+$/.test(v) ? v.replace(/\D/g, '') : v;
     }
   }
 

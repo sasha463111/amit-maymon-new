@@ -117,6 +117,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export async function createCase(input: CreateCaseInput) {
   const supabase = await createClient();
   if (!input.plate_number?.trim()) return { error: 'מספר רישוי חובה' };
+  // Plates are stored digits-only ("330-94-804" was saved with dashes and no lookup found it).
+  if (/^[\d\s-]+$/.test(input.plate_number)) input = { ...input, plate_number: input.plate_number.replace(/\D/g, '') };
   if (!input.branch_id || !UUID_REGEX.test(input.branch_id)) return { error: 'סניף לא תקין' };
   const firstRegDate = input.first_registration_date?.trim() || null;
 
