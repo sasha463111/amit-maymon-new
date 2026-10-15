@@ -37,10 +37,13 @@ async function me() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('role, is_active, full_name').eq('id', user.id).maybeSingle();
-  const p = data as { role: string; is_active: boolean; full_name: string | null } | null;
+  const { data } = await supabase.from('profiles').select('role, is_active, full_name, collections_manager').eq('id', user.id).maybeSingle();
+  const p = data as { role: string; is_active: boolean; full_name: string | null; collections_manager: boolean } | null;
   if (!p || p.is_active === false || !ROLES.has(p.role)) return null;
-  return { user, role: p.role, name: p.full_name };
+  // Sees every collector's claims: CEO, bookkeeper, and the claims department
+  // manager (Galit — Discussion #2). Payment agreements stay CEO + bookkeeper.
+  const supervisor = SUPERVISORS.has(p.role) || (p.role === 'COLLECTIONS' && !!p.collections_manager);
+  return { user, role: p.role, name: p.full_name, supervisor };
 }
 
 const CASE_COLS =
@@ -137,7 +140,7 @@ export async function listCollectionCases(): Promise<{
   if (!ctx) return { ...empty, error: 'אין הרשאה' };
   const db = serviceClient();
   if (!db) return { ...empty, error: 'שרת לא מוגדר' };
-  const isCeo = SUPERVISORS.has(ctx.role);
+  const isCeo = ctx.supervisor;
   let q = db.from('collection_cases').select(CASE_COLS).order('opened_at', { ascending: false }).limit(5000);
   if (!isCeo) q = q.eq('assigned_to', ctx.user.id);
   const [casesRes, people, branches, termRows] = await Promise.all([
@@ -294,7 +297,7 @@ export async function openCollectionCase(
   }
 
   let assignee = ctx.user.id;
-  if (SUPERVISORS.has(ctx.role) && input.assign_to) {
+  if (ctx.supervisor && input.assign_to) {
     const { data: who } = await db.from('profiles').select('id, role, is_active').eq('id', input.assign_to).maybeSingle();
     const w = who as { role: string; is_active: boolean } | null;
     if (!w || w.role !== 'COLLECTIONS' || !w.is_active) return { error: 'מסלקת לא תקינה' };
@@ -422,7 +425,7 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   const { data: row } = await db.from('collection_cases').select('id, assigned_to, closed_at').eq('id', id).maybeSingle();
   const cur = row as { assigned_to: string; closed_at: string | null } | null;
   if (!cur) return { error: 'לא נמצא' };
-  if (!SUPERVISORS.has(ctx.role) && cur.assigned_to !== ctx.user.id) return { error: 'התיק משויך למסלקת אחרת' };
+  if (!ctx.supervisor && cur.assigned_to !== ctx.user.id) return { error: 'התיק משויך למסלקת אחרת' };
 
   const status = u.status ?? undefined;
   if (status && !STATUSES.has(status)) return { error: 'סטטוס לא תקין' };

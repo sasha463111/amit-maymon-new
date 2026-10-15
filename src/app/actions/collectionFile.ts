@@ -35,12 +35,13 @@ async function me() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('role, is_active').eq('id', user.id).maybeSingle();
-  const p = data as { role: string; is_active: boolean } | null;
+  const { data } = await supabase.from('profiles').select('role, is_active, collections_manager').eq('id', user.id).maybeSingle();
+  const p = data as { role: string; is_active: boolean; collections_manager: boolean } | null;
   if (!p || p.is_active === false || !ROLES.has(p.role)) return null;
   const db = serviceClient();
   if (!db) return null;
-  return { user, role: p.role, db, supervisor: SUPERVISORS.has(p.role) };
+  // + the claims department manager (Galit — Discussion #2)
+  return { user, role: p.role, db, supervisor: SUPERVISORS.has(p.role) || (p.role === 'COLLECTIONS' && !!p.collections_manager) };
 }
 type Ctx = NonNullable<Awaited<ReturnType<typeof me>>>;
 

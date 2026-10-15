@@ -868,8 +868,12 @@ async function runCollectionsWeekly(supabase: ServiceClient, isoDate: string) {
     .select('key');
   if (claimErr) return { error: claimErr.message };
   if (!claimed?.length) return { skipped: 'already sent this week' };
-  const { data: people } = await supabase.from('profiles').select('id').in('role', ['CEO', 'ACCOUNTANT']).eq('is_active', true);
-  const to = ((people ?? []) as { id: string }[]).map((p) => p.id);
+  // + the claims department manager (Galit — Discussion #2)
+  const [{ data: people }, { data: managers }] = await Promise.all([
+    supabase.from('profiles').select('id').in('role', ['CEO', 'ACCOUNTANT']).eq('is_active', true),
+    supabase.from('profiles').select('id').eq('collections_manager' as never, true as never).eq('is_active', true),
+  ]);
+  const to = Array.from(new Set([...((people ?? []) as { id: string }[]), ...((managers ?? []) as { id: string }[])].map((p) => p.id)));
   const summary = await loadWeeklySummary(supabase as never);
   const { title, body } = weeklyText(summary);
   // COLLECTION_REMINDER: relevant to CEO + ACCOUNTANT and never fanned out, so one row each.

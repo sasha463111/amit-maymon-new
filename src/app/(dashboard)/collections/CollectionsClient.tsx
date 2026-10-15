@@ -114,7 +114,7 @@ export function CollectionsClient({
             📂 פתיחת תיק
           </button>
           <FeedbackButton />
-          {isCeo && (
+          {canEditTerms && (
             <button type="button" onClick={() => setShowTerms((v) => !v)} className="h-11 px-4 rounded-xl border border-gray-300 bg-white text-sm font-semibold">
               ⚙️ הסכמי תשלום
             </button>
@@ -123,7 +123,7 @@ export function CollectionsClient({
       </div>
       {error && <p className="text-sm text-red-600">⚠️ {error}</p>}
       {reminders.length > 0 && <RemindersStrip reminders={reminders} />}
-      {showTerms && isCeo && <TermsPanel terms={terms} canEdit={canEditTerms} />}
+      {showTerms && canEditTerms && <TermsPanel terms={terms} canEdit={canEditTerms} />}
 
       {isCeo && (
         <div className="flex gap-2 flex-wrap">
