@@ -10,7 +10,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 // "💡 הערות לשיפור": staff see only their own notes, a CEO sees all of them.
 // The development side answers from the terminal with dev_reply_request()
 // (see .claude/skills/amit-requests). A new note / message pushes to the
-// developer account only (DEV_ACCOUNTS) as a DIRECT_NOTE — not to Amit, who
+// developer account only (profiles.office_function 'DEVELOPER') as a DIRECT_NOTE — not to Amit, who
 // asked for fewer pushes; he sees the staff notes on the page.
 
 const BUCKET = 'app-requests';
@@ -23,8 +23,6 @@ function service() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-// Tomer — gets the push for every new note / reply (the development side).
-const DEV_ACCOUNTS = ['1786a9fa-ac9c-4376-8746-f625343c3193'];
 
 async function member() {
   const supabase = await createClient();
@@ -94,8 +92,9 @@ async function saveImage(c: NonNullable<Awaited<ReturnType<typeof member>>>, req
 
 /** Tell the developer side (Tomer) by push. */
 async function notifyDev(c: NonNullable<Awaited<ReturnType<typeof member>>>, requestId: string, title: string, body: string) {
-  const rows = DEV_ACCOUNTS.filter((id) => id !== c.user.id).map((id) => ({
-    user_id: id, type: 'DIRECT_NOTE', triggered_by: c.user.id, title, body: body.slice(0, 300), action_url: `/requests#${requestId}`,
+  const { data } = await c.db.from('profiles').select('id').eq('office_function', 'DEVELOPER').eq('is_active', true).neq('id', c.user.id);
+  const rows = ((data ?? []) as { id: string }[]).map((p) => ({
+    user_id: p.id, type: 'DIRECT_NOTE', triggered_by: c.user.id, title, body: body.slice(0, 300), action_url: `/requests#${requestId}`,
   }));
   if (rows.length) await c.db.from('notifications').insert(rows as never);
 }

@@ -1,5 +1,7 @@
 'use server';
 
+import type { OfficeFunction } from '@/lib/staffJobs';
+
 import { cookies } from 'next/headers';
 import { generatePassword } from '@/lib/passwords';
 import { revalidatePath } from 'next/cache';
@@ -46,7 +48,7 @@ export interface SystemUser {
   is_active: boolean;
   is_bodywork_advisor: boolean;
   /** OFFICE only: REFERRALS ("משרד הפניות") / CLOSURE ("משרד סגירה"). */
-  office_function: 'REFERRALS' | 'CLOSURE' | null;
+  office_function: OfficeFunction | null;
   /** Login address — Amit (2026-10-11) needs it to manage people. */
   email: string | null;
   last_sign_in_at: string | null;
@@ -80,7 +82,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     branch_ids: string[];
     is_active: boolean;
     is_bodywork_advisor: boolean;
-    office_function: 'REFERRALS' | 'CLOSURE' | null;
+    office_function: OfficeFunction | null;
     mfa_required: boolean;
     sms_required: boolean;
   }>;
@@ -129,7 +131,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
 export async function updateSystemUser(
   userId: string,
-  updates: Partial<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string; office_function: 'REFERRALS' | 'CLOSURE' | null }>
+  updates: Partial<{ role: UserRole; branch_ids: string[]; is_active: boolean; full_name: string; office_function: OfficeFunction | null }>
 ) {
   const { error, supabase, userId: callerId } = await requireCeo();
   if (error || !supabase) return { error: error ?? 'שגיאת אימות' };
@@ -149,7 +151,7 @@ export async function updateSystemUser(
   }
 
   // The office function only means something for OFFICE.
-  if (updates.role !== undefined && updates.role !== 'OFFICE') updates = { ...updates, office_function: null };
+  if (updates.role !== undefined && updates.role !== 'OFFICE' && !(updates.role === 'CEO' && updates.office_function === 'DEVELOPER')) updates = { ...updates, office_function: null };
 
   // Service client after the CEO check: users can't update profiles directly
   // (migration 20261015090000 — a user could otherwise change their own role).
@@ -217,7 +219,7 @@ export async function createNewSystemUser(params: {
   email: string;
   full_name: string;
   role: UserRole;
-  office_function?: 'REFERRALS' | 'CLOSURE' | null;
+  office_function?: OfficeFunction | null;
   branch_ids: string[];
 }) {
   const { error, supabase, userId: callerId } = await requireCeo();

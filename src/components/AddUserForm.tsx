@@ -5,7 +5,7 @@ import { Plus, Mail, User, Shield } from 'lucide-react';
 import { createNewSystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import type { UserRole } from '@/types/database';
-import { STAFF_JOBS, jobByKey } from '@/lib/staffJobs';
+import { STAFF_JOBS, jobByKey, type OfficeFunction } from '@/lib/staffJobs';
 
 // A job = role (+ which office). It decides pages, permissions AND which
 // notifications the person gets — see src/lib/staffJobs.ts.
@@ -26,7 +26,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
     email: '',
     full_name: '',
     role: 'OFFICE' as UserRole,
-    office_function: 'REFERRALS' as 'REFERRALS' | 'CLOSURE' | null,
+    office_function: 'REFERRALS' as OfficeFunction | null,
     branch_ids: [] as string[],
   });
   const jobKey = JOB_OPTIONS.find((j) => j.role === formData.role && j.officeFunction === formData.office_function)?.key ?? '';

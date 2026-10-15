@@ -7,7 +7,8 @@ import type { UserRole } from '@/types/database';
 // 20261011140000. Choosing the job when creating a user is all it takes for a
 // new person to get the right notifications.
 
-export type OfficeFunction = 'REFERRALS' | 'CLOSURE';
+// 'DEVELOPER' (15/10): only with role CEO — Tomer, the product developer.
+export type OfficeFunction = 'REFERRALS' | 'CLOSURE' | 'DEVELOPER';
 
 export type StaffJob = {
   key: string;
@@ -88,6 +89,13 @@ export const STAFF_JOBS: StaffJob[] = [
     officeFunction: null,
     label: 'מנכ"ל',
     notifications: 'כל ההתראות',
+  },
+  {
+    key: 'DEVELOPER',
+    role: 'CEO',
+    officeFunction: 'DEVELOPER',
+    label: 'מפתח המוצר',
+    notifications: 'כל ההתראות + הערות לשיפור מהעובדים',
   },
 ];
 

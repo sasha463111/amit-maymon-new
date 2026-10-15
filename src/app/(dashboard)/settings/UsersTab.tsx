@@ -9,7 +9,7 @@ import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
 import { formatDateTime } from '@/lib/dates';
-import { STAFF_JOBS, jobByKey, jobFor, jobLabel } from '@/lib/staffJobs';
+import { STAFF_JOBS, jobByKey, jobFor, jobLabel, type OfficeFunction } from '@/lib/staffJobs';
 
 interface Branch {
   id: string;
@@ -30,7 +30,7 @@ export function UsersTab({
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ role: UserRole; office_function: 'REFERRALS' | 'CLOSURE' | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
+  const [draft, setDraft] = useState<{ role: UserRole; office_function: OfficeFunction | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -161,7 +161,7 @@ export function UsersTab({
           ? {
               ...x,
               role: draft.role,
-              office_function: draft.role === 'OFFICE' ? draft.office_function : null,
+              office_function: draft.role === 'OFFICE' || (draft.role === 'CEO' && draft.office_function === 'DEVELOPER') ? draft.office_function : null,
               branch_ids: draft.branch_ids,
               branch_names: draft.branch_ids.map((bid) => branches.find((b) => b.id === bid)?.name ?? bid),
               is_active: draft.is_active,

@@ -178,7 +178,7 @@
   - **סגירה / שינוי סטטוס:** CEO בלבד.
   - **טבלאות:** `app_requests` (סטטוס NEW / IN_PROGRESS / DONE / NO) ו-`app_request_messages` (`author_id` null = צוות הפיתוח). שתיהן server-only. צילומי מסך נשמרים ב-bucket פרטי `app-requests`.
   - **פעולות** (`actions/appRequests.ts`):
-    - `createAppRequest` / `addRequestMessage`: ההודעה החדשה נשלחת כ-DIRECT_NOTE (פוש) רק לחשבונות ב-`DEV_ACCOUNTS` (תומר). לא לעמית — הוא ביקש פחות פושים, ורואה את הערות העובדים בדף.
+    - `createAppRequest` / `addRequestMessage`: ההודעה החדשה נשלחת כ-DIRECT_NOTE (פוש) רק לחשבון מפתח המוצר (`profiles.office_function = 'DEVELOPER'`, תומר). לא לעמית — הוא ביקש פחות פושים, ורואה את הערות העובדים בדף.
     - `setRequestStatus`: CEO בלבד.
   - **תשובה מהטרמינל:** הפונקציה `dev_reply_request(id, body, status)` מוסיפה את התשובה, משנה את הסטטוס ושולחת פוש למי שפתח את הבקשה ("✅ הבקשה שלך בוצעה") — עמית או העובד. ההרשאה להריץ אותה בוטלה ל-anon ול-authenticated, כך שרק service role יכול לקרוא לה.
   - **התהליך כולו:** ב-skill `.claude/skills/amit-requests` (`/amit-requests`).
