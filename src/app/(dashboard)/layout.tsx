@@ -8,6 +8,7 @@ import { NotificationsBell } from '@/components/NotificationsBell';
 import { CaseSearch } from '@/components/CaseSearch';
 import { AutoRefresh } from '@/components/AutoRefresh';
 import { UserMenu } from '@/components/UserMenu';
+import { UpdateBanner } from '@/components/UpdateBanner';
 import { BottomNav } from '@/components/BottomNav';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
@@ -253,6 +254,9 @@ export default async function DashboardLayout({
           <StopViewAsButton />
         </div>
       )}
+
+      {/* A newer version is live → offer a refresh (16/10). */}
+      {!isPreview && <UpdateBanner />}
 
       {/* One banner at a time (16/10, design round): "מה חדש" first; the
           push-enable nudge only when there is nothing new to announce. */}
