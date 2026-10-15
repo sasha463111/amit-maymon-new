@@ -15,7 +15,9 @@ export type UserRole =
   // Claims collectors — collections screen (2026-10-14)
   | 'COLLECTIONS'
   // Bookkeeper — returns, finance, collections (2026-10-14)
-  | 'ACCOUNTANT';
+  | 'ACCOUNTANT'
+  // Drivers — the loaner-car module only (Tomer, 2026-10-15)
+  | 'DRIVER';
 
 export type GeneralStatus = 'NEW' | 'IN_PROGRESS' | 'COMPLETED';
 

@@ -25,9 +25,9 @@ async function me() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('role, is_active, branch_ids').eq('id', user.id).maybeSingle();
-  const p = data as { role: string; is_active: boolean; branch_ids: string[] | null } | null;
-  if (!p || p.is_active === false || !canUseLoaners(p.role)) return null;
+  const { data } = await supabase.from('profiles').select('role, is_active, branch_ids, loaners_access').eq('id', user.id).maybeSingle();
+  const p = data as { role: string; is_active: boolean; branch_ids: string[] | null; loaners_access: boolean | null } | null;
+  if (!p || p.is_active === false || !canUseLoaners(p.role, !!p.loaners_access)) return null;
   const db = serviceClient();
   if (!db) return null;
   return { supabase, db, user, role: p.role };

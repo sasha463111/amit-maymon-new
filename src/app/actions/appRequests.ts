@@ -37,16 +37,19 @@ async function member() {
 }
 
 export type RequestStatus = 'NEW' | 'IN_PROGRESS' | 'DONE' | 'NO';
+// Bugs / features boards (Tomer, 15/10): tagged when opened, managed on
+// /bugs and /features (CEO). null = not tagged yet (requests from before).
+export type RequestKind = 'BUG' | 'FEATURE';
 export type AppRequestMessage = { id: string; body: string; image_url: string | null; author: string; from_dev: boolean; at: string };
-export type AppRequest = { id: string; status: RequestStatus; created_at: string; updated_at: string; by: string; messages: AppRequestMessage[] };
+export type AppRequest = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_at: string; updated_at: string; by: string; messages: AppRequestMessage[] };
 
 export async function listAppRequests(): Promise<AppRequest[]> {
   const c = await member();
   if (!c) return [];
-  let rq = c.db.from('app_requests').select('id, status, created_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(300);
+  let rq = c.db.from('app_requests').select('id, status, kind, priority, created_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(500);
   if (!c.isCeo) rq = rq.eq('created_by', c.user.id);
   const { data: reqs } = await rq;
-  type R = { id: string; status: RequestStatus; created_by: string; created_at: string; updated_at: string };
+  type R = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_by: string; created_at: string; updated_at: string };
   type M = { id: string; request_id: string; body: string; image_path: string | null; author_id: string | null; created_at: string };
   const rs = (reqs ?? []) as R[];
   if (!rs.length) return [];
@@ -63,6 +66,8 @@ export async function listAppRequests(): Promise<AppRequest[]> {
   return rs.map((r) => ({
     id: r.id,
     status: r.status,
+    kind: r.kind,
+    priority: r.priority,
     created_at: r.created_at,
     updated_at: r.updated_at,
     by: nameById.get(r.created_by) ?? '',
@@ -91,10 +96,11 @@ async function saveImage(c: NonNullable<Awaited<ReturnType<typeof member>>>, req
 }
 
 /** Tell the developer side (Tomer) by push. */
-async function notifyDev(c: NonNullable<Awaited<ReturnType<typeof member>>>, requestId: string, title: string, body: string) {
+async function notifyDev(c: NonNullable<Awaited<ReturnType<typeof member>>>, requestId: string, title: string, body: string, kind?: string | null) {
+  const page = kind === 'BUG' ? '/bugs' : kind === 'FEATURE' ? '/features' : '/requests';
   const { data } = await c.db.from('profiles').select('id').eq('office_function', 'DEVELOPER').eq('is_active', true).neq('id', c.user.id);
   const rows = ((data ?? []) as { id: string }[]).map((p) => ({
-    user_id: p.id, type: 'DIRECT_NOTE', triggered_by: c.user.id, title, body: body.slice(0, 300), action_url: `/requests#${requestId}`,
+    user_id: p.id, type: 'DIRECT_NOTE', triggered_by: c.user.id, title, body: body.slice(0, 300), action_url: `${page}#${requestId}`,
   }));
   if (rows.length) await c.db.from('notifications').insert(rows as never);
 }
@@ -104,13 +110,15 @@ export async function createAppRequest(fd: FormData): Promise<{ ok?: true; error
   if (!c) return { error: 'אין הרשאה' };
   const body = String(fd.get('body') ?? '').trim().slice(0, 5000);
   if (body.length < 3 && !(fd.get('image') instanceof File)) return { error: 'נא לכתוב את הבקשה' };
-  const { data, error } = await c.db.from('app_requests').insert({ body: body || '(צילום מסך)', created_by: c.user.id } as never).select('id').single();
+  const kind = String(fd.get('kind') ?? '');
+  if (kind !== 'BUG' && kind !== 'FEATURE') return { error: 'נא לבחור: באג או פיתוח' };
+  const { data, error } = await c.db.from('app_requests').insert({ body: body || '(צילום מסך)', kind, created_by: c.user.id } as never).select('id').single();
   if (error || !data) return { error: error?.message ?? 'לא נשמר' };
   const id = (data as { id: string }).id;
   const img = await saveImage(c, id, fd.get('image'));
   if (img.error) return { error: img.error };
   await c.db.from('app_request_messages').insert({ request_id: id, body, image_path: img.path ?? null, author_id: c.user.id } as never);
-  await notifyDev(c, id, `💡 הערה חדשה מ${c.name.split(' ')[0] || 'עובד'}`, body);
+  await notifyDev(c, id, `${kind === 'BUG' ? '🐞 באג חדש' : '🚀 בקשת פיתוח'} מ${c.name.split(' ')[0] || 'עובד'}`, body, kind);
   revalidatePath('/requests');
   return { ok: true };
 }
@@ -120,7 +128,7 @@ export async function addRequestMessage(fd: FormData): Promise<{ ok?: true; erro
   if (!c) return { error: 'אין הרשאה' };
   const id = String(fd.get('request_id') ?? '');
   const body = String(fd.get('body') ?? '').trim().slice(0, 5000);
-  const { data: req } = await c.db.from('app_requests').select('id, created_by').eq('id', id).maybeSingle();
+  const { data: req } = await c.db.from('app_requests').select('id, created_by, kind').eq('id', id).maybeSingle();
   // Staff answer only in their own notes.
   if (!req || (!c.isCeo && (req as { created_by: string }).created_by !== c.user.id)) return { error: 'הבקשה לא נמצאה' };
   const img = await saveImage(c, id, fd.get('image'));
@@ -128,7 +136,12 @@ export async function addRequestMessage(fd: FormData): Promise<{ ok?: true; erro
   if (!body && !img.path) return { error: 'נא לכתוב משהו או לצרף תמונה' };
   await c.db.from('app_request_messages').insert({ request_id: id, body, image_path: img.path ?? null, author_id: c.user.id } as never);
   await c.db.from('app_requests').update({ updated_at: new Date().toISOString() } as never).eq('id', id);
-  await notifyDev(c, id, `💬 תגובה מ${c.name.split(' ')[0] || 'עובד'} על הערה`, body || '(צילום מסך)');
+  const owner = (req as { created_by: string }).created_by;
+  if (c.isCeo && owner !== c.user.id) {
+    await notifyOwner(c, owner, id, '💬 תשובה על הבקשה שלך', body || '(צילום מסך)');
+  } else {
+    await notifyDev(c, id, `💬 תגובה מ${c.name.split(' ')[0] || 'עובד'} על הערה`, body || '(צילום מסך)', (req as { kind: string | null }).kind);
+  }
   revalidatePath('/requests');
   return { ok: true };
 }
@@ -137,8 +150,49 @@ export async function setRequestStatus(id: string, status: RequestStatus): Promi
   const c = await member();
   if (!c?.isCeo) return { error: 'אין הרשאה' };
   if (!['NEW', 'IN_PROGRESS', 'DONE', 'NO'].includes(status)) return { error: 'סטטוס לא תקין' };
+  const { data: req } = await c.db.from('app_requests').select('created_by, status').eq('id', id).maybeSingle();
+  const r = req as { created_by: string; status: RequestStatus } | null;
+  if (!r) return { error: 'הבקשה לא נמצאה' };
   const { error } = await c.db.from('app_requests').update({ status, updated_at: new Date().toISOString() } as never).eq('id', id);
   if (error) return { error: error.message };
+  if (r.created_by !== c.user.id && r.status !== status && status !== 'NEW') {
+    const title = status === 'DONE' ? '✅ הבקשה שלך בוצעה' : status === 'IN_PROGRESS' ? '🔧 התחלנו לעבוד על הבקשה שלך' : '⏸ הבקשה שלך נדחתה לבינתיים';
+    await notifyOwner(c, r.created_by, id, title, 'פרטים בדף ההערות לשיפור');
+  }
+  revalidatePath('/bugs');
+  revalidatePath('/features');
   revalidatePath('/requests');
+  return { ok: true };
+}
+
+/** Tell the person who opened the request (bell + push). */
+async function notifyOwner(c: NonNullable<Awaited<ReturnType<typeof member>>>, userId: string, requestId: string, title: string, body: string) {
+  await c.db.from('notifications').insert({
+    user_id: userId, type: 'DIRECT_NOTE', triggered_by: c.user.id, title, body: body.slice(0, 300), action_url: `/requests#${requestId}`,
+  } as never);
+}
+
+/** CEO: re-tag a request (bug ↔ feature). */
+export async function setRequestKind(id: string, kind: RequestKind): Promise<{ ok?: true; error?: string }> {
+  const c = await member();
+  if (!c?.isCeo) return { error: 'אין הרשאה' };
+  if (kind !== 'BUG' && kind !== 'FEATURE') return { error: 'סוג לא תקין' };
+  const { error } = await c.db.from('app_requests').update({ kind } as never).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/bugs');
+  revalidatePath('/features');
+  revalidatePath('/requests');
+  return { ok: true };
+}
+
+/** CEO: priority 1 (high) … 3 (low), or null. */
+export async function setRequestPriority(id: string, priority: number | null): Promise<{ ok?: true; error?: string }> {
+  const c = await member();
+  if (!c?.isCeo) return { error: 'אין הרשאה' };
+  if (priority !== null && ![1, 2, 3].includes(priority)) return { error: 'עדיפות לא תקינה' };
+  const { error } = await c.db.from('app_requests').update({ priority } as never).eq('id', id);
+  if (error) return { error: error.message };
+  revalidatePath('/bugs');
+  revalidatePath('/features');
   return { ok: true };
 }

@@ -3,9 +3,10 @@
 // v2: merged with the garage's paper forms (מסירת/קבלת רכב חליפי, טופס רכב
 // חליפי, ביטול השתתפות עצמית) — Amit, 14/10.
 
-/** Office (אילנה, אילנית, אביה) + CEO. */
-export const LOANER_ROLES: readonly string[] = ['CEO', 'OFFICE'];
-export const canUseLoaners = (role: string | null | undefined) => LOANER_ROLES.includes(role ?? '');
+/** Office (אילנה, אילנית, אביה) + CEO + drivers (ינון, יצחק — 15/10). Plus
+ *  anyone with profiles.loaners_access (the painters בתאל, דקל, כפיר, ניסים). */
+export const LOANER_ROLES: readonly string[] = ['CEO', 'OFFICE', 'DRIVER'];
+export const canUseLoaners = (role: string | null | undefined, access = false) => access || LOANER_ROLES.includes(role ?? '');
 
 export const FUEL_LEVELS = ['ריק', '1/4', '1/2', '3/4', 'מלא'] as const;
 

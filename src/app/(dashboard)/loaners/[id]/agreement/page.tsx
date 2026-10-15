@@ -12,8 +12,8 @@ export default async function LoanerAgreementPage({ params }: { params: { id: st
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if (!canUseLoaners((prof as { role: string } | null)?.role)) redirect('/');
+  const { data: prof } = await supabase.from('profiles').select('role, loaners_access').eq('id', user.id).maybeSingle();
+  if (!canUseLoaners((prof as { role: string } | null)?.role, !!(prof as { loaners_access?: boolean } | null)?.loaners_access)) redirect('/');
   const { handovers } = await listLoaners();
   const h = handovers.find((x) => x.id === params.id);
   if (!h || !h.signature_url) notFound();

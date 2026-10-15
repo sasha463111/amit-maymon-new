@@ -84,6 +84,13 @@ export const STAFF_JOBS: StaffJob[] = [
     notifications: 'הודעות אישיות',
   },
   {
+    key: 'DRIVER',
+    role: 'DRIVER',
+    officeFunction: null,
+    label: 'נהג',
+    notifications: 'הודעות אישיות (רואה רק רכב חליפי)',
+  },
+  {
     key: 'CEO',
     role: 'CEO',
     officeFunction: null,

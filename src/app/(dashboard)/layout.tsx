@@ -57,6 +57,8 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'הגדרות', href: '/settings' },
     { label: '💡 הצעות ייעול', href: '/requests' },
+    { label: '🐞 באגים', href: '/bugs' },
+    { label: '🚀 פיתוחים', href: '/features' },
   ],
   PAINTER: [
     { label: 'תיקים', href: '/painters' },
@@ -100,6 +102,11 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'הודעות', href: '/messages' },
     { label: 'התראות', href: '/notifications' },
   ],
+  // Drivers (ינון, יצחק — Tomer, 15/10): the loaner-car module only.
+  DRIVER: [
+    { label: 'רכב חליפי', href: '/loaners' },
+    { label: 'התראות', href: '/notifications' },
+  ],
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -112,6 +119,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   WAREHOUSE_MANAGER: 'מנהל מחסן',
   COLLECTIONS: 'מסלקת תביעות',
   ACCOUNTANT: 'מנהלת חשבונות',
+  DRIVER: 'נהג',
 };
 
 export default async function DashboardLayout({
@@ -127,11 +135,11 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_ids, is_active, office_function, mfa_required, sms_required')
+    .select('full_name, role, branch_ids, is_active, office_function, mfa_required, sms_required, loaners_access')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null; mfa_required?: boolean; sms_required?: boolean } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null; mfa_required?: boolean; sms_required?: boolean; loaners_access?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
   // Mid-session deactivation: if a CEO disabled this account, kick them out
@@ -183,6 +191,8 @@ export default async function DashboardLayout({
         role === 'CEO' ? Promise.resolve({ data: null }) : supabase.from('finance_viewers').select('user_id').eq('user_id', user.id).maybeSingle(),
       ]);
   if (viewerRow && !links.some((l) => l.href === '/receivables')) links.push({ label: 'דשבורד גבייה', href: '/receivables' });
+  // "רכב חליפי" for people given the module personally (profiles.loaners_access, 15/10).
+  if (!isPreview && !viewAs && profile?.loaners_access && !links.some((l) => l.href === '/loaners')) links.push({ label: 'רכב חליפי', href: '/loaners' });
   // "💡 הערות לשיפור" for everyone (15/10); a CEO already has "הצעות ייעול".
   if (!isPreview && !links.some((l) => l.href === '/requests')) links.push({ label: '💡 הערות לשיפור', href: '/requests' });
 
