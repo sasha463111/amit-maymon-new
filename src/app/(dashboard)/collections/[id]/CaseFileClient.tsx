@@ -16,6 +16,7 @@ import { CLAIM_STAGES, OTHER, REMIND_DAY_OPTIONS, REMINDER_REASONS, defaultStage
 import { WhatsAppDocs } from './WhatsAppDocs';
 import { InsurerCheckPanel } from './InsurerCheckPanel';
 import { shortVehicle } from '@/lib/vehicleLabel';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 import { STATUS_CHIP, STATUS_LABEL, StatusEditor, ils, isClosed, num, toCollect, today } from '../shared';
 
 // The collection case file (Amit, 2026-10-14). The list is the outer view;
@@ -27,7 +28,29 @@ const at = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
 function Fields({ children }: { children: React.ReactNode }) {
-  return <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">{children}</dl>;
+  return <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">{children}</dl>;
+}
+// Compact layout (Amit 15/10, like BAFI: "מקום לכל דבר"): label small above
+// the value, three to a row on a wide screen.
+function Grid3({ children }: { children: React.ReactNode }) {
+  return <dl className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">{children}</dl>;
+}
+function Cell({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] text-gray-400 leading-tight">{label}</dt>
+      <dd className={`text-[13px] leading-snug break-words ${tone ?? 'text-gray-900'}`}>{children ?? '—'}</dd>
+    </div>
+  );
+}
+/** A key fact in the header strip. */
+function Fact({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 border border-gray-200 px-2.5 py-1.5 min-w-0">
+      <p className="text-[11px] text-gray-500 leading-tight">{label}</p>
+      <p className={`text-sm font-bold leading-snug truncate ${tone ?? 'text-gray-900'}`}>{children ?? '—'}</p>
+    </div>
+  );
 }
 function F({ label, children, tone }: { label: string; children: React.ReactNode; tone?: string }) {
   return (
@@ -80,50 +103,46 @@ export function CaseFileClient({
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
+    <div className="max-w-6xl mx-auto space-y-3" dir="rtl">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <Link href="/collections" className="text-sm text-indigo-700 font-semibold">→ ניהול תביעות ביטוח</Link>
         <FeedbackButton />
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              תיק תביעה · רכב {c.plate}
-              {c.vehicle_type && <span className="text-lg font-semibold text-gray-600"> · {shortVehicle(c.vehicle_type)}</span>}
-            </h1>
-            <p className="text-lg font-semibold text-gray-800">לקוח: {c.customer_name || '—'}</p>
-          </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-bold ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+      <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 space-y-3">
+        {/* One line: plate · vehicle · customer · status (compact, 15/10). */}
+        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+          <span className="text-sm font-semibold text-gray-500">תיק תביעה</span>
+          <LicensePlate plate={c.plate} size="md" />
+          {c.vehicle_type && <span className="text-sm font-semibold text-gray-700">{shortVehicle(c.vehicle_type)}</span>}
+          <span className="text-lg font-bold text-gray-900">לקוח: {c.customer_name || '—'}</span>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold mr-auto ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
         </div>
-        <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
-          <Fields>
-            <F label="משלם">{payerOf(c) || '—'}</F>
-            <F label="סוג / דגם רכב">{c.vehicle_type ? shortVehicle(c.vehicle_type) : null}</F>
-            <F label="סוג תביעה">{c.claim_type}</F>
-            <F label="מספר תביעה">{c.claim_number}</F>
-            <F label="מצב תביעה" tone="text-indigo-700 font-semibold">{c.claim_stage}</F>
-            {c.status === 'LEGAL' && <F label="סיבה משפטית" tone="text-purple-800 font-semibold">{c.legal_reason}</F>}
-            <F label="מסלקת">{supervisor ? <Reassign c={c} collectors={collectors} /> : c.assigned_name}</F>
-          </Fields>
-          <Fields>
-            <F label="לגבייה" tone="text-gray-900 font-bold">{ils(toCollect(c))}</F>
-            <F label="מועד פירעון צ׳ק" tone={late ? 'text-red-700 font-semibold' : undefined}>
-              {c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ איחור ${daysLate(exp.date, t0)} ימים` : ''}` : exp.basis}
-            </F>
-            <F label="נפתח">{formatDate(c.opened_at)}</F>
-            <F label="ימי עבודה">{workingDaysBetween(c.opened_at, c.closed_at ?? t0)}</F>
-            {repairCaseId && supervisor && (
-              <F label="תיק התיקון">
-                <Link href={`/go/${repairCaseId}`} className="text-indigo-700 font-semibold">פתיחה ←</Link>
-              </F>
-            )}
-          </Fields>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Fact label="לגבייה">{ils(toCollect(c))}</Fact>
+          <Fact label="מועד פירעון צ׳ק" tone={late ? 'text-red-700' : c.received_on ? 'text-green-700' : undefined}>
+            {c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ ${daysLate(exp.date, t0)} ימים` : ''}` : exp.basis}
+          </Fact>
+          <Fact label="מצב תביעה" tone="text-indigo-700">{c.claim_stage}</Fact>
+          <Fact label="נפתח · ימי עבודה">
+            {formatDate(c.opened_at)} · {workingDaysBetween(c.opened_at, c.closed_at ?? t0)}
+          </Fact>
         </div>
+        <Grid3>
+          <Cell label="משלם">{payerOf(c) || '—'}</Cell>
+          <Cell label="סוג תביעה">{c.claim_type}</Cell>
+          <Cell label="מספר תביעה">{c.claim_number}</Cell>
+          {c.status === 'LEGAL' && <Cell label="סיבה משפטית" tone="text-purple-800 font-semibold">{c.legal_reason}</Cell>}
+          <Cell label="מסלקת">{supervisor ? <Reassign c={c} collectors={collectors} /> : c.assigned_name}</Cell>
+          {repairCaseId && supervisor && (
+            <Cell label="תיק התיקון">
+              <Link href={`/go/${repairCaseId}`} className="text-indigo-700 font-semibold">פתיחה ←</Link>
+            </Cell>
+          )}
+        </Grid3>
         <StagePicker c={c} shortcuts={shortcuts} events={events} />
-        <div className="flex gap-2 flex-wrap pt-1">
-          <Link href={`/collections/${c.id}/letter`} className="h-10 px-4 inline-flex items-center rounded-xl border border-gray-300 bg-white text-sm font-semibold">
+        <div className="flex gap-2 flex-wrap">
+          <Link href={`/collections/${c.id}/letter`} className="h-9 px-3 inline-flex items-center rounded-lg border border-gray-300 bg-white text-xs font-semibold">
             📄 צור מכתב דרישת תשלום
           </Link>
           <WhatsAppDocs c={c} />
@@ -131,13 +150,13 @@ export function CaseFileClient({
         </div>
       </div>
 
-      <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {tabs.map(([k, label]) => (
           <button
             key={k}
             type="button"
             onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap ${tab === k ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500'}`}
+            className={`px-3 py-1.5 text-[13px] font-semibold border-b-2 -mb-px whitespace-nowrap ${tab === k ? 'border-red-600 text-red-700' : 'border-transparent text-gray-500'}`}
           >
             {label}
           </button>
@@ -482,9 +501,9 @@ function DetailsTab({ c, title, fields, note }: { c: CollectionCase; title: stri
     router.refresh();
   }
 
-  const input = 'w-full h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
+  const input = 'w-full h-9 px-2.5 rounded-lg border border-gray-300 text-[13px] bg-white';
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+    <div className="rounded-xl border border-gray-200 bg-white p-3 md:p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-bold">{title}</h2>
         {!edit && (
@@ -502,19 +521,19 @@ function DetailsTab({ c, title, fields, note }: { c: CollectionCase; title: stri
       </div>
       {note && <p className="text-xs text-amber-700">{note}</p>}
       {!edit ? (
-        <Fields>
+        <Grid3>
           {fields.map((f) => (
-            <F key={f.k} label={f.label}>
+            <Cell key={f.k} label={f.label}>
               {show(c, f)}
-            </F>
+            </Cell>
           ))}
-        </Fields>
+        </Grid3>
       ) : (
         <div className="space-y-2">
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
             {fields.map((f) => (
-              <label key={f.k} className="block">
-                <span className="block text-xs text-gray-500 mb-0.5">{f.label}</span>
+              <label key={f.k} className="block min-w-0">
+                <span className="block text-[11px] text-gray-500 mb-0.5">{f.label}</span>
                 {f.type === 'select' ? (
                   <select value={v[f.k] ?? ''} onChange={(e) => setV({ ...v, [f.k]: e.target.value })} className={input}>
                     <option value="">—</option>
