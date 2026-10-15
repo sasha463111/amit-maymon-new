@@ -54,6 +54,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: 'התראות', href: '/notifications' },
     { label: 'ארכיון', href: '/cases/archive' },
     { label: 'הגדרות', href: '/settings' },
+    { label: '💡 הצעות ייעול', href: '/requests' },
   ],
   PAINTER: [
     { label: 'תיקים', href: '/painters' },

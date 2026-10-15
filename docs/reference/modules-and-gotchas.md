@@ -85,6 +85,13 @@
     - בשרת: אי אפשר לפתוח תיק פתוח שני לאותו רכב עם אותו `event_date`.
   - **בתוך התיק:** `StagePicker` לעדכון מצב תביעה (כל שינוי נרשם בטיפול השוטף), ו-`reassignCase` (העברה למסלקת אחרת, למנכ״ל ולחני).
   - **פידבק בטא:** טבלת `beta_feedback`, רכיב `collections/Feedback.tsx`. הכפתור "💡 פידבק / חלום" מופיע ברשימה ובתיק, ונשלח לעמית כ-`DIRECT_NOTE` (פוש + "הודעות"). בלשונית "💡 פידבק" עמית וחני משיבים ומסמנים: בתכנון / בוצע / לא כרגע.
+- **💡 הצעות ייעול (`/requests`, 15/10, עמית; מיגרציה `20261015100000`; מנכ"ל בלבד):** מחליף את GitHub Discussions, שנסגרו כשהריפו הפך לפרטי.
+  - **טבלאות:** `app_requests` (סטטוס NEW / IN_PROGRESS / DONE / NO) ו-`app_request_messages` (`author_id` null = צוות הפיתוח). שתיהן server-only. צילומי מסך נשמרים ב-bucket פרטי `app-requests`.
+  - **פעולות** (`actions/appRequests.ts`):
+    - `createAppRequest` / `addRequestMessage`: ההודעה החדשה נשלחת כ-DIRECT_NOTE (פוש) לשאר חשבונות ה-CEO, כלומר לתומר.
+    - `setRequestStatus`: עמית יכול לסגור בקשה.
+  - **תשובה מהטרמינל:** הפונקציה `dev_reply_request(id, body, status)` מוסיפה את התשובה, משנה את הסטטוס ושולחת פוש לעמית ("✅ הבקשה שלך בוצעה"). ההרשאה להריץ אותה בוטלה ל-anon ול-authenticated, כך שרק service role יכול לקרוא לה.
+  - **התהליך כולו:** ב-skill `.claude/skills/amit-requests` (`/amit-requests`).
 - **🔐 אימות דו-שלבי ב-Duo Mobile (15/10, עמית: "שיהיה לכולם"; מיגרציה `20261015090000`):**
   - **מה זה:** Supabase MFA מסוג TOTP. Duo Mobile מקבל חשבונות צד ג׳ דרך "Use QR code".
   - **למי זה פועל:** `profiles.mfa_required`, לכל אדם בנפרד. ב-`(dashboard)/layout.tsx`: מי שנדרש ולא נמצא ב-`aal2` מועבר ל-`/mfa`.
