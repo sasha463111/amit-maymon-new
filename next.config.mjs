@@ -7,6 +7,10 @@ const nextConfig = {
   // and offers a refresh when a newer version is live (UpdateBanner) — an open
   // tab / installed app otherwise keeps running the old code for days.
   env: { NEXT_PUBLIC_BUILD_ID: String(Date.now()) },
+  // Security review (16/10): the app doesn't use next/image, yet /_next/image
+  // was live — and the image optimizer carries open critical advisories on the
+  // 14.x line (RCE with AVIF). Off = no optimizer endpoint at all.
+  images: { unoptimized: true },
   // Scanned documents (replacement cars, 2026-10-14) go through server actions;
   // the 1 MB default is too small for a phone photo of a page. Stays under
   // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.
