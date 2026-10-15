@@ -413,3 +413,8 @@ supabase/
   - פגיעויות בתלויות הפרודקשן: 19 → 2 (`next`, ו-`postcss` שבתוכו). שתיהן נסגרות רק ב-Next ≥ 15.5.24 (upgrade major: React 19, `params` / `cookies()` / `headers()` אסינכרוניים). **צריך לתכנן את השדרוג בנפרד.**
   - עד אז: `images.unoptimized: true`. האפליקציה לא משתמשת ב-`next/image`, ו-`/_next/image` היה חי למרות זאת. זה סוגר את משטח ה-RCE (AVIF) של ה-Image Optimizer.
   - ה-RCE של Windows לא רלוונטי (Vercel = Linux).
+- **🔒 עוד מסקירת האבטחה (16/10):**
+  - **כותרות אבטחה** (`headers()` ב-`next.config.mjs`): `X-Frame-Options: DENY`, CSP מצומצם (`frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`, בלי הגבלה על סקריפטים), `nosniff`, `Referrer-Policy`, `Permissions-Policy` (מצלמה ומיקרופון רק לאתר עצמו, בשביל סריקה והכתבה). לפני כן Vercel שלח רק HSTS. **אין iframe לדפי האפליקציה**: אם צריך כזה, לפתוח את `frame-ancestors`.
+  - `lookupVehicleByPlate` דורש עכשיו התחברות, כדי שלא יהיה proxy פתוח למשרד התחבורה.
+  - נסרקו כל ה-server actions: כל פונקציה מיוצאת שעובדת עם service client בודקת זהות דרך helper (`ceo()`, `access()`, `requireReferralAccess`, `requireSettingsAccess`, `officeOrCeo`, `deliverNote`). שאר הפונקציות עובדות דרך client של המשתמש, שמוגן ב-RLS.
+  - נתיבי ה-API: cron ו-push מאומתים ב-secret מה-Vault, customer-docs ב-token מוצפן, ו-perf רק למחוברים.

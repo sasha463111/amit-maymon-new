@@ -11,6 +11,24 @@ const nextConfig = {
   // was live — and the image optimizer carries open critical advisories on the
   // 14.x line (RCE with AVIF). Off = no optimizer endpoint at all.
   images: { unoptimized: true },
+  // Security headers (security review 16/10). Vercel only sent HSTS. The CSP
+  // is deliberately narrow — no embedding in other sites (clickjacking), no
+  // plugins, forms only to us — and doesn't restrict scripts (inline Next
+  // scripts would break). Camera + mic for scanning / dictation, own site only.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(), payment=(), usb=()' },
+        ],
+      },
+    ];
+  },
   // Scanned documents (replacement cars, 2026-10-14) go through server actions;
   // the 1 MB default is too small for a phone photo of a page. Stays under
   // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.

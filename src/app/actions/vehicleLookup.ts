@@ -1,5 +1,7 @@
 'use server';
 
+import { createClient } from '@/lib/supabase/server';
+
 // Israel Ministry of Transport open datasets.
 //
 // A plate can live in any one of these, and they are separate datasets — not
@@ -108,6 +110,10 @@ async function mainRegistryIsEmpty(): Promise<boolean> {
 export async function lookupVehicleByPlate(
   plateNumber: string
 ): Promise<{ vehicle_type: string | null; vehicle_year: number | null; error?: string }> {
+  // Security review (16/10): a 'use server' export is a public endpoint — signed-in staff only,
+  // so our server isn't an open proxy to the Ministry of Transport API.
+  const { data: { user } } = await (await createClient()).auth.getUser();
+  if (!user) return { vehicle_type: null, vehicle_year: null, error: 'לא מחובר' };
   const digits = plateNumber.replace(/\D/g, '');
   if (!digits) return { vehicle_type: null, vehicle_year: null, error: 'מספר רישוי לא תקין' };
 
