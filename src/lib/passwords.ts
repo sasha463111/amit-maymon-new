@@ -13,8 +13,8 @@ function letters(n: number): string {
   return s;
 }
 
-/** e.g. "kmr-4829-tvb" */
+/** e.g. "Kmr-4829-tvb" — also meets the rules people choose by (passwordPolicy.ts). */
 export function generatePassword(): string {
-  return `${letters(3)}-${randomInt(1000, 10000)}-${letters(3)}`;
+  return `${letters(1).toUpperCase()}${letters(2)}-${randomInt(1000, 10000)}-${letters(3)}`;
 }
 
