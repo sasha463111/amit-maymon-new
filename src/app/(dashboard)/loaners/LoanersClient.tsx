@@ -1,5 +1,6 @@
 'use client';
 
+import { LicensePlate } from '@/components/ui/LicensePlate';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -520,7 +521,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
                   <span className="text-xs font-semibold text-gray-600 w-14">{b.name}:</span>
                   {cars.map((f) => (
                     <button key={f.id} type="button" onClick={() => setManualPlate(f.plate)} className="px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs text-right">
-                      <b>{f.plate}</b> · {f.car_type}
+                      <LicensePlate plate={f.plate} size="sm" /> {f.car_type}
                     </button>
                   ))}
                 </div>
@@ -533,7 +534,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
                   .filter((f) => !f.branch_id)
                   .map((f) => (
                     <button key={f.id} type="button" onClick={() => setManualPlate(f.plate)} className="px-2.5 py-1 rounded-lg border border-gray-300 bg-white text-xs text-right">
-                      <b>{f.plate}</b> · {f.car_type}
+                      <LicensePlate plate={f.plate} size="sm" /> {f.car_type}
                     </button>
                   ))}
               </div>
@@ -825,7 +826,7 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
     if (!edit.branch_id) return setErr('נא לבחור סניף');
     setBusy(true);
     setErr(null);
-    const r = await saveFleetCar({ id: edit.id, plate: edit.plate ?? '', car_type: edit.car_type ?? '', branch_id: edit.branch_id ?? null, notes: edit.notes ?? null, active: edit.active ?? true });
+    const r = await saveFleetCar({ id: edit.id, plate: edit.plate ?? '', car_type: edit.car_type ?? '', branch_id: edit.branch_id ?? null, notes: edit.notes ?? null, active: edit.active ?? true, test_until: edit.test_until ?? null });
     setBusy(false);
     if (r.error) return setErr(r.error);
     setEdit(null);
@@ -881,8 +882,11 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
                 </span>
               </div>
               <Fields>
-                <F label="מספר רכב" tone="text-gray-900 font-bold">{f.plate}</F>
+                <F label="מספר רכב">
+                  <LicensePlate plate={f.plate} size="sm" />
+                </F>
                 <F label="דגם">{f.car_type}</F>
+                {f.test_until && <F label="טסט עד" tone={testTone(f.test_until)}>{testLabel(f.test_until)}</F>}
                 {at && (
                   <>
                     <F label="נמסר ל">{at.customer_name ?? '—'}</F>
@@ -929,6 +933,10 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
             <span className={lab}>הערות</span>
             <input value={edit.notes ?? ''} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} className={input} />
           </label>
+          <label>
+            <span className={lab}>טסט עד (ריק = נמשך אוטומטית ממשרד התחבורה)</span>
+            <input type="date" value={edit.test_until ?? ''} onChange={(e) => setEdit({ ...edit, test_until: e.target.value || null })} className={input} dir="ltr" />
+          </label>
           {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
           <button type="button" onClick={() => void save()} disabled={busy} className="w-full h-11 rounded-xl bg-gray-900 text-white font-bold disabled:opacity-50">
             {busy ? 'שומר…' : 'שמור'}
@@ -937,6 +945,21 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
       )}
     </div>
   );
+}
+
+// "טסט עד" (15/10): red when expired, amber within 30 days.
+function testDays(iso: string): number {
+  const today = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }));
+  return Math.round((new Date(iso).getTime() - today.getTime()) / 86_400_000);
+}
+function testLabel(iso: string): string {
+  const d = testDays(iso);
+  const date = iso.slice(0, 10).split('-').reverse().join('/');
+  return d < 0 ? `${date} — פג תוקף!` : d <= 30 ? `${date} — עוד ${d} ימים` : date;
+}
+function testTone(iso: string): string {
+  const d = testDays(iso);
+  return d < 0 ? 'text-red-700 font-bold' : d <= 30 ? 'text-amber-700 font-bold' : '';
 }
 
 /** Send the customer his copy of the signed documents on WhatsApp. */

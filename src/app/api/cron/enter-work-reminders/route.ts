@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchTestUntil } from '@/lib/motTest.server';
 import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotificationEmail } from '@/lib/notificationEmail';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
@@ -820,6 +821,57 @@ async function runSupplierStatementReminder(supabase: ServiceClient, isoDate: st
   return { sent: rows.length };
 }
 
+/** Round 11 — loaner fleet test ("טסט") expiry (Tomer, 15/10): once a car's
+ *  licence expires within 30 days, re-check the Ministry of Transport registry
+ *  (a renewed car just gets its new date, no reminder); otherwise ONE grouped
+ *  DIRECT_NOTE per person — the office staff of the car's branch + the CEOs —
+ *  and the car is marked (test_reminded_for) so it is not repeated for the
+ *  same expiry date. Work days from 09:00. */
+async function runLoanerTestReminders(supabase: ServiceClient, todayIso: string) {
+  const until = new Date(new Date(todayIso).getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const { data } = await supabase
+    .from('loaner_fleet')
+    .select('id, plate, car_type, branch_id, test_until, test_reminded_for')
+    .eq('active', true)
+    .not('test_until', 'is', null)
+    .lte('test_until', until);
+  type Car = { id: string; plate: string; car_type: string; branch_id: string | null; test_until: string; test_reminded_for: string | null };
+  const due: Car[] = [];
+  let renewed = 0;
+  for (const car of (data ?? []) as Car[]) {
+    if (car.test_reminded_for === car.test_until) continue;
+    const fresh = await fetchTestUntil(car.plate);
+    if (fresh && fresh > until) {
+      await supabase.from('loaner_fleet').update({ test_until: fresh } as never).eq('id', car.id);
+      renewed++;
+      continue;
+    }
+    due.push(car);
+  }
+  if (!due.length) return { due: 0, renewed };
+
+  const { data: people } = await supabase.from('profiles').select('id, role, branch_ids').in('role', ['CEO', 'OFFICE']).eq('is_active', true);
+  const list = (people ?? []) as { id: string; role: string; branch_ids: string[] | null }[];
+  const ddmm = (iso: string) => iso.split('-').reverse().slice(0, 2).join('/');
+  const line = (c: Car) => `${c.plate} ${c.car_type} — ${c.test_until < todayIso ? 'פג ב-' : 'עד '}${ddmm(c.test_until)}`;
+  const rows = list
+    .map((p) => ({ p, cars: p.role === 'CEO' ? due : due.filter((c) => c.branch_id && (p.branch_ids ?? []).includes(c.branch_id)) }))
+    .filter((x) => x.cars.length)
+    .map(({ p, cars }) => ({
+      user_id: p.id,
+      type: 'DIRECT_NOTE',
+      title: cars.length === 1 ? `🚗 טסט לרכב חליפי ${cars[0].plate} נגמר בקרוב` : `🚗 ${cars.length} רכבים חליפיים — טסט נגמר בחודש הקרוב`,
+      body: cars.map(line).join('\n').slice(0, 900),
+      action_url: '/loaners',
+    }));
+  if (rows.length) {
+    const { error } = await supabase.from('notifications').insert(rows as never);
+    if (error) return { error: error.message };
+  }
+  for (const c of due) await supabase.from('loaner_fleet').update({ test_reminded_for: c.test_until } as never).eq('id', c.id);
+  return { due: due.length, renewed, notified: rows.length };
+}
+
 /** Round 9 — collection-case reminders (Amit, 2026-10-14): a reminder set in
  *  a case's running log ("טיפול שוטף") reaches the person it is for — bell +
  *  push — once its time has come. Any hour, any day: the collector chose the
@@ -944,5 +996,10 @@ export async function GET(req: NextRequest) {
     ? { skipped: true as const }
     : await runCollectionsWeekly(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly });
+  // 11. Loaner fleet — test expiring within 30 days. Work days from 09:00.
+  const loanerTests = (isWeekend || isHoliday || hour < 9)
+    ? { skipped: true as const }
+    : await runLoanerTestReminders(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly, loanerTests });
 }

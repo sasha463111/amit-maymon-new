@@ -1,5 +1,6 @@
 'use server';
 
+import { fetchTestUntil } from '@/lib/motTest.server';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
@@ -54,7 +55,7 @@ async function upload(db: NonNullable<ReturnType<typeof serviceClient>>, prefix:
   return error ? null : path;
 }
 
-export type FleetCar = { id: string; plate: string; car_type: string; branch_id: string | null; branch_name: string | null; notes: string | null; active: boolean; busy: boolean };
+export type FleetCar = { id: string; plate: string; car_type: string; branch_id: string | null; branch_name: string | null; notes: string | null; active: boolean; busy: boolean; test_until: string | null };
 export type LoanerDoc = { id: string; stage: 'OUT' | 'IN'; url: string | null; file_name: string | null; mime_type: string | null; created_at: string };
 export type Handover = {
   id: string;
@@ -93,7 +94,7 @@ export async function listLoaners(): Promise<{ fleet: FleetCar[]; handovers: Han
   if (!ctx) return { fleet: [], handovers: [], branches: [], error: 'אין הרשאה' };
   const { db } = ctx;
   const [fleetRes, hoRes, docsRes, branchesRes] = await Promise.all([
-    db.from('loaner_fleet').select('id, plate, car_type, branch_id, notes, active').order('plate'),
+    db.from('loaner_fleet').select('id, plate, car_type, branch_id, notes, active, test_until').order('plate'),
     db.from('loaner_handovers').select('*').order('given_at', { ascending: false }).limit(3000),
     db.from('loaner_documents').select('id, handover_id, stage, file_path, file_name, mime_type, created_at').order('created_at'),
     db.from('branches').select('id, name').order('name'),
@@ -155,14 +156,17 @@ export async function listLoaners(): Promise<{ fleet: FleetCar[]; handovers: Han
 }
 
 /** Add / edit a fleet car. */
-export async function saveFleetCar(input: { id?: string; plate: string; car_type: string; branch_id: string | null; notes: string | null; active: boolean }): Promise<{ error?: string; ok?: true }> {
+export async function saveFleetCar(input: { id?: string; plate: string; car_type: string; branch_id: string | null; notes: string | null; active: boolean; test_until?: string | null }): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
   const plate = input.plate.replace(/\D/g, '');
   if (plate.length < 5) return { error: 'מספר רכב לא תקין' };
   if (!input.car_type.trim()) return { error: 'נא להזין סוג רכב' };
   if (!input.branch_id) return { error: 'נא לבחור סניף' };
-  const row = { plate, car_type: input.car_type.trim().slice(0, 80), branch_id: input.branch_id || null, notes: (input.notes ?? '').trim().slice(0, 300) || null, active: input.active };
+  // "טסט עד": typed, or from the Ministry of Transport registry (15/10).
+  let testUntil = input.test_until && /^\d{4}-\d{2}-\d{2}$/.test(input.test_until) ? input.test_until : null;
+  if (!testUntil) testUntil = await fetchTestUntil(plate);
+  const row = { plate, car_type: input.car_type.trim().slice(0, 80), branch_id: input.branch_id || null, notes: (input.notes ?? '').trim().slice(0, 300) || null, active: input.active, ...(testUntil ? { test_until: testUntil } : {}) };
   const { error } = input.id
     ? await ctx.db.from('loaner_fleet').update(row as never).eq('id', input.id)
     : await ctx.db.from('loaner_fleet').insert({ ...row, created_by: ctx.user.id } as never);
