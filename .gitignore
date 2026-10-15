@@ -40,3 +40,11 @@ supabase/.branches
 supabase/.temp
 .claude/settings.local.json
 .env*
+
+# graphify output
+graphify-out/
+
+# Secrets / data dumps — never in git (15/10, security cleanup)
+.backups/
+SqlBackup/*.sql
+*.dump
