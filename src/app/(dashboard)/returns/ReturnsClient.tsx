@@ -19,6 +19,7 @@ import { SignaturePad } from '@/components/SignaturePad';
 import { formatDate, formatDateTime } from '@/lib/dates';
 import type { SupplierDocRow } from '@/app/actions/supplierDocs';
 import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
+import { BranchFilter, StatCard, StatGrid, ils } from '@/components/ui/kit';
 
 type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
 
@@ -78,6 +79,22 @@ export function ReturnsClient({
   const waiting = rows.filter((r) => r.status === 'WAITING_PICKUP');
   const forCredit = rows.filter((r) => r.status === 'COLLECTED' || r.status === 'DISPUTE');
   const done = rows.filter((r) => r.status === 'CREDITED');
+  const summary = useMemo(() => {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+    const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }) : '');
+    const month = today.slice(0, 7);
+    const credited = done.filter((r) => day(r.credited_at).startsWith(month));
+    return {
+      pickup7: waiting.filter((r) => daysSince(r.created_at) > 7).length,
+      pickup14: waiting.filter((r) => daysSince(r.created_at) > 14).length,
+      credit14: forCredit.filter((r) => r.collected_at && daysSince(r.collected_at) > 14).length,
+      monthCount: credited.length,
+      monthSum: credited.reduce((s, r) => s + (r.credit_amount ?? 0), 0),
+      todayMarked: rows.filter((r) => day(r.created_at) === today).length,
+      todayCollected: rows.filter((r) => day(r.collected_at) === today).length,
+      todayCredited: rows.filter((r) => day(r.credited_at) === today).length,
+    };
+  }, [rows, waiting, forCredit, done]);
   // Search over everything (Amit: a part or a credit shows up a month or two
   // later — "was this returned or not?"): part, SKU, invoice numbers, plate…
   const [query, setQuery] = useState('');
@@ -123,14 +140,18 @@ export function ReturnsClient({
       </div>
 
       {branchNames.length > 1 && (
-        <div className="flex gap-1.5 flex-wrap items-center">
-          <span className="text-xs text-gray-500">סניף:</span>
-          {[['', `כל הסניפים (${allRows.length})`], ...branchNames.map((b) => [b, `${b} (${allRows.filter((r) => r.branch_name === b).length})`])].map(([k, text]) => (
-            <button key={k || 'all'} type="button" onClick={() => setBranch(k)} className={`h-9 px-4 rounded-lg border text-sm font-semibold ${branch === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300 text-gray-700'}`}>
-              {text}
-            </button>
-          ))}
-        </div>
+        <BranchFilter branches={branchNames.map((b) => ({ id: b, name: `${b} (${allRows.filter((r) => r.branch_name === b).length})` }))} value={branch} onChange={setBranch} />
+      )}
+
+      {/* Summary strip (Amit 15/10: "דשבורד שמסכם את כל פעילות ההחזרות עם עדכונים
+          יומיים") — the shared kit; a card opens its tab. */}
+      {!isPainter && !q && (
+        <StatGrid>
+          <StatCard label="ממתין לאיסוף" value={waiting.length} hint={`${summary.pickup7} מעל 7 ימים · ${summary.pickup14} מעל 14`} tone={summary.pickup14 ? 'bad' : summary.pickup7 ? 'warn' : 'neutral'} onClick={() => setTab('pickup')} active={tab === 'pickup'} />
+          <StatCard label="נאסף — ממתין לזיכוי" value={forCredit.length} hint={`${summary.credit14} מעל 14 ימים מהאיסוף`} tone={summary.credit14 ? 'warn' : 'neutral'} onClick={() => setTab('credit')} active={tab === 'credit'} />
+          <StatCard label="זוכו החודש" value={summary.monthCount} hint={ils(summary.monthSum)} tone="good" onClick={() => setTab('done')} active={tab === 'done'} />
+          <StatCard label="היום — סומנו להחזרה" value={summary.todayMarked} hint={`${summary.todayCollected} נאספו · ${summary.todayCredited} זוכו`} tone="info" onClick={() => setTab('all')} active={tab === 'all'} />
+        </StatGrid>
       )}
 
       {toast && <div className="rounded-lg bg-green-50 border border-green-200 text-green-800 px-4 py-2 text-sm font-semibold">{toast}</div>}
@@ -949,9 +970,66 @@ const STATUS_CHIP: Record<string, string> = {
 
 /** Everything in one table — the view Amit knows from his Sheets: what is
  *  waiting, what went with which driver, invoice and credit numbers. */
-function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDone: (m: string) => void; canCredit: boolean }) {
+// Table filters (Amit 15/10: "שיהיה אפשרות למיין גם לפי סטטוס ושיהיה רשום סכום").
+const TABLE_STATUSES: [string, string][] = [
+  ['', 'הכל'],
+  ['WAITING_PICKUP', 'ממתין לאיסוף'],
+  ['COLLECTED', 'נאסף · ממתין לזיכוי'],
+  ['DISPUTE', 'בבירור'],
+  ['CREDITED', 'זוכה'],
+];
+type TableSort = 'new' | 'old' | 'waiting' | 'amount';
+const TABLE_SORTS: [TableSort, string][] = [
+  ['new', 'חדש → ישן'],
+  ['old', 'ישן → חדש'],
+  ['waiting', 'הכי הרבה ימים ממתין'],
+  ['amount', 'סכום זיכוי'],
+];
+// Days a part has been waiting at its current step (pickup → since marked; credit → since collected).
+const waitingDays = (r: PartReturnRow) => (r.status === 'WAITING_PICKUP' ? daysSince(r.created_at) : (r.status === 'COLLECTED' || r.status === 'DISPUTE') && r.collected_at ? daysSince(r.collected_at) : 0);
+
+function ReturnsTable({ rows: input, onDone, canCredit }: { rows: PartReturnRow[]; onDone: (m: string) => void; canCredit: boolean }) {
   const [view, setView] = useState<string | null>(null);
-  if (rows.length === 0) return <p className="text-gray-400 py-8 text-center">לא נמצאו החזרות</p>;
+  const [status, setStatus] = useState('');
+  const [sort, setSort] = useState<TableSort>('new');
+  if (input.length === 0) return <p className="text-gray-400 py-8 text-center">לא נמצאו החזרות</p>;
+  const rows = input
+    .filter((r) => !status || r.status === status)
+    .slice()
+    .sort((a, b) =>
+      sort === 'old'
+        ? a.created_at.localeCompare(b.created_at)
+        : sort === 'waiting'
+          ? waitingDays(b) - waitingDays(a)
+          : sort === 'amount'
+            ? (b.credit_amount ?? -1) - (a.credit_amount ?? -1)
+            : b.created_at.localeCompare(a.created_at),
+    );
+  const creditSum = rows.reduce((s, r) => s + (r.credit_amount ?? 0), 0);
+  const filters = (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {TABLE_STATUSES.map(([k, l]) => {
+        const n = k ? input.filter((r) => r.status === k).length : input.length;
+        return (
+          <button key={k || 'all'} type="button" onClick={() => setStatus(k)} className={`h-8 px-3 rounded-lg border text-xs font-semibold ${status === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-300 text-gray-700'}`}>
+            {l} ({n})
+          </button>
+        );
+      })}
+      <select value={sort} onChange={(e) => setSort(e.target.value as TableSort)} className="h-8 px-2 rounded-lg border border-gray-300 text-xs mr-auto" aria-label="מיון">
+        {TABLE_SORTS.map(([k, l]) => (
+          <option key={k} value={k}>מיון: {l}</option>
+        ))}
+      </select>
+    </div>
+  );
+  if (rows.length === 0)
+    return (
+      <div className="space-y-2">
+        {filters}
+        <p className="text-gray-400 py-8 text-center">אין החזרות בסטטוס הזה</p>
+      </div>
+    );
   const pic = (url: string | null, label: string) =>
     url ? (
       <button type="button" onClick={() => setView(url)} className="text-blue-700 underline decoration-dotted">
@@ -961,18 +1039,20 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
       <span>{label}</span>
     );
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+    <div className="space-y-2">
+    {filters}
+    <div className="overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
       <table className="min-w-[900px] w-full text-sm">
-        <thead className="bg-gray-50 text-gray-600 text-xs">
+        <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
           <tr>
-            {['תאריך', 'חלק', 'מק"ט', 'ספק', 'רכב', 'חשבונית מקור', 'סטטוס', 'נמסר לנהג', 'חשבונית זיכוי', 'סכום', ''].map((h) => (
-              <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+            {['תאריך', 'חלק', 'מק"ט', 'ספק', 'רכב', 'חשבונית מקור', 'סטטוס', 'נמסר לנהג', 'חשבונית זיכוי', 'סכום זיכוי', ''].map((h, i) => (
+              <th key={h || i} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {rows.map((r) => (
-            <tr key={r.id} className="align-top">
+            <tr key={r.id} className="align-top even:bg-gray-50/60 hover:bg-indigo-50/40">
               <td className="px-3 py-2 whitespace-nowrap text-gray-500">{formatDate(r.created_at)}</td>
               <td className="px-3 py-2">
                 {pic(r.photo_url, r.description || '—')}
@@ -994,7 +1074,9 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
                 <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
                   {PART_RETURN_STATUS_LABEL[r.status] ?? r.status}
                 </span>
-                {r.status === 'WAITING_PICKUP' && <div className="text-[11px] text-gray-400">{daysSince(r.created_at)} ימים</div>}
+                {waitingDays(r) > 0 && (
+                  <div className={`text-[11px] ${waitingDays(r) > 14 ? 'text-red-600 font-bold' : waitingDays(r) > 7 ? 'text-amber-600 font-semibold' : 'text-gray-400'}`}>{waitingDays(r)} ימים ממתין</div>
+                )}
               </td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {r.collected_at ? (
@@ -1015,6 +1097,13 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
             </tr>
           ))}
         </tbody>
+        <tfoot className="bg-gray-100 text-xs font-semibold text-gray-700 sticky bottom-0">
+          <tr>
+            <td colSpan={9} className="px-3 py-2">{rows.length} שורות</td>
+            <td className="px-3 py-2 whitespace-nowrap">{creditSum ? ils(creditSum) : '—'}</td>
+            <td />
+          </tr>
+        </tfoot>
       </table>
       {view && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
@@ -1022,6 +1111,7 @@ function ReturnsTable({ rows, onDone, canCredit }: { rows: PartReturnRow[]; onDo
           <img src={view} alt="" className="max-w-full max-h-full rounded-lg" />
         </div>
       )}
+    </div>
     </div>
   );
 }

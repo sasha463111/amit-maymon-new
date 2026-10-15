@@ -26,6 +26,7 @@ import { CaseFields, STATUS_CHIP, STATUS_LABEL, ils, isClosed, num, str, toColle
 import { formatDate } from '@/lib/dates';
 import { shortVehicle } from '@/lib/vehicleLabel';
 import { LicensePlate } from '@/components/ui/LicensePlate';
+import { StatCard, StatGrid } from '@/components/ui/kit';
 import { LEGAL_REASONS, OTHER } from '@/lib/collectionStages';
 
 type Tab = 'active' | 'overdue' | 'legal' | 'closed' | 'all' | 'shir' | 'feedback' | 'summary';
@@ -101,6 +102,8 @@ export function CollectionsClient({
     closed: withExp.filter((e) => isClosed(e.c)).length,
     all: withExp.length,
   };
+  const sumOf = (list: E[]) => list.reduce((s, e) => s + toCollect(e.c), 0);
+  const paidMonth = scoped.filter((c) => c.received_on && c.received_on.slice(0, 7) === t0.slice(0, 7));
 
   return (
     <div className="space-y-4">
@@ -165,6 +168,17 @@ export function CollectionsClient({
         </Link>
       </div>
 
+      {/* Summary strip — the shared kit (Tomer 15/10, "עיצוב אחיד"). Money only
+          for CEO / bookkeeper: collectors see counts, not money summaries. */}
+      {(tab === 'active' || tab === 'overdue' || tab === 'closed' || tab === 'all') && (
+        <StatGrid>
+          <StatCard label="בטיפול" value={counts.active} hint={isCeo ? `לגבייה ${ils(sumOf(withExp.filter((e) => !isClosed(e.c) && e.c.status !== 'LEGAL')))}` : undefined} onClick={() => setTab('active')} active={tab === 'active'} />
+          <StatCard label="⏰ באיחור" value={counts.overdue} hint={isCeo ? ils(sumOf(withExp.filter(overdue))) : 'עבר מועד הפירעון'} tone={counts.overdue ? 'bad' : 'good'} onClick={() => setTab('overdue')} active={tab === 'overdue'} />
+          <StatCard label="שולמו החודש" value={paidMonth.length} hint={isCeo ? ils(paidMonth.reduce((s, c) => s + (c.received_amount ?? 0), 0)) : undefined} tone="good" onClick={() => setTab('closed')} active={tab === 'closed'} />
+          <StatCard label="⚖️ טיפול משפטי" value={counts.legal} tone={counts.legal ? 'warn' : 'neutral'} href="/legal" />
+        </StatGrid>
+      )}
+
       {tab === 'summary' && weekly ? (
         <WeeklyView s={weekly} />
       ) : tab === 'feedback' ? (
@@ -173,20 +187,22 @@ export function CollectionsClient({
         <ShirBatch invoices={shir} terms={terms} />
       ) : (
       <>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔎 רכב, לקוח, חברת ביטוח, מספר תביעה, מצב תביעה, חשבונית, עורך דין…"
-        className="w-full h-11 px-3 rounded-xl border border-gray-300 text-sm"
-        dir="auto"
-      />
-
-      <div className="flex gap-1.5">
-        {([['table', '📋 טבלה'], ['cards', '🔲 כרטיסים']] as const).map(([k, l]) => (
-          <button key={k} type="button" onClick={() => chooseView(k)} className={`h-9 px-3 rounded-lg border text-sm font-semibold ${view === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}>
-            {l}
-          </button>
-        ))}
+      {/* Search + view on one row (Amit 15/10: "אצלנו מרגיש גדול מדי"). */}
+      <div className="flex gap-2 items-center">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="🔎 רכב, לקוח, חברת ביטוח, מספר תביעה, מצב תביעה, חשבונית, עורך דין…"
+          className="flex-1 min-w-0 h-10 px-3 rounded-xl border border-gray-300 text-sm"
+          dir="auto"
+        />
+        <div className="inline-flex rounded-xl border border-gray-300 bg-white p-0.5 shrink-0">
+          {([['table', '📋 טבלה'], ['cards', '🔲 כרטיסים']] as const).map(([k, l]) => (
+            <button key={k} type="button" onClick={() => chooseView(k)} className={`h-8 px-3 rounded-lg text-xs font-semibold ${view === k ? 'bg-gray-900 text-white' : 'text-gray-700'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
 
       {view === 'cards' ? (
@@ -197,16 +213,18 @@ export function CollectionsClient({
           ))}
         </div>
       ) : (
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="min-w-[1150px] w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600 text-xs">
+      <div className="overflow-auto max-h-[72vh] rounded-xl border border-gray-200 bg-white">
+        {/* Compact table (Amit 15/10, like BAFI: "מקום לכל דבר"): tighter rows,
+            sticky header, zebra rows, plates as licence plates. */}
+        <table className="min-w-[1100px] w-full text-[13px] [&_td]:px-2 [&_td]:py-1.5 [&_th]:px-2 [&_th]:py-2">
+          <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
             <tr>
-              {['נפתח', 'רכב / לקוח', 'חברה', 'סוג', 'לגבייה', 'צ׳ק (צד ג׳)', 'אישור תשלום', 'מועד פירעון צ׳ק', 'סטטוס', 'ימי עבודה', ''].map((h) => (
-                <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+              {['נפתח', 'רכב / לקוח', 'חברה', 'סוג', 'לגבייה', 'צ׳ק (צד ג׳)', 'אישור תשלום', 'מועד פירעון צ׳ק', 'סטטוס', 'ימי עבודה', ''].map((h, i) => (
+                <th key={h || i} className="text-right font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
             {shown.length === 0 && (
               <tr>
                 <td colSpan={11} className="text-center text-gray-400 py-8">
@@ -224,8 +242,8 @@ export function CollectionsClient({
                     {isCeo && <div className="text-[11px] text-gray-500">{c.assigned_name}</div>}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    <Link href={`/collections/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-indigo-700">
-                      {c.plate}
+                    <Link href={`/collections/${c.id}`} onClick={(e) => e.stopPropagation()} className="inline-block">
+                      <LicensePlate plate={c.plate} size="sm" />
                     </Link>
                     {c.vehicle_type && <div className="text-[11px] text-gray-600">{shortVehicle(c.vehicle_type)}</div>}
                     {c.customer_name && <div className="text-[11px] text-gray-500">{c.customer_name}</div>}

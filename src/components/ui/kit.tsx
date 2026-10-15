@@ -23,8 +23,8 @@ const RING: Record<Tone, string> = {
   info: 'border-indigo-200',
 };
 
-/** A number with its label — and, optionally, a hint line and a link. */
-export function StatCard({ label, value, hint, tone = 'neutral', href }: { label: string; value: string | number; hint?: string; tone?: Tone; href?: string }) {
+/** A number with its label — and, optionally, a hint line and a link / action. */
+export function StatCard({ label, value, hint, tone = 'neutral', href, onClick, active = false }: { label: string; value: string | number; hint?: string; tone?: Tone; href?: string; onClick?: () => void; active?: boolean }) {
   const inner = (
     <>
       <span className="block text-xs text-gray-500">{label}</span>
@@ -32,7 +32,14 @@ export function StatCard({ label, value, hint, tone = 'neutral', href }: { label
       {hint && <span className="block text-[11px] text-gray-500 mt-0.5">{hint}</span>}
     </>
   );
-  const cls = `rounded-xl border-2 bg-white p-3 text-right ${RING[tone]}`;
+  const cls = `rounded-xl border-2 bg-white p-3 text-right ${active ? 'border-gray-900 ring-1 ring-gray-900' : RING[tone]}`;
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${cls} hover:bg-gray-50 block w-full`}>
+        {inner}
+      </button>
+    );
+  }
   return href ? (
     <Link href={href} className={`${cls} hover:bg-gray-50 block`}>
       {inner}
