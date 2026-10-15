@@ -6,16 +6,16 @@ import type { UserRole } from '@/types/database';
 import { homeForRole } from '@/lib/roleHome';
 import { getSignedInHome } from '@/lib/signedInHome';
 
-export async function loginAction(credentials: { email: string; rememberMe?: boolean }) {
+export async function loginAction(credentials: { email: string; password?: string; rememberMe?: boolean }) {
   const supabase = await createClient();
 
-  // Email-only login: staff enter just their email. The actual password is a
-  // server-side shared secret (env), never shown or typed by the user. Every
-  // active account is set to this secret, so signInWithPassword succeeds by
-  // email alone. (No OTP / no email delivery -> no lockout risk.)
-  const password = process.env.EMAIL_ONLY_LOGIN_PASSWORD;
+  // Personal passwords (Amit, 2026-10-15). Until then the login was email-only
+  // with a shared server-side secret — anyone who knew a staff email could get
+  // in. The demo site alone keeps the old email-only flow.
+  const demo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  const password = demo ? process.env.EMAIL_ONLY_LOGIN_PASSWORD : credentials.password;
   if (!password) {
-    return { error: 'ההתחברות אינה מוגדרת בשרת. פנה למנהל המערכת.' };
+    return { error: demo ? 'ההתחברות אינה מוגדרת בשרת.' : 'נא להקליד סיסמה' };
   }
 
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -24,7 +24,7 @@ export async function loginAction(credentials: { email: string; rememberMe?: boo
   });
 
   if (authError) {
-    return { error: 'אימייל לא נמצא במערכת. בדוק את הכתובת או פנה למנהל.' };
+    return { error: 'המייל או הסיסמה שגויים. שכחת סיסמה? פנה לעמית.' };
   }
   if (!authData.user) {
     return { error: 'התחברות נכשלה' };

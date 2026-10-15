@@ -157,7 +157,7 @@ RLS מבטיח שמשתמשים רואים רק את סניפם. CEO רואה ה
 - מיגרציות DB הן שלב נפרד — פוש קוד לא מריץ SQL.
 - Vercel region **`bom1`** ליד Supabase (`ap-south-1`) — לא להחזיר ל-iad1. בדיקה: `GET /api/health/db`.
 - כתובת אחת: `amit-maymon-new-psi.vercel.app`; ה-middleware בפרויקטים האחרים מפנה אליה. אתר הדגמה: `NEXT_PUBLIC_DEMO_MODE=true` בלבד (פירוט: `docs/reference/deploy-demo-qa.md`).
-- התחברות = מייל בלבד (`EMAIL_ONLY_LOGIN_PASSWORD` ב-`.env.local`); חשבונות בדיקה `QA_ACCOUNT_*` ב-`.env.local`.
+- התחברות = מייל + **סיסמה אישית** (מ-15/10). רק המנכ"ל מאפס (`resetUserPassword`). אסור לחזור לכניסה במייל בלבד. `EMAIL_ONLY_LOGIN_PASSWORD` נשאר רק לאתר הדמו. חשבונות בדיקה `QA_ACCOUNT_*` ב-`.env.local`.
 
 </important>
 

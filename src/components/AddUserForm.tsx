@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Plus, Mail, User, Shield } from 'lucide-react';
 import { createNewSystemUser } from '@/app/actions/users';
+import { PasswordReveal } from '@/components/PasswordReveal';
 import type { UserRole } from '@/types/database';
 import { STAFF_JOBS, jobByKey } from '@/lib/staffJobs';
 
@@ -33,6 +34,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [created, setCreated] = useState<{ name: string; email: string; password: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -45,6 +47,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
 
     if (res?.ok) {
       setResult({ ok: true, msg: `✅ משתמש ${formData.email} נוצר בהצלחה` });
+      if (res.password) setCreated({ name: formData.full_name, email: res.email, password: res.password });
       setFormData({
         email: '',
         full_name: '',
@@ -53,7 +56,7 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
         branch_ids: [],
       });
       onUserCreated?.({ id: res.userId, email: res.email });
-      setTimeout(() => setShowForm(false), 2000);
+      setShowForm(false);
     } else {
       setResult({ ok: false, msg: `❌ ${res?.error ?? 'נכשל'}` });
     }
@@ -71,7 +74,8 @@ export function AddUserForm({ branches, onUserCreated }: Props) {
   const isCeo = formData.role === 'CEO';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+      {created && <PasswordReveal name={created.name} email={created.email} password={created.password} onClose={() => setCreated(null)} />}
       {!showForm ? (
         <button
           onClick={() => setShowForm(true)}

@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { generatePassword } from '@/lib/passwords';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
@@ -208,10 +209,9 @@ export async function createNewSystemUser(params: {
 
   // Validate inputs
   if (!email || !email.includes('@')) return { error: 'דוא"ל לא תקין' };
-  // Sign-in is by email only: every account uses the shared secret the login
-  // page signs in with. A password typed here would lock the person out.
-  const password = process.env.EMAIL_ONLY_LOGIN_PASSWORD;
-  if (!password) return { error: 'EMAIL_ONLY_LOGIN_PASSWORD לא מוגדר בשרת' };
+  // Personal password (Amit, 15/10): generated here, shown once to the CEO to
+  // send the person. (Until 15/10 everyone shared one server-side secret.)
+  const password = generatePassword();
   const admin = serviceClient();
   if (!admin) return { error: 'שרת לא מוגדר (service key)' };
   if (!full_name || full_name.trim().length === 0) return { error: 'שם מלא נדרש' };
@@ -272,7 +272,20 @@ export async function createNewSystemUser(params: {
   }
 
   revalidatePath('/settings');
-  return { ok: true, userId: authUser.user.id, email };
+  return { ok: true, userId: authUser.user.id, email, password };
+}
+
+/** CEO only (Amit: "רק אני יכול לאפס"): a new personal password, shown once. */
+export async function resetUserPassword(userId: string): Promise<{ ok?: true; error?: string; password?: string; email?: string; name?: string }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { data: prof } = await admin.from('profiles').select('full_name').eq('id', userId).maybeSingle();
+  const password = generatePassword();
+  const { data, error: upErr } = await admin.auth.admin.updateUserById(userId, { password });
+  if (upErr || !data.user) return { error: upErr?.message ?? 'המשתמש לא נמצא' };
+  return { ok: true, password, email: data.user.email ?? '', name: (prof as { full_name: string | null } | null)?.full_name ?? '' };
 }
 
 export async function getViewAsState(): Promise<ViewAsState | null> {

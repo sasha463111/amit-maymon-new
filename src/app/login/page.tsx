@@ -11,6 +11,8 @@ const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState(DEMO_MODE ? DEMO_LOGIN_EMAIL : '');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +65,7 @@ export default function LoginPage() {
     }
 
     try {
-      const result = await loginAction({ email });
+      const result = await loginAction({ email, password });
       if (result?.error) {
         setError(result.error);
         setLoading(false);
@@ -119,9 +121,36 @@ export default function LoginPage() {
               />
             </div>
 
-            <p className="text-xs text-gray-500 -mt-1 leading-relaxed">
-              הכניסה היא עם כתובת המייל בלבד, ללא סיסמה.
-            </p>
+            {!DEMO_MODE && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  סיסמה
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full border border-gray-200 rounded-lg px-3.5 py-2.5 text-sm focus:border-brand-red focus:ring-2 focus:ring-brand-red/10 outline-none transition-all bg-gray-50 focus:bg-white"
+                    dir="ltr"
+                    autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 px-2 py-1"
+                  >
+                    {showPassword ? 'הסתר' : 'הצג'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">שכחת סיסמה? פונים לעמית והוא מאפס.</p>
+              </div>
+            )}
 
             {/* No "remember me" box: the session is always kept on this device (it
                 set a cookie nothing ever read, so it only confused people). */}

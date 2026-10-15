@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
-import { updateSystemUser, startViewAsUser, type SystemUser } from '@/app/actions/users';
+import { updateSystemUser, startViewAsUser, resetUserPassword, type SystemUser } from '@/app/actions/users';
+import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
 import type { UserRole } from '@/types/database';
@@ -33,6 +34,19 @@ export function UsersTab({
   const [, startTransition] = useTransition();
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
   const [pushTestBusy, setPushTestBusy] = useState(false);
+  // Personal passwords (Amit, 15/10): only the CEO resets; shown once.
+  const [revealed, setRevealed] = useState<{ name: string; email: string; password: string } | null>(null);
+
+  async function resetPassword(u: SystemUser) {
+    if (!window.confirm(`לאפס את הסיסמה של ${u.full_name}? הסיסמה הקודמת תפסיק לעבוד מיד.`)) return;
+    setBusyId(u.id);
+    setError(null);
+    const r = await resetUserPassword(u.id);
+    setBusyId(null);
+    if (r.error || !r.password) return setError(r.error ?? 'האיפוס נכשל');
+    setRevealed({ name: r.name || u.full_name, email: r.email ?? '', password: r.password });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function handleTestPush() {
     setPushTestBusy(true);
@@ -139,6 +153,7 @@ export function UsersTab({
         </div>
       </div>
 
+      {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} onClose={() => setRevealed(null)} />}
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
           ⚠️ {error}
@@ -256,6 +271,14 @@ export function UsersTab({
                       className="flex-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-200"
                     >
                       ערוך
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === u.id}
+                      onClick={() => void resetPassword(u)}
+                      className="flex-1 px-3 py-1.5 bg-amber-100 text-amber-800 rounded text-xs font-medium hover:bg-amber-200 disabled:opacity-50"
+                    >
+                      🔑 איפוס סיסמה
                     </button>
                     {u.id !== currentUserId && (
                       <button
@@ -398,6 +421,14 @@ export function UsersTab({
                             className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium hover:bg-indigo-200"
                           >
                             ערוך
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === u.id}
+                            onClick={() => void resetPassword(u)}
+                            className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs font-medium hover:bg-amber-200 disabled:opacity-50"
+                          >
+                            🔑 איפוס סיסמה
                           </button>
                           {u.id !== currentUserId && (
                             <button
