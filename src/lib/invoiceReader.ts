@@ -10,6 +10,8 @@ import { PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 const MODEL = 'claude-haiku-5-5';
 
 export type InvoiceFields = {
+  /** The items on the document — short Hebrew descriptions, comma-separated (Amit 15/10, #30). */
+  items: string | null;
   doc_type: 'INVOICE' | 'DELIVERY_NOTE' | 'CREDIT_INVOICE' | null;
   supplier: string | null; // one of PART_RETURN_SUPPLIERS, or 'אחר'
   supplier_other: string | null;
@@ -41,10 +43,11 @@ const TOOL = {
       plate: { type: 'string', description: 'Israeli vehicle licence plate if printed (רכב / רישוי / מס' + "'" + ' רכב), 7 or 8 digits, digits only. Empty if not printed.' },
       amount: { type: 'number', description: 'The total to pay INCLUDING VAT (סה"כ לתשלום / סה"כ כולל מע"מ / סה"כ לזיכוי) — usually the largest total at the bottom. Read it carefully. 0 ONLY if no price is printed at all (e.g. a delivery note without prices).' },
       invoice_date: { type: 'string', description: 'The document date as YYYY-MM-DD (Israeli day/month order).' },
+      items: { type: 'string', description: 'The parts / items listed on the document: their descriptions as printed (תאור פריט), comma-separated, up to 6, e.g. "מראה שמאלית, פגוש קדמי". Empty only if no item lines are printed.' },
     },
     // amount + plate required (Amit 15/10: "בכל החשבוניות שצולמו לא קלט את הסכום"
     // — as an optional field the model often skipped it). 0 / '' = not printed.
-    required: ['doc_type', 'supplier', 'invoice_number', 'invoice_date', 'amount', 'plate'],
+    required: ['doc_type', 'supplier', 'invoice_number', 'invoice_date', 'amount', 'plate', 'items'],
   },
 } as const;
 
@@ -96,6 +99,7 @@ export async function readInvoice(image: { base64: string; mediaType: string }):
   const type = str(out.doc_type);
   const amount = typeof out.amount === 'number' && out.amount > 0 && out.amount < 10_000_000 ? Math.round(out.amount * 100) / 100 : null;
   return {
+    items: str(out.items)?.slice(0, 300) ?? null,
     doc_type: type === 'INVOICE' || type === 'DELIVERY_NOTE' || type === 'CREDIT_INVOICE' ? type : null,
     supplier: supplier && (PART_RETURN_SUPPLIERS as readonly string[]).includes(supplier) ? supplier : null,
     supplier_other: str(out.supplier_other),

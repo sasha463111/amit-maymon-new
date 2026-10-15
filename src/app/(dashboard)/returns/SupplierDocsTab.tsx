@@ -6,6 +6,8 @@ import type { PartReturnRow } from '@/app/actions/partReturns';
 import { PART_RETURN_SUPPLIERS } from '@/lib/partReturns';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { formatDate } from '@/lib/dates';
+import { LicensePlate } from '@/components/ui/LicensePlate';
+import { BranchFilter, ils } from '@/components/ui/kit';
 
 // "🧾 חשבוניות / ת. משלוח" (Amit, 2026-10-14): every photographed supplier
 // document, by branch and date, with search. Invoices photographed on a
@@ -28,6 +30,8 @@ export type DocLine = {
   date: string;
   plate: string | null;
   amount: number | null;
+  /** Items on the document ("תיאור פריט", #30). */
+  items: string | null;
   notes: string | null;
   photo_url: string | null;
   by: string | null;
@@ -46,6 +50,7 @@ export function docLines(docs: SupplierDocRow[], returns: PartReturnRow[]): DocL
     date: d.doc_date,
     plate: d.plate,
     amount: d.amount,
+    items: d.items,
     notes: d.notes,
     photo_url: d.photo_url,
     by: d.created_by_name,
@@ -57,21 +62,21 @@ export function docLines(docs: SupplierDocRow[], returns: PartReturnRow[]): DocL
     if (r.invoice_url)
       lines.push({
         key: `${r.id}-o`, branch_id: r.branch_id, branch_name: r.branch_name, type: 'חשבונית (מהחזרה)', supplier: r.supplier_label,
-        number: r.document_number, date: r.created_at.slice(0, 10), plate: r.plate, amount: null, notes: part || null,
+        number: r.document_number, date: r.created_at.slice(0, 10), plate: r.plate, amount: null, items: part || null, notes: null,
         photo_url: r.invoice_url, by: r.created_by_name, source: 'return',
       });
     if (r.credit_invoice_url)
       lines.push({
         key: `${r.id}-c`, branch_id: r.branch_id, branch_name: r.branch_name, type: 'חשבונית זיכוי (מהחזרה)', supplier: r.supplier_label,
         number: r.credit_invoice_number, date: (r.credited_at ?? r.created_at).slice(0, 10), plate: r.plate, amount: r.credit_amount,
-        notes: part || null, photo_url: r.credit_invoice_url, by: null, source: 'return',
+        items: part || null, notes: null, photo_url: r.credit_invoice_url, by: null, source: 'return',
       });
   }
   return lines.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function matchesDoc(l: DocLine, q: string): boolean {
-  return [l.number, l.supplier, l.plate, l.notes, l.type, l.by, l.branch_name, formatDate(l.date)].some((v) => (v ?? '').toLowerCase().includes(q));
+  return [l.number, l.supplier, l.plate, l.items, l.notes, l.type, l.by, l.branch_name, formatDate(l.date)].some((v) => (v ?? '').toLowerCase().includes(q));
 }
 
 export function SupplierDocsTab({
@@ -99,23 +104,16 @@ export function SupplierDocsTab({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="px-4 h-11 bg-gray-900 text-white rounded-xl text-sm font-bold"
+          className="px-4 h-10 bg-gray-900 text-white rounded-xl text-sm font-bold"
         >
           📷 צלם חשבונית / ת. משלוח
         </button>
-        {branches.length > 1 && (
-          <select value={branch} onChange={(e) => setBranch(e.target.value)} className="h-11 px-3 rounded-xl border border-gray-300 text-sm">
-            <option value="">כל הסניפים</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        )}
+        {branches.length > 1 && <BranchFilter branches={branches} value={branch} onChange={setBranch} />}
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="🔎 מספר מסמך, ספק, רכב, תאריך…"
-          className="flex-1 min-w-[200px] h-11 px-3 rounded-xl border border-gray-300 text-sm"
+          placeholder="🔎 מספר מסמך, ספק, פריט, רכב, תאריך…"
+          className="flex-1 min-w-[200px] h-10 px-3 rounded-xl border border-gray-300 text-sm"
           dir="auto"
         />
       </div>
@@ -160,27 +158,34 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="min-w-[760px] w-full text-sm">
-        <thead className="bg-gray-50 text-gray-600 text-xs">
+    // Clear at a glance (Amit 15/10, #32): type chip, the items column, amount
+    // aligned and bold, plates as licence plates, a totals row.
+    <div className="overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
+      <table className="min-w-[900px] w-full text-[13px]">
+        <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
           <tr>
-            {['תאריך', 'סוג', 'ספק', 'מספר', 'רכב', 'סכום', 'הערות', 'צילם', 'בדיקה', ''].map((h) => (
-              <th key={h} className="px-3 py-2 text-right font-semibold whitespace-nowrap">{h}</th>
+            {['תאריך', 'סוג', 'ספק', 'מספר מסמך', 'תיאור פריטים', 'רכב', 'סכום', 'צילם', 'בדיקה', ''].map((h, i) => (
+              <th key={h || i} className={`px-2 py-2 font-semibold whitespace-nowrap ${h === 'סכום' ? 'text-left' : 'text-right'}`}>{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="[&>tr:nth-child(even)]:bg-gray-50/60">
           {rows.map((l) => (
-            <tr key={l.key} className="border-t border-gray-100">
-              <td className="px-3 py-2 whitespace-nowrap">{formatDate(l.date)}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{l.type}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{l.supplier}</td>
-              <td className="px-3 py-2 whitespace-nowrap" dir="ltr">{l.number ?? '—'}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{l.plate ?? ''}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{l.amount != null ? `₪${l.amount.toLocaleString('he-IL')}` : ''}</td>
-              <td className="px-3 py-2 max-w-[220px] truncate" title={l.notes ?? ''}>{l.notes ?? ''}</td>
-              <td className="px-3 py-2 whitespace-nowrap text-gray-500">{l.by ?? ''}</td>
-              <td className="px-3 py-2 whitespace-nowrap">
+            <tr key={l.key} className="border-t border-gray-100 align-top hover:bg-indigo-50/40">
+              <td className="px-2 py-1.5 whitespace-nowrap text-gray-600">{formatDate(l.date)}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap">
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${l.type.startsWith('חשבונית זיכוי') ? 'bg-green-100 text-green-800' : l.type.startsWith('תעודת') ? 'bg-sky-100 text-sky-800' : 'bg-gray-100 text-gray-800'}`}>{l.type}</span>
+              </td>
+              <td className="px-2 py-1.5 whitespace-nowrap font-semibold">{l.supplier}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{l.number ?? <span className="text-red-600">חסר</span>}</td>
+              <td className="px-2 py-1.5 min-w-[160px] max-w-[260px]">
+                {l.items ? <span className="line-clamp-2" title={l.items}>{l.items}</span> : <span className="text-gray-300">—</span>}
+                {l.notes && <span className="block text-[11px] text-gray-500 truncate" title={l.notes}>{l.notes}</span>}
+              </td>
+              <td className="px-2 py-1.5 whitespace-nowrap">{l.plate ? <LicensePlate plate={l.plate} size="sm" /> : <span className="text-gray-300">—</span>}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap text-left font-bold tabular-nums">{l.amount != null ? ils(l.amount) : <span className="text-gray-300 font-normal">—</span>}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap text-gray-500">{l.by ?? ''}</td>
+              <td className="px-2 py-1.5 whitespace-nowrap">
                 {l.source === 'return' ? (
                   <span className="text-gray-400 text-xs">בהחזרה</span>
                 ) : l.doc?.verified_at ? (
@@ -198,7 +203,7 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
                   </button>
                 )}
               </td>
-              <td className="px-3 py-2 whitespace-nowrap">
+              <td className="px-2 py-1.5 whitespace-nowrap">
                 {l.photo_url && (
                   <button type="button" onClick={() => setView(l.photo_url)} className="text-blue-700 underline decoration-dotted">
                     📄 צפייה
@@ -208,6 +213,13 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
             </tr>
           ))}
         </tbody>
+        <tfoot className="bg-gray-100 text-xs font-semibold text-gray-700 sticky bottom-0">
+          <tr>
+            <td colSpan={6} className="px-2 py-2">{rows.length} מסמכים</td>
+            <td className="px-2 py-2 text-left tabular-nums">{ils(rows.reduce((s, l) => s + (l.amount ?? 0), 0))}</td>
+            <td colSpan={3} />
+          </tr>
+        </tfoot>
       </table>
       {view && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
@@ -229,6 +241,7 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [plate, setPlate] = useState('');
   const [amount, setAmount] = useState('');
+  const [items, setItems] = useState('');
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -252,6 +265,7 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
     if (x.invoice_number) setNumber((v) => v || x.invoice_number!);
     if (x.plate) setPlate((v) => v || x.plate!);
     if (x.amount != null) setAmount((v) => v || String(x.amount));
+    if (x.items) setItems((v) => v || x.items!);
     if (x.invoice_date && !dateTouched) setDate(x.invoice_date);
     setReading('filled');
   }
@@ -261,8 +275,17 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
   async function save(confirmDuplicate = false) {
     setError(null);
     if (!photo) return setError('נא לצלם את המסמך');
-    if (!supplier || (supplier === 'אחר' && !supplierOther.trim())) return setError('נא לבחור ספק');
-    if (!branchId) return setError('נא לבחור סניף');
+    // Everything is required except the plate (Amit 15/10, #31): if the photo
+    // didn't fill a field, say exactly which ones are still empty.
+    const missing = [
+      (!supplier || (supplier === 'אחר' && !supplierOther.trim())) && 'ספק',
+      !number.trim() && (docType === 'DELIVERY_NOTE' ? 'מספר תעודת משלוח' : 'מספר חשבונית'),
+      !date && 'תאריך',
+      !amount.trim() && 'סכום (0 אם אין מחירים בתעודה)',
+      !items.trim() && 'תיאור פריטים',
+      !branchId && 'סניף',
+    ].filter(Boolean);
+    if (missing.length) return setError(`⚠️ יש שדות ריקים — להשלים: ${missing.join(' · ')}`);
     setSaving(true);
     const fd = new FormData();
     fd.append('doc_type', docType);
@@ -272,6 +295,7 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
     fd.append('branch_id', branchId);
     fd.append('plate', plate);
     fd.append('amount', amount);
+    fd.append('items', items);
     fd.append('notes', notes);
     fd.append('photo', await shrinkImage(photo));
     if (confirmDuplicate) fd.append('confirm_duplicate', 'yes');
@@ -352,10 +376,14 @@ function NewDocForm({ branches, onClose, onSaved }: { branches: { id: string; na
             <input value={plate} onChange={(e) => setPlate(e.target.value)} inputMode="numeric" className={`${input} mt-0.5`} dir="ltr" />
           </label>
           <label className="text-xs text-gray-500">
-            סכום כולל מע״מ ₪
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={`${input} mt-0.5`} dir="ltr" />
+            סכום כולל מע״מ ₪ *
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={`${input} mt-0.5 ${!amount.trim() && reading === 'filled' ? 'border-amber-400 bg-amber-50' : ''}`} dir="ltr" />
           </label>
         </div>
+        <label className="block text-xs text-gray-500">
+          תיאור פריטים *
+          <input value={items} onChange={(e) => setItems(e.target.value)} placeholder="למשל: מראה שמאלית, פגוש קדמי" className={`${input} mt-0.5 ${!items.trim() && reading === 'filled' ? 'border-amber-400 bg-amber-50' : ''}`} />
+        </label>
         {branches.length > 1 && (
           <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className={input}>
             <option value="">סניף…</option>

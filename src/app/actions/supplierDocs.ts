@@ -45,6 +45,7 @@ export type SupplierDocRow = {
   doc_date: string;
   plate: string | null;
   amount: number | null;
+  items: string | null;
   notes: string | null;
   photo_url: string | null;
   created_at: string;
@@ -61,7 +62,7 @@ export async function listSupplierDocs(): Promise<{ rows: SupplierDocRow[]; erro
   const { supabase, user } = ctx;
   const { data, error } = await supabase
     .from('supplier_documents')
-    .select('id, branch_id, doc_type, supplier, doc_number, doc_date, plate, amount, notes, photo_path, created_at, created_by, verified_at, verified_by')
+    .select('id, branch_id, doc_type, supplier, doc_number, doc_date, plate, amount, items, notes, photo_path, created_at, created_by, verified_at, verified_by')
     .order('doc_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(2000);
@@ -91,6 +92,7 @@ export async function listSupplierDocs(): Promise<{ rows: SupplierDocRow[]; erro
       doc_date: r.doc_date,
       plate: r.plate,
       amount: r.amount == null ? null : Number(r.amount),
+      items: r.items ?? null,
       notes: r.notes,
       photo_url: urlByPath.get(r.photo_path) ?? null,
       created_at: r.created_at,
@@ -127,6 +129,15 @@ export async function createSupplierDoc(formData: FormData): Promise<{ error?: s
   const amountRaw = clean(formData.get('amount'), 20).replace(/[,₪\s]/g, '');
   const amount = amountRaw ? Number(amountRaw) : null;
   if (amount != null && (!Number.isFinite(amount) || amount < 0)) return { error: 'סכום לא תקין' };
+  // Everything is required except the plate (Amit 15/10, #31) — the same check
+  // as the form, so a half-read photo can't be saved with empty fields.
+  const items = clean(formData.get('items'), 300);
+  const missing = [
+    !clean(formData.get('doc_number'), 80) && 'מספר מסמך',
+    amount == null && 'סכום',
+    !items && 'תיאור פריטים',
+  ].filter(Boolean);
+  if (missing.length) return { error: `יש להשלים: ${missing.join(', ')}` };
 
   const db = serviceClient();
   if (!db) return { error: 'שרת לא מוגדר' };
@@ -168,6 +179,7 @@ export async function createSupplierDoc(formData: FormData): Promise<{ error?: s
     doc_date: docDate,
     plate: clean(formData.get('plate'), 12).replace(/\D/g, '') || null,
     amount,
+    items,
     notes: clean(formData.get('notes'), 500) || null,
     photo_path: path,
     created_by: user.id,
