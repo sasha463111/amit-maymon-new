@@ -308,24 +308,27 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
     router.refresh();
   }
 
-  const input = 'h-10 px-3 rounded-lg border border-gray-300 text-sm bg-white';
+  const input = 'h-9 px-2.5 rounded-lg border border-gray-300 text-[13px] bg-white';
+  // Compact (Amit 15/10, like BAFI): on a computer the form + open reminders sit
+  // beside the history, so what was done is in view while writing.
   return (
-    <div className="space-y-4">
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] items-start">
+    <div className="space-y-3 lg:sticky lg:top-28">
       {open.length > 0 && (
-        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 space-y-2">
-          <p className="font-bold text-sm text-amber-900">⏰ תזכורות פתוחות</p>
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-2.5 space-y-1.5">
+          <p className="font-bold text-[13px] text-amber-900">⏰ תזכורות פתוחות ({open.length})</p>
           {open.map((e) => {
             const due = (e.remind_at ?? '') <= now;
             return (
-              <div key={e.id} id={`r-${e.id}`} className={`rounded-lg bg-white border p-2 space-y-1 ${hash === `r-${e.id}` ? 'ring-2 ring-amber-500' : 'border-amber-200'}`}>
-                <Fields>
-                  <F label="מתי" tone={due ? 'text-amber-800 font-bold' : undefined}>{at(e.remind_at)}{due ? ' · הגיע הזמן' : ''}</F>
-                  <F label="מה">{e.body}</F>
-                  <F label="תזכורת ל">{e.remind_user_name}</F>
-                  <F label="נקבעה ע״י">{e.created_by_name}</F>
-                </Fields>
+              <div key={e.id} id={`r-${e.id}`} className={`rounded-lg bg-white border px-2 py-1.5 flex items-start gap-2 ${hash === `r-${e.id}` ? 'ring-2 ring-amber-500' : 'border-amber-200'}`}>
+                <div className="min-w-0 flex-1 text-[13px]">
+                  <p className={due ? 'text-amber-800 font-bold' : 'text-gray-700'}>
+                    {at(e.remind_at)}{due ? ' · הגיע הזמן' : ''} · <span className="font-normal text-gray-500">ל{e.remind_user_name ?? ''}</span>
+                  </p>
+                  <p className="text-gray-900 break-words">{e.body}</p>
+                </div>
                 {(e.remind_is_mine || supervisor) && (
-                  <button type="button" disabled={busy} onClick={() => void done(e.id)} className="h-9 px-4 rounded-lg bg-green-600 text-white text-sm font-semibold disabled:opacity-50">
+                  <button type="button" disabled={busy} onClick={() => void done(e.id)} className="h-8 px-3 shrink-0 rounded-lg bg-green-600 text-white text-xs font-semibold disabled:opacity-50">
                     ✓ בוצע
                   </button>
                 )}
@@ -335,11 +338,11 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
-        <p className="font-semibold text-sm">הוספה לטיפול השוטף</p>
-        <div className="flex gap-1.5 flex-wrap">
+      <div className="rounded-xl border border-gray-200 bg-white p-2.5 space-y-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="font-semibold text-[13px] ml-1">הוספה:</p>
           {(['NOTE', 'CALL', 'EMAIL'] as CaseEventKind[]).map((k) => (
-            <button key={k} type="button" onClick={() => setKind(k)} className={`h-9 px-3 rounded-lg border text-sm font-semibold ${kind === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}>
+            <button key={k} type="button" onClick={() => setKind(k)} className={`h-8 px-2.5 rounded-lg border text-xs font-semibold ${kind === k ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-300'}`}>
               {KIND_LABEL[k]}
             </button>
           ))}
@@ -347,12 +350,12 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          rows={3}
+          rows={2}
           placeholder={remind ? 'פירוט (רשות אם נבחרה סיבה). למשל: לחזור למיכל מביטוח ישיר' : 'מה נעשה? למשל: דיברתי עם מיכל מהראל, הדוח אצל השמאי'}
-          className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm"
+          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 text-[13px]"
         />
-        <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
-          <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} className="w-5 h-5" />
+        <label className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer">
+          <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} className="w-4 h-4" />
           ⏰ להוסיף תזכורת (תקפוץ בטלפון ובפעמון)
         </label>
         {remind && (
@@ -394,7 +397,7 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
                   key={l}
                   type="button"
                   onClick={() => setRDate(new Date(Date.now() + Number(d) * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }))}
-                  className="h-10 px-3 rounded-lg border border-gray-300 text-xs font-semibold bg-white"
+                  className="h-9 px-2.5 rounded-lg border border-gray-300 text-xs font-semibold bg-white"
                 >
                   {l}
                 </button>
@@ -403,30 +406,35 @@ function LogTab({ c, events, supervisor }: { c: CollectionCase; events: CaseEven
           </div>
         )}
         {err && <p className="text-sm text-red-600">⚠️ {err}</p>}
-        <button type="button" onClick={() => void add()} disabled={busy} className="h-11 px-6 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-50">
+        <button type="button" onClick={() => void add()} disabled={busy} className="h-9 px-5 rounded-lg bg-red-600 text-white text-[13px] font-bold disabled:opacity-50">
           {busy ? 'שומר…' : remind ? 'שמירה + תזכורת' : 'שמירה'}
         </button>
       </div>
+    </div>
 
-      <div className="space-y-2">
-        {events.length === 0 && <p className="text-gray-400 text-center py-6">עוד אין רישומים בתיק</p>}
-        {events.map((e) => (
-          <div key={e.id} className="rounded-xl border border-gray-200 bg-white p-3">
-            <div className="flex items-center justify-between gap-2 text-xs text-gray-500">
-              <span className="font-semibold text-gray-700">{KIND_LABEL[e.kind]}</span>
-              <span className="flex items-center gap-2">
-                {at(e.created_at)} · {e.created_by_name ?? ''}
+      {/* History — a compact timeline (newest first). */}
+      <div className="rounded-xl border border-gray-200 bg-white p-2.5">
+        <p className="font-semibold text-[13px] mb-1.5">היסטוריית הטיפול ({events.length})</p>
+        {events.length === 0 && <p className="text-gray-400 text-center py-6 text-sm">עוד אין רישומים בתיק</p>}
+        <ol className="relative border-r-2 border-gray-100 pr-3 space-y-1.5">
+          {events.map((e) => (
+            <li key={e.id} className="relative">
+              <span className={`absolute -right-[17px] top-1.5 w-2 h-2 rounded-full ${e.kind === 'STATUS' ? 'bg-indigo-500' : e.kind === 'DOC' ? 'bg-sky-400' : e.kind === 'SYSTEM' ? 'bg-gray-300' : 'bg-red-400'}`} />
+              <div className="flex items-baseline gap-x-2 gap-y-0 flex-wrap text-[11px] text-gray-500">
+                <span className="font-semibold text-gray-700">{KIND_LABEL[e.kind]}</span>
+                <span>{at(e.created_at)}</span>
+                <span>{e.created_by_name ?? ''}</span>
                 {e.can_delete && <DeleteEvent id={e.id} />}
-              </span>
-            </div>
-            <p className="text-sm text-gray-900 whitespace-pre-wrap mt-1">{e.body}</p>
-            {e.remind_at && (
-              <p className={`text-xs mt-1 ${e.remind_done_at ? 'text-green-700' : 'text-amber-700'}`}>
-                ⏰ תזכורת ל-{at(e.remind_at)} · {e.remind_user_name ?? ''} · {e.remind_done_at ? `בוצע ${at(e.remind_done_at)}` : e.reminded_at ? 'נשלחה, ממתינה לביצוע' : 'מתוזמנת'}
-              </p>
-            )}
-          </div>
-        ))}
+              </div>
+              <p className="text-[13px] text-gray-900 whitespace-pre-wrap leading-snug">{e.body}</p>
+              {e.remind_at && (
+                <p className={`text-[11px] ${e.remind_done_at ? 'text-green-700' : 'text-amber-700'}`}>
+                  ⏰ {at(e.remind_at)} · {e.remind_user_name ?? ''} · {e.remind_done_at ? `בוצע ${at(e.remind_done_at)}` : e.reminded_at ? 'נשלחה, ממתינה לביצוע' : 'מתוזמנת'}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   );

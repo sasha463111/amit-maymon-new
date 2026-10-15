@@ -44,15 +44,15 @@ export type AppRequestMessage = { id: string; body: string; image_url: string | 
 // History (15/10): app_request_events, written by a DB trigger on every
 // change of status / priority / kind. by = null → the development team.
 export type AppRequestEvent = { id: string; field: 'CREATED' | 'STATUS' | 'PRIORITY' | 'KIND'; from: string | null; to: string | null; note: string | null; commit: string | null; by: string | null; at: string };
-export type AppRequest = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_at: string; updated_at: string; by: string; by_id: string; messages: AppRequestMessage[]; events: AppRequestEvent[] };
+export type AppRequest = { id: string; ticket_no: number; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_at: string; updated_at: string; by: string; by_id: string; messages: AppRequestMessage[]; events: AppRequestEvent[] };
 
 export async function listAppRequests(): Promise<AppRequest[]> {
   const c = await member();
   if (!c) return [];
-  let rq = c.db.from('app_requests').select('id, status, kind, priority, created_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(500);
+  let rq = c.db.from('app_requests').select('id, ticket_no, status, kind, priority, created_by, created_at, updated_at').order('updated_at', { ascending: false }).limit(500);
   if (!c.isCeo) rq = rq.eq('created_by', c.user.id);
   const { data: reqs } = await rq;
-  type R = { id: string; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_by: string; created_at: string; updated_at: string };
+  type R = { id: string; ticket_no: number; status: RequestStatus; kind: RequestKind | null; priority: number | null; created_by: string; created_at: string; updated_at: string };
   type M = { id: string; request_id: string; body: string; image_path: string | null; author_id: string | null; created_at: string };
   const rs = (reqs ?? []) as R[];
   if (!rs.length) return [];
@@ -74,6 +74,7 @@ export async function listAppRequests(): Promise<AppRequest[]> {
   const urlByPath = new Map(((signed.data ?? []) as { path: string | null; signedUrl: string }[]).map((s) => [s.path, s.signedUrl]));
   return rs.map((r) => ({
     id: r.id,
+    ticket_no: r.ticket_no,
     status: r.status,
     kind: r.kind,
     priority: r.priority,
@@ -125,13 +126,13 @@ export async function createAppRequest(fd: FormData): Promise<{ ok?: true; error
   if (body.length < 3 && !(fd.get('image') instanceof File)) return { error: 'נא לכתוב את הבקשה' };
   const kind = String(fd.get('kind') ?? '');
   if (kind !== 'BUG' && kind !== 'FEATURE') return { error: 'נא לבחור: באג או פיתוח' };
-  const { data, error } = await c.db.from('app_requests').insert({ body: body || '(צילום מסך)', kind, created_by: c.user.id } as never).select('id').single();
+  const { data, error } = await c.db.from('app_requests').insert({ body: body || '(צילום מסך)', kind, created_by: c.user.id } as never).select('id, ticket_no').single();
   if (error || !data) return { error: error?.message ?? 'לא נשמר' };
-  const id = (data as { id: string }).id;
+  const { id, ticket_no: no } = data as { id: string; ticket_no: number };
   const img = await saveImage(c, id, fd.get('image'));
   if (img.error) return { error: img.error };
   await c.db.from('app_request_messages').insert({ request_id: id, body, image_path: img.path ?? null, author_id: c.user.id } as never);
-  await notifyDev(c, id, `${kind === 'BUG' ? '🐞 באג חדש' : '🚀 בקשת פיתוח'} מ${c.name.split(' ')[0] || 'עובד'}`, body, kind);
+  await notifyDev(c, id, `${kind === 'BUG' ? '🐞 באג חדש' : '🚀 בקשת פיתוח'} #${no} מ${c.name.split(' ')[0] || 'עובד'}`, body, kind);
   revalidatePath('/requests');
   return { ok: true };
 }
@@ -141,7 +142,7 @@ export async function addRequestMessage(fd: FormData): Promise<{ ok?: true; erro
   if (!c) return { error: 'אין הרשאה' };
   const id = String(fd.get('request_id') ?? '');
   const body = String(fd.get('body') ?? '').trim().slice(0, 5000);
-  const { data: req } = await c.db.from('app_requests').select('id, created_by, kind').eq('id', id).maybeSingle();
+  const { data: req } = await c.db.from('app_requests').select('id, created_by, kind, ticket_no').eq('id', id).maybeSingle();
   // Staff answer only in their own notes.
   if (!req || (!c.isCeo && (req as { created_by: string }).created_by !== c.user.id)) return { error: 'הבקשה לא נמצאה' };
   const img = await saveImage(c, id, fd.get('image'));
@@ -151,9 +152,9 @@ export async function addRequestMessage(fd: FormData): Promise<{ ok?: true; erro
   await c.db.from('app_requests').update({ updated_at: new Date().toISOString() } as never).eq('id', id);
   const owner = (req as { created_by: string }).created_by;
   if (c.isCeo && owner !== c.user.id) {
-    await notifyOwner(c, owner, id, '💬 תשובה על הבקשה שלך', body || '(צילום מסך)');
+    await notifyOwner(c, owner, id, `💬 תשובה על הבקשה שלך · #${(req as { ticket_no: number }).ticket_no}`, body || '(צילום מסך)');
   } else {
-    await notifyDev(c, id, `💬 תגובה מ${c.name.split(' ')[0] || 'עובד'} על הערה`, body || '(צילום מסך)', (req as { kind: string | null }).kind);
+    await notifyDev(c, id, `💬 תגובה מ${c.name.split(' ')[0] || 'עובד'} על #${(req as { ticket_no: number }).ticket_no}`, body || '(צילום מסך)', (req as { kind: string | null }).kind);
   }
   revalidatePath('/requests');
   return { ok: true };
@@ -176,8 +177,8 @@ export async function setRequestStatus(id: string, status: RequestStatus, opts: 
   const note = (opts.note ?? '').trim().slice(0, 3000);
   const commit = (opts.commit ?? '').trim().slice(0, 200);
   if (status === 'DONE' && note.length < 3) return { error: 'בסגירה צריך לכתוב "מה בוצע"' };
-  const { data: req } = await c.db.from('app_requests').select('created_by, status, body').eq('id', id).maybeSingle();
-  const r = req as { created_by: string; status: RequestStatus; body: string } | null;
+  const { data: req } = await c.db.from('app_requests').select('created_by, status, body, ticket_no').eq('id', id).maybeSingle();
+  const r = req as { created_by: string; status: RequestStatus; body: string; ticket_no: number } | null;
   if (!r) return { error: 'הבקשה לא נמצאה' };
   // The trigger writes the history event (actor = updated_by, note / commit = pending_*).
   const { error } = await c.db
@@ -191,7 +192,7 @@ export async function setRequestStatus(id: string, status: RequestStatus, opts: 
   }
   if ((opts.notify ?? true) && r.created_by !== c.user.id && r.status !== status && status !== 'NEW') {
     const title = status === 'DONE' ? '✅ הבקשה שלך בוצעה' : status === 'IN_PROGRESS' ? '🔧 התחלנו לעבוד על הבקשה שלך' : '⏸ הבקשה שלך נדחתה לבינתיים';
-    await notifyOwner(c, r.created_by, id, title, note || 'פרטים בדף ההערות לשיפור');
+    await notifyOwner(c, r.created_by, id, `${title} · #${r.ticket_no}`, note || 'פרטים בדף ההערות לשיפור');
   }
   if (opts.announce?.title?.trim()) {
     const title = opts.announce.title.trim().slice(0, 120);

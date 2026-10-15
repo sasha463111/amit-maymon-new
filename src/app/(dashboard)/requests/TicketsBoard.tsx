@@ -24,6 +24,7 @@ export function TicketsBoard({ kind, items }: { kind: RequestKind; items: AppReq
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>('open');
   const [person, setPerson] = useState('');
+  const [query, setQuery] = useState('');
   const [hash, setHash] = useState('');
   const [adding, setAdding] = useState(false);
   useEffect(() => setHash(window.location.hash.slice(1)), []);
@@ -34,6 +35,13 @@ export function TicketsBoard({ kind, items }: { kind: RequestKind; items: AppReq
   const shown = mine
     .filter((r) => (filter === 'open' ? isOpen(r.status) : filter === 'closed' ? !isOpen(r.status) : filter === 'all' ? true : r.status === filter))
     .filter((r) => !person || r.by === person)
+    // Search by ticket number ("12" / "#12") or by text (15/10).
+    .filter((r) => {
+      const q = query.trim().replace(/^#/, '');
+      if (!q) return true;
+      if (/^\d+$/.test(q)) return String(r.ticket_no) === q;
+      return r.messages.some((m) => m.body.includes(q)) || r.by.includes(q);
+    })
     // Priority first (1 → 3, none last), then the newest.
     .sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9) || b.created_at.localeCompare(a.created_at));
 
@@ -90,6 +98,7 @@ export function TicketsBoard({ kind, items }: { kind: RequestKind; items: AppReq
             {l} ({count(f)})
           </button>
         ))}
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="🔎 #מספר או טקסט" className="h-8 px-2.5 rounded-lg border border-gray-300 text-xs w-40" />
         {people.length > 1 && (
           <select value={person} onChange={(e) => setPerson(e.target.value)} className="h-8 px-2 rounded-lg border border-gray-300 text-xs mr-auto">
             <option value="">כל המבקשים</option>

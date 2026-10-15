@@ -228,6 +228,7 @@ export function RequestCard({ r, isCeo, highlight = false, collapsible = false }
     <div id={r.id} className={`rounded-2xl border bg-white p-4 space-y-3 ${highlight ? 'ring-2 ring-amber-400' : 'border-gray-200'}`}>
       <button type="button" onClick={() => collapsible && setOpen(!open)} className={`w-full text-right space-y-1.5 ${collapsible ? 'cursor-pointer' : 'cursor-default'}`}>
         <div className="flex items-center gap-1.5 flex-wrap text-xs">
+          <span className="px-2 py-1 rounded-md font-black bg-gray-900 text-white tabular-nums" title="מספר טיקט">#{r.ticket_no}</span>
           <span className={`px-2.5 py-1 rounded-full font-bold ${STATUS[r.status][1]}`}>{STATUS[r.status][0]}</span>
           {r.kind ? <span className={`px-2.5 py-1 rounded-full font-bold ${KIND[r.kind][1]}`}>{KIND[r.kind][0]}</span> : <span className="px-2.5 py-1 rounded-full font-bold bg-yellow-100 text-yellow-800">❔ לא מסווג</span>}
           {r.priority && <span className={`px-2.5 py-1 rounded-full font-bold ${PRIORITY[r.priority][1]}`}>{PRIORITY[r.priority][0]}</span>}
