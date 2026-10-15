@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { setReceivablesViewer, type ReceivablesData } from '@/app/actions/receivables';
 import type { CollectionCase } from '@/app/actions/collections';
 import { expectedPayment, payerOf, workingDaysBetween, daysLate } from '@/lib/collections';
+import { StatCard, type Tone } from '@/components/ui/kit';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 // "דשבורד גבייה" (Amit, 2026-10-14): the money side of collections, CEO + approved.
 // Sections: snapshot · expected cash flow · aging · per insurer · collected per
@@ -65,14 +67,10 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   );
 }
 
+// The shared kit (15/10, "עיצוב אחיד"): the old colour classes → kit tones.
 function Kpi({ label, value, hint, tone = '' }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className={`rounded-xl border p-3 ${tone || 'border-gray-200 bg-white'}`}>
-      <div className="text-[11px] text-gray-500">{label}</div>
-      <div className="text-xl font-bold mt-0.5">{value}</div>
-      {hint && <div className="text-[11px] text-gray-500 mt-0.5">{hint}</div>}
-    </div>
-  );
+  const t: Tone = tone.includes('red') ? 'bad' : tone.includes('green') ? 'good' : tone.includes('amber') ? 'warn' : tone.includes('purple') ? 'info' : 'neutral';
+  return <StatCard label={label} value={value} hint={hint} tone={t} />;
 }
 
 export function ReceivablesClient({ data }: { data: ReceivablesData }) {
@@ -258,15 +256,15 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
 
       <Section title="5. לפי חברת ביטוח" hint={`"נגבה", "קיזוזים" ו"ימים לתשלום" — ${PERIOD_LABEL[period]}. ימים לתשלום = מסגירת התיק במוסך עד שהכסף התקבל.`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[860px]">
-            <thead className="text-xs text-gray-500 bg-gray-50">
+          <table className="w-full text-[13px] [&_td]:py-1.5 [&_th]:py-2 min-w-[860px]">
+            <thead className="text-xs text-gray-700 bg-gray-100 sticky top-0 z-10">
               <tr>
                 {['חברה', 'תיקים בטיפול', 'יתרה לגבייה', 'באיחור', 'ממתין לפתיחת תיק', 'נגבה', 'קיזוזים', 'ממוצע ימים לתשלום'].map((h) => (
                   <th key={h} className="text-right font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
               {payers.map(([k, v]) => (
                 <tr key={k}>
                   <td className="px-2 py-1.5 font-semibold whitespace-nowrap">{k}</td>
@@ -295,7 +293,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
                 .sort((a, b) => (b.offset_amount ?? 0) - (a.offset_amount ?? 0))
                 .map((c) => (
                   <li key={c.id}>
-                    <b>{ils(c.offset_amount ?? 0)}</b> · {payerOf(c)} · {c.plate} — {c.partial_reason}
+                    <b>{ils(c.offset_amount ?? 0)}</b> · {payerOf(c)} · <span className="inline-block align-middle"><LicensePlate plate={c.plate} size="sm" /></span> — {c.partial_reason}
                   </li>
                 ))}
             </ul>
@@ -306,7 +304,7 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
           {lawyers.length === 0 ? (
             <p className="text-sm text-gray-400">אין תיקים שהועברו</p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-[13px] [&_td]:py-1.5 [&_th]:py-2">
               <thead className="text-xs text-gray-500">
                 <tr>
                   {['עורך דין', 'פתוחים', 'במחלוקת', 'הסתיימו', 'נתבע', 'התקבל', '%'].map((h) => (
@@ -334,15 +332,15 @@ export function ReceivablesClient({ data }: { data: ReceivablesData }) {
 
       <Section title="8. תפוקת מסלקות" hint="ימי עבודה = א׳–ה׳ מפתיחת תיק הגבייה עד סגירה.">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[760px]">
-            <thead className="text-xs text-gray-500 bg-gray-50">
+          <table className="w-full text-[13px] [&_td]:py-1.5 [&_th]:py-2 min-w-[760px]">
+            <thead className="text-xs text-gray-700 bg-gray-100 sticky top-0 z-10">
               <tr>
                 {['מסלקת', 'בטיפול', 'יתרה בטיפול', 'באיחור', `נסגרו ${PERIOD_LABEL[period]}`, ...(isManager ? [`נגבה ${PERIOD_LABEL[period]}`] : []), 'ממוצע ימי עבודה', 'קיזוזים'].map((h) => (
                   <th key={h} className="text-right font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
               {collectors.map((p) => {
                 const mine = rows.filter((r) => r.c.assigned_to === p.id);
                 const mOpen = mine.filter((r) => isOpen(r.c) && r.c.status !== 'LEGAL');
@@ -439,15 +437,15 @@ function CollectedByCollector({ cases, collectors }: { cases: CollectionCase[]; 
   return (
     <Section title="💰 כמה גבתה כל מסלקת" hint="🔒 מנכ״ל ומנהלת חשבונות בלבד. כסף שנכנס בתיקים של המסלקת (תשלום + סיום תביעה משפטית), לפי תאריך הכניסה.">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[620px]">
-          <thead className="text-xs text-gray-500 bg-gray-50">
+        <table className="w-full text-[13px] [&_td]:py-1.5 [&_th]:py-2 min-w-[620px]">
+          <thead className="text-xs text-gray-700 bg-gray-100 sticky top-0 z-10">
             <tr>
               {['מסלקת', `החודש (${MONTHS[Number(thisMonth.slice(5)) - 1]})`, `הרבעון (Q${Math.ceil(Number(thisMonth.slice(5)) / 3)})`, `השנה (${thisMonth.slice(0, 4)})`, 'מאז ההתחלה'].map((h) => (
                 <th key={h} className="text-right font-semibold px-2 py-2 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
             {rows.map((r) => (
               <tr key={r.id}>
                 <td className="px-2 py-1.5 font-semibold">{r.name}</td>
@@ -478,7 +476,7 @@ function CollectedByCollector({ cases, collectors }: { cases: CollectionCase[]; 
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 [&>tr:nth-child(even)]:bg-gray-50/60">
             {rows.map((r) => (
               <tr key={r.id}>
                 <td className="px-2 py-1.5 font-semibold whitespace-nowrap">{r.name}</td>

@@ -65,7 +65,8 @@ const GROUPS: { title: string; icon: React.ElementType; hrefs: string[] }[] = [
   { title: 'תיקים', icon: FolderOpen, hrefs: ['/cases', '/approvals', '/closure', '/referrals', '/cases/archive'] },
   { title: 'מוסך', icon: Package, hrefs: ['/painters', '/returns', '/loaners', '/extras', '/extras/mine'] },
   { title: 'ביטוח וכספים', icon: DollarSign, hrefs: ['/collections', '/legal', '/finance', '/receivables'] },
-  { title: 'ניהול', icon: Settings, hrefs: ['/dashboards', '/requests', '/bugs', '/features', '/settings', '/notifications'] },
+  // "📊 דשבורדים" stays a direct item (Tomer 15/10), not inside ניהול.
+  { title: 'ניהול', icon: Settings, hrefs: ['/requests', '/bugs', '/features', '/settings'] },
 ];
 const GROUP_FROM = 9; // a menu longer than this is grouped
 
@@ -145,8 +146,11 @@ function Group({ title, icon: Icon, links, pathname, badges }: { title: string; 
   );
 }
 
-export function SidebarNav({ links, badges = {} }: { links: NavLink[]; badges?: Record<string, number> }) {
+export function SidebarNav({ links: allLinks, badges = {} }: { links: NavLink[]; badges?: Record<string, number> }) {
   const pathname = usePathname();
+  // "התראות" is the bell in the header (with "לכל ההתראות") — not a second
+  // time in the menu (Tomer 15/10: "למה ההתראות מופיע פעמיים?").
+  const links = allLinks.filter((l) => l.href !== '/notifications');
 
   // A short menu: every item directly, with its icon.
   if (links.length < GROUP_FROM) {
