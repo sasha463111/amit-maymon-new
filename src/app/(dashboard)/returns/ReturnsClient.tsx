@@ -709,6 +709,8 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   const [stickerDate, setStickerDate] = useState('');
   // Sticker reading (Claude): 'reading' while it runs, 'done' after it filled something.
   const [reading, setReading] = useState<'idle' | 'reading' | 'done' | 'empty' | 'off' | 'failed'>('idle');
+  // Why the reading failed, as the reader reported it (15/10 — no more guessing).
+  const [failDetail, setFailDetail] = useState<string | null>(null);
   const [branchId, setBranchId] = useState(branches.length === 1 ? branches[0].id : '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -725,12 +727,16 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
   // nothing happens and the form stays manual.
   async function readFromSticker(f: File) {
     setReading('reading');
+    setFailDetail(null);
     try {
       const fd = new FormData();
       fd.append('photo', await shrinkImage(f, { maxSide: 1600 }));
       const res = await readPartSticker(fd);
       const x = res.fields;
-      if (!x) return setReading(res.reason === 'no_key' ? 'off' : res.reason === 'no_result' ? 'empty' : 'failed');
+      if (!x) {
+        setFailDetail(res.detail ?? null);
+        return setReading(res.reason === 'no_key' ? 'off' : res.reason === 'no_result' ? 'empty' : 'failed');
+      }
       // Functional updates: the reading takes a few seconds, and anything the
       // user typed meanwhile must win over the sticker.
       let filled = false;
@@ -814,7 +820,7 @@ function NewReturnForm({ branches, onClose, onSaved }: { branches: { id: string;
         {reading === 'off' && <p className="text-sm text-gray-600">הקריאה האוטומטית של מדבקות עוד לא מחוברת — ממלאים ידנית</p>}
         {reading === 'failed' && (
           <p className="text-sm text-amber-700 font-semibold">
-            ⚠️ הקריאה מהמדבקה לא הצליחה הפעם.{' '}
+            ⚠️ הקריאה מהמדבקה לא הצליחה הפעם{failDetail ? ` (${failDetail})` : ''}.{' '}
             {photo && (
               <button type="button" onClick={() => void readFromSticker(photo)} className="underline">לנסות שוב</button>
             )}{' '}

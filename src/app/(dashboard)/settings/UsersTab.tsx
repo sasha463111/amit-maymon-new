@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
+import { testClaudeConnection } from '@/app/actions/aiCheck';
 import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, sendTestSmsToMe, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
@@ -33,6 +34,7 @@ export function UsersTab({
   const [draft, setDraft] = useState<{ role: UserRole; office_function: OfficeFunction | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [smsTest, setSmsTest] = useState<string | null>(null);
+  const [aiTest, setAiTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -258,6 +260,24 @@ export function UsersTab({
         ) : (
           <span className="text-xs text-amber-800">⏳ ספק ה-SMS עוד לא מחובר — הקוד לא יידרש מאף אחד עד החיבור</span>
         )}
+      </div>
+      {/* 🤖 Claude connection check (15/10): sticker / invoice reading + advisor. */}
+      <div className="flex items-center gap-2 flex-wrap rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
+        <span>🤖 קריאת מדבקות / חשבוניות (Claude)</span>
+        <button
+          type="button"
+          disabled={busyId === 'AI_TEST'}
+          onClick={async () => {
+            setBusyId('AI_TEST');
+            const r = await testClaudeConnection();
+            setBusyId(null);
+            setAiTest(r.error ? `⚠️ ${r.error}` : `${r.ok ? '✅' : '⚠️'} ${r.detail}${r.source ? ` · מפתח מ-${r.source}` : ''}`);
+          }}
+          className="h-8 px-3 rounded-lg border border-violet-300 bg-white text-violet-800 text-xs font-semibold disabled:opacity-50"
+        >
+          {busyId === 'AI_TEST' ? 'בודק…' : 'בדיקת חיבור'}
+        </button>
+        {aiTest && <span className="text-xs">{aiTest}</span>}
       </div>
       {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} phone={revealed.phone} onClose={() => setRevealed(null)} />}
       {error && (

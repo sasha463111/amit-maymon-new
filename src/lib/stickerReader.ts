@@ -64,12 +64,55 @@ const TOOL = {
 
 export type StickerFailure = 'no_key' | 'api' | 'no_result';
 
-/** Read a sticker; on failure say why (no key / API error / nothing read) — the caller keeps the form manual. */
-export async function readStickerDetailed(image: { base64: string; mediaType: string }): Promise<{ fields: StickerFields | null; failure?: StickerFailure }> {
+// The last API error text (15/10: the reason used to reach only the server log,
+// which nobody could read — "חסר מפתח" was guessed instead of seen).
+type ApiError = { failure: 'api'; detail: string };
+
+/** Read a sticker; on failure say why (no key / API error + its reason / nothing read) — the caller keeps the form manual. */
+export async function readStickerDetailed(image: { base64: string; mediaType: string }): Promise<{ fields: StickerFields | null; failure?: StickerFailure; detail?: string }> {
   const key = await apiKey();
   if (!key) return { fields: null, failure: 'no_key' };
   const fields = await readStickerWithKey(key, image);
-  return typeof fields === 'string' ? { fields: null, failure: fields } : { fields };
+  if (typeof fields === 'string') return { fields: null, failure: fields };
+  if ('failure' in fields) return { fields: null, failure: 'api', detail: fields.detail };
+  return { fields };
+}
+
+/** Short human reason from an Anthropic error response. */
+function apiReason(status: number, body: string): string {
+  let msg = '';
+  try {
+    msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message ?? '';
+  } catch {
+    msg = body;
+  }
+  const m = msg.toLowerCase();
+  if (m.includes('credit balance')) return 'אין יתרת קרדיט בחשבון Claude (צריך לטעון קרדיט)';
+  if (status === 401 || m.includes('invalid x-api-key') || m.includes('authentication')) return 'מפתח ה-API לא תקין או בוטל';
+  if (status === 429) return 'עומס / חריגה ממכסה — לנסות שוב בעוד דקה';
+  if (status === 529 || status >= 500) return 'שירות Claude עמוס כרגע — לנסות שוב';
+  if (m.includes('model')) return `בעיה במודל: ${msg.slice(0, 120)}`;
+  return `שגיאה ${status}: ${msg.slice(0, 140)}`;
+}
+
+/** CEO diagnostics (Settings): is the key there, and does a tiny call work? */
+export async function checkClaudeConnection(): Promise<{ ok: boolean; source: 'env' | 'vault' | 'none'; detail: string }> {
+  const source = process.env.ANTHROPIC_API_KEY ? 'env' : 'vault';
+  const key = await apiKey();
+  if (!key) return { ok: false, source: 'none', detail: 'אין מפתח — לא ב-Vercel (ANTHROPIC_API_KEY) ולא ב-Vault' };
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 5, messages: [{ role: 'user', content: 'ping' }] }),
+      signal: AbortSignal.timeout(20_000),
+      cache: 'no-store',
+    });
+    if (res.ok) return { ok: true, source, detail: `מחובר ✓ (מודל ${MODEL})` };
+    return { ok: false, source, detail: apiReason(res.status, await res.text().catch(() => '')) };
+  } catch (e) {
+    return { ok: false, source, detail: `אין חיבור ל-Claude: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160) };
+  }
 }
 
 /** null = reading unavailable (no key / API error / nothing read). */
@@ -77,8 +120,10 @@ export async function readSticker(image: { base64: string; mediaType: string }):
   return (await readStickerDetailed(image)).fields;
 }
 
-async function readStickerWithKey(key: string, image: { base64: string; mediaType: string }): Promise<StickerFields | StickerFailure> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+async function readStickerWithKey(key: string, image: { base64: string; mediaType: string }): Promise<StickerFields | StickerFailure | ApiError> {
+  let res: Response;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -102,9 +147,15 @@ async function readStickerWithKey(key: string, image: { base64: string; mediaTyp
     signal: AbortSignal.timeout(25_000),
     cache: 'no-store',
   });
+  } catch (e) {
+    // Timeout / network — a failure with a reason, never an exception.
+    const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    return { failure: 'api', detail: timeout ? 'הקריאה לקחה יותר מדי זמן — לנסות שוב' : 'אין חיבור לשירות הקריאה — לנסות שוב' };
+  }
   if (!res.ok) {
-    console.error('[readSticker] API error', res.status, (await res.text().catch(() => '')).slice(0, 200));
-    return 'api';
+    const body = await res.text().catch(() => '');
+    console.error('[readSticker] API error', res.status, body.slice(0, 300));
+    return { failure: 'api', detail: apiReason(res.status, body) };
   }
   const json = (await res.json()) as { content?: { type: string; input?: Record<string, unknown> }[] };
   const out = json.content?.find((c) => c.type === 'tool_use')?.input;

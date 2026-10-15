@@ -39,10 +39,12 @@ const TOOL = {
         description: 'The document number itself: "חשבונית מס' + "'" + '", "מספר חשבונית", "תעודת משלוח מס' + "'" + '", "זיכוי מס' + "'" + '". NOT the order number, NOT the customer number, NOT the allocation number (מספר הקצאה).',
       },
       plate: { type: 'string', description: 'Israeli vehicle licence plate if printed (רכב / רישוי / מס' + "'" + ' רכב), 7 or 8 digits, digits only. Empty if not printed.' },
-      amount: { type: 'number', description: 'The total to pay INCLUDING VAT (סה"כ לתשלום / סה"כ כולל מע"מ). Positive number. Empty if not printed (e.g. a delivery note without prices).' },
+      amount: { type: 'number', description: 'The total to pay INCLUDING VAT (סה"כ לתשלום / סה"כ כולל מע"מ / סה"כ לזיכוי) — usually the largest total at the bottom. Read it carefully. 0 ONLY if no price is printed at all (e.g. a delivery note without prices).' },
       invoice_date: { type: 'string', description: 'The document date as YYYY-MM-DD (Israeli day/month order).' },
     },
-    required: ['doc_type', 'supplier', 'invoice_number', 'invoice_date'],
+    // amount + plate required (Amit 15/10: "בכל החשבוניות שצולמו לא קלט את הסכום"
+    // — as an optional field the model often skipped it). 0 / '' = not printed.
+    required: ['doc_type', 'supplier', 'invoice_number', 'invoice_date', 'amount', 'plate'],
   },
 } as const;
 
@@ -50,7 +52,9 @@ const TOOL = {
 export async function readInvoice(image: { base64: string; mediaType: string }): Promise<InvoiceFields | null> {
   const key = await apiKey();
   if (!key) return null;
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  let res: Response;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -74,8 +78,13 @@ export async function readInvoice(image: { base64: string; mediaType: string }):
     signal: AbortSignal.timeout(25_000),
     cache: 'no-store',
   });
+  } catch (e) {
+    // Timeout / network — the form stays manual instead of an exception.
+    console.error('[readInvoice] network', e);
+    return null;
+  }
   if (!res.ok) {
-    console.error('[readInvoice] API error', res.status, (await res.text().catch(() => '')).slice(0, 200));
+    console.error('[readInvoice] API error', res.status, (await res.text().catch(() => '')).slice(0, 300));
     return null;
   }
   const json = (await res.json()) as { content?: { type: string; input?: Record<string, unknown> }[] };

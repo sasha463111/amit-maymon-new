@@ -456,7 +456,7 @@ export async function attachInvoicePhoto(formData: FormData) {
 /** Read the sticker photo with Claude and return the fields it found
  *  (Amit, 2026-10-14). null fields = not found; { unavailable } = no API key
  *  or API error — the form just stays manual. */
-export async function readPartSticker(formData: FormData): Promise<{ fields?: StickerFields; unavailable?: true; reason?: string; error?: string }> {
+export async function readPartSticker(formData: FormData): Promise<{ fields?: StickerFields; unavailable?: true; reason?: string; detail?: string; error?: string }> {
   const ctx = await me();
   if (!ctx) return { error: 'לא מחובר' };
   if (!MARK_ROLES.has(ctx.profile.role) || !canUsePartReturns(ctx.profile.role)) return { error: 'אין הרשאה' };
@@ -467,7 +467,7 @@ export async function readPartSticker(formData: FormData): Promise<{ fields?: St
   const mediaType = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) ? photo.type : 'image/jpeg';
   try {
     const r = await readStickerDetailed({ base64, mediaType });
-    return r.fields ? { fields: r.fields } : { unavailable: true, reason: r.failure ?? 'no_result' };
+    return r.fields ? { fields: r.fields } : { unavailable: true, reason: r.failure ?? 'no_result', detail: r.detail };
   } catch (e) {
     console.error('[readPartSticker]', e);
     return { unavailable: true, reason: 'api' };
