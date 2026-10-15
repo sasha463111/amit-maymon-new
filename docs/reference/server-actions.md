@@ -51,6 +51,7 @@
 
 ### `push.ts`
 - `savePushSubscription(sub)` / `removePushSubscription(endpoint)` — ניהול Push API subscription
+  - **אבטחה (15/10):** השמירה נעשית עם service client ועם ה-id מ-`auth.getUser()` בלבד. ה-Edge Function `save-push-subscription` הוצאה משימוש (מחזירה 410, `verify_jwt`) — היא סמכה על header ‏`x-user-id` ועל JWT לא מאומת, וכל אחד יכול היה לרשום מכשיר בשם משתמש אחר ולקבל את ההתראות שלו. לא להחזיר אותה.
 - `sendPushToUser(userId, payload)` — שולח web push
 - `pushToOverseers(payload, excludeUserId?)` — שולח לכל CEO + SERVICE_ADVISOR
 - `sendTestPushToSelf()` — כלי אבחון
