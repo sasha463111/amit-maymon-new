@@ -385,8 +385,8 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
   const id = clean(fd.get('handover_id'), 40);
   const returnedAt = isoOrNull(fd.get('returned_at'));
   if (!returnedAt) return { error: 'נא להזין תאריך ושעת החזרה' };
-  const { data: cur } = await ctx.db.from('loaner_handovers').select('id, given_at, returned_at').eq('id', id).maybeSingle();
-  const h = cur as { given_at: string; returned_at: string | null } | null;
+  const { data: cur } = await ctx.db.from('loaner_handovers').select('id, given_at, returned_at, waiver, waiver_to').eq('id', id).maybeSingle();
+  const h = cur as { given_at: string; returned_at: string | null; waiver: boolean; waiver_to: string | null } | null;
   if (!h) return { error: 'לא נמצא' };
   if (h.returned_at) return { error: 'הרכב כבר סומן כמוחזר' };
   if (new Date(returnedAt) < new Date(h.given_at)) return { error: 'ההחזרה לפני המסירה — בדקו את התאריך' };
@@ -411,6 +411,8 @@ export async function returnHandover(fd: FormData): Promise<{ error?: string; ok
       return_notes: clean(fd.get('return_notes'), 500) || null,
       return_signature_path: returnSig,
       returned_by: ctx.user.id,
+      // Excess waiver with an open end runs until the car is back (Amit, 15/10).
+      ...(h.waiver && !h.waiver_to ? { waiver_to: new Date(returnedAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }) } : {}),
       updated_at: new Date().toISOString(),
     } as never)
     .eq('id', id)

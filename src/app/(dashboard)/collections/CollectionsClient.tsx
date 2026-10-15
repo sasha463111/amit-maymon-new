@@ -81,7 +81,7 @@ export function CollectionsClient({
   const scoped = useMemo(() => (who ? cases.filter((c) => c.assigned_to === who) : cases), [cases, who]);
   const withExp = useMemo(() => scoped.map((c) => ({ c, exp: expectedPayment(c, terms) })), [scoped, terms]);
   type E = (typeof withExp)[number];
-  const overdue = (e: E) => !isClosed(e.c) && e.c.status !== 'LEGAL' && e.c.status !== 'BLOCKED' && !!e.exp.date && e.exp.date < t0;
+  const overdue = (e: E) => !isClosed(e.c) && !e.c.received_on && e.c.status !== 'PAID' && e.c.status !== 'PARTIAL' && e.c.status !== 'LEGAL' && e.c.status !== 'BLOCKED' && !!e.exp.date && e.exp.date < t0;
   const inTab = (e: E) =>
     tab === 'all' ? true
     : tab === 'active' ? !isClosed(e.c) && e.c.status !== 'LEGAL'
@@ -626,7 +626,7 @@ function ClaimCard({ c, exp, late, t0, showCollector }: { c: CollectionCase; exp
         <dd className="font-bold">{ils(toCollect(c))}</dd>
         <dt className="text-gray-400">מועד פירעון:</dt>
         <dd className={late ? 'text-red-700 font-semibold' : ''}>
-          {isClosed(c) && c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ ${daysLate(exp.date, t0)} ימים` : ''}` : '—'}
+          {c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ ${daysLate(exp.date, t0)} ימים` : ''}` : '—'}
         </dd>
         {showCollector && (
           <>

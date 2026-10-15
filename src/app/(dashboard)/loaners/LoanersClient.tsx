@@ -438,7 +438,9 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
     if (!caseId && !branchId && !car?.branch_id) return setErr('נא לבחור סניף');
     if (signMode === 'screen' && (!(dName || name).trim() || dId.replace(/\D/g, '').length < 5 || !dLicense.trim() || !dAddress.trim()))
       return setErr('בהצהרת הנהג חובה: שם מלא, ת.ז., מס׳ רישיון נהיגה וכתובת');
-    if (waiver && !wCost) return setErr('בביטול השתתפות עצמית — נא לבחור מתאריך עד תאריך');
+    // "עד" is usually unknown at handover (Amit, 15/10) — empty = the return date.
+    if (waiver && !waiverFrom) return setErr('בביטול השתתפות עצמית — נא לבחור מאיזה תאריך');
+    if (waiver && waiverTo && !wCost) return setErr('תאריך "עד" לפני תאריך "מ"');
     if (!driverOk) return setErr(`נא לאשר שהנהג בן ${MIN_DRIVER_AGE}+ עם רישיון ${MIN_LICENSE_YEARS} שנים לפחות`);
     if (signMode === 'screen' && !signature) return setErr('הלקוח צריך לחתום על המסך');
     if (signMode === 'paper' && !formPhoto) return setErr('נא לצלם את הטופס החתום');
@@ -638,7 +640,7 @@ function GiveDialog({ fleet, branches, onClose, onSaved }: { fleet: FleetCar[]; 
               <input type="date" value={waiverFrom} onChange={(e) => setWaiverFrom(e.target.value)} className={input} />
             </label>
             <label>
-              <span className={lab}>עד יום</span>
+              <span className={lab}>עד יום (לא חובה — אם ריק, נקבע ביום ההחזרה)</span>
               <input type="date" value={waiverTo} onChange={(e) => setWaiverTo(e.target.value)} className={input} />
             </label>
             <p className="col-span-2 text-sm text-indigo-800">

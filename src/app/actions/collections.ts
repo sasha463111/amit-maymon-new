@@ -24,7 +24,6 @@ const SUPERVISORS = new Set(['CEO', 'ACCOUNTANT']);
 export type CollectionStatus = 'OPEN' | 'PARTIAL' | 'PAID' | 'DISPUTE' | 'LEGAL' | 'BLOCKED';
 const STATUSES = new Set<CollectionStatus>(['OPEN', 'PARTIAL', 'PAID', 'DISPUTE', 'LEGAL', 'BLOCKED']);
 /** Final statuses — the case is closed (PARTIAL = paid with an offset). LEGAL closes when the lawyer's case closes. */
-const FINAL = new Set<CollectionStatus>(['PAID', 'PARTIAL']);
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -440,6 +439,27 @@ export type CaseUpdate = Partial<CaseInput> & Partial<Omit<CaseFileFields, 'exte
   legal_reason?: string | null;
 };
 
+/** "✅ סגירת תביעה" / "↩️ פתיחה מחדש" — by hand only. */
+export async function setCollectionClosed(id: string, close: boolean): Promise<{ error?: string; ok?: true }> {
+  const ctx = await me();
+  if (!ctx) return { error: 'אין הרשאה' };
+  const db = serviceClient();
+  if (!db) return { error: 'שרת לא מוגדר' };
+  const { data: row } = await db.from('collection_cases').select('assigned_to, closed_at').eq('id', id).maybeSingle();
+  const cur = row as { assigned_to: string; closed_at: string | null } | null;
+  if (!cur) return { error: 'לא נמצא' };
+  if (!ctx.supervisor && cur.assigned_to !== ctx.user.id) return { error: 'התיק משויך למסלקת אחרת' };
+  if (!!cur.closed_at === close) return { ok: true };
+  const now = new Date().toISOString();
+  const { error } = await db.from('collection_cases').update({ closed_at: close ? now : null, updated_by: ctx.user.id, updated_at: now } as never).eq('id', id);
+  if (error) return { error: error.message };
+  await db.from('collection_case_events').insert({ case_id: id, kind: 'STATUS', body: close ? '✅ התביעה נסגרה' : '↩️ התביעה נפתחה מחדש', created_by: ctx.user.id } as never);
+  if (close) await closeAutoReminders(db, id);
+  revalidatePath('/collections');
+  revalidatePath(`/collections/${id}`);
+  return { ok: true };
+}
+
 export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{ error?: string; ok?: true }> {
   const ctx = await me();
   if (!ctx) return { error: 'אין הרשאה' };
@@ -479,12 +499,9 @@ export async function updateCollectionCase(id: string, u: CaseUpdate): Promise<{
   for (const k of FILE_TEXT) set(k, txt(u[k], 120));
   for (const k of FILE_MONEY) set(k, u[k] ?? null);
   set('event_date', u.event_date || null);
-  if (status) {
-    patch.status = status;
-    // Closed when paid (fully or with an offset), or when the legal case is closed.
-    const closes = FINAL.has(status) || (status === 'LEGAL' && !!u.legal_closed_on);
-    patch.closed_at = closes ? cur.closed_at ?? new Date().toISOString() : null;
-  }
+  // A status never closes the claim (Galit, 15/10: "נסגרה מעצמה רק כי עדכנתי
+  // שהלקוח שילם") — closing is the explicit "✅ סגירת תביעה" (setCollectionClosed).
+  if (status) patch.status = status;
 
   const { data: before } = status || 'claim_stage' in u ? await db.from('collection_cases').select('status, claim_stage').eq('id', id).maybeSingle() : { data: null };
   const { error } = await db.from('collection_cases').update(patch as never).eq('id', id);

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
+import { setCollectionClosed, updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
 import { addCaseEvent, addStatusUpdate, finishReminder, reassignCase, saveStageShortcuts, uploadCaseFile, type CaseEvent, type CaseEventKind, type CaseFile } from '@/app/actions/collectionFile';
 import { FeedbackButton } from '../Feedback';
 import { daysLate, expectedPayment, payerOf, workingDaysBetween, THIRD_PARTY, type PaymentRule } from '@/lib/collections';
@@ -60,7 +60,8 @@ export function CaseFileClient({
   const [tab, setTab] = useState<Tab>('log');
   const t0 = today();
   const exp = expectedPayment(c, terms);
-  const late = !isClosed(c) && c.status !== 'LEGAL' && c.status !== 'BLOCKED' && !!exp.date && exp.date < t0;
+  // Paid (even early, before the cheque date) is never "late" — Galit 15/10.
+  const late = !isClosed(c) && !c.received_on && c.status !== 'PAID' && c.status !== 'PARTIAL' && c.status !== 'LEGAL' && c.status !== 'BLOCKED' && !!exp.date && exp.date < t0;
   const openReminders = events.filter((e) => e.remind_at && !e.remind_done_at);
 
   // A push opens /collections/<id>#r-<reminder>: land on the log.
@@ -92,7 +93,7 @@ export function CaseFileClient({
               תיק תביעה · רכב {c.plate}
               {c.vehicle_type && <span className="text-lg font-semibold text-gray-600"> · {shortVehicle(c.vehicle_type)}</span>}
             </h1>
-            <p className="text-sm text-gray-500">{c.customer_name ?? ''}</p>
+            <p className="text-lg font-semibold text-gray-800">לקוח: {c.customer_name || '—'}</p>
           </div>
           <span className={`px-3 py-1 rounded-full text-sm font-bold ${STATUS_CHIP[c.status]}`}>{STATUS_LABEL[c.status]}</span>
         </div>
@@ -109,7 +110,7 @@ export function CaseFileClient({
           <Fields>
             <F label="לגבייה" tone="text-gray-900 font-bold">{ils(toCollect(c))}</F>
             <F label="מועד פירעון צ׳ק" tone={late ? 'text-red-700 font-semibold' : undefined}>
-              {isClosed(c) && c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ איחור ${daysLate(exp.date, t0)} ימים` : ''}` : exp.basis}
+              {c.received_on ? `שולם ${formatDate(c.received_on)}` : exp.date ? `${formatDate(exp.date)}${late ? ` · ⏰ איחור ${daysLate(exp.date, t0)} ימים` : ''}` : exp.basis}
             </F>
             <F label="נפתח">{formatDate(c.opened_at)}</F>
             <F label="ימי עבודה">{workingDaysBetween(c.opened_at, c.closed_at ?? t0)}</F>
@@ -126,6 +127,7 @@ export function CaseFileClient({
             📄 צור מכתב דרישת תשלום
           </Link>
           <WhatsAppDocs c={c} />
+          <CloseClaim c={c} />
         </div>
       </div>
 
@@ -876,6 +878,25 @@ function StagePicker({ c, shortcuts, events }: { c: CollectionCase; shortcuts: s
       </div>
       {msg && <p className="text-sm">{msg}</p>}
     </div>
+  );
+}
+
+function CloseClaim({ c }: { c: CollectionCase }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const closed = isClosed(c);
+  async function go() {
+    if (!window.confirm(closed ? 'לפתוח את התביעה מחדש?' : 'לסגור את התביעה? היא תעבור לסגורות.')) return;
+    setBusy(true);
+    const r = await setCollectionClosed(c.id, !closed);
+    setBusy(false);
+    if (r.error) return alert(r.error);
+    router.refresh();
+  }
+  return (
+    <button type="button" disabled={busy} onClick={() => void go()} className={`h-10 px-4 rounded-xl text-sm font-bold disabled:opacity-50 ${closed ? 'border border-gray-300 bg-white text-gray-700' : 'bg-green-700 text-white'}`}>
+      {busy ? '…' : closed ? '↩️ פתיחה מחדש' : '✅ סגירת תביעה'}
+    </button>
   );
 }
 
