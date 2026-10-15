@@ -1,12 +1,13 @@
 'use server';
 
+import { canUseAdvisor } from '@/lib/advisorAccess';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { apiKey } from '@/lib/stickerReader';
 import { askClaude } from '@/lib/advisor.server';
 
-// "🤖 התייעצות" (Amit, 2026-10-15) — CEO only. The conversation is stored per
+// "🤖 התייעצות" (Amit, 2026-10-15) — AMIT ONLY (advisorAccess.ts). Stored per
 // user (advisor_messages). Change requests the advisor files land in
 // app_requests and wait for Tomer's approval (Tomer, 15/10: option ב׳), with a
 // push to the other CEO account (Tomer).
@@ -19,7 +20,8 @@ async function ceo() {
   if (!user) return null;
   const { data } = await supabase.from('profiles').select('role, is_active, full_name').eq('id', user.id).maybeSingle();
   const p = data as { role: string; is_active: boolean; full_name: string | null } | null;
-  if (!p || p.role !== 'CEO' || p.is_active === false) return null;
+  // Amit only (advisorAccess.ts) — not every CEO.
+  if (!p || p.role !== 'CEO' || p.is_active === false || !canUseAdvisor(user.id)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
