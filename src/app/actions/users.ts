@@ -53,6 +53,9 @@ export interface SystemUser {
   /** Has at least one device registered for push. */
   has_push: boolean;
   is_staff: boolean;
+  /** Two-step login (Duo): required for this person / already enrolled. */
+  mfa_required: boolean;
+  mfa_enrolled: boolean;
 }
 
 export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: string | null }> {
@@ -61,7 +64,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
 
   const { data, error: queryError } = await supabase
     .from('profiles')
-    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor, office_function')
+    .select('id, full_name, role, branch_ids, is_active, is_bodywork_advisor, office_function, mfa_required')
     .order('full_name');
 
   if (queryError) return { data: [], error: queryError.message };
@@ -74,6 +77,7 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     is_active: boolean;
     is_bodywork_advisor: boolean;
     office_function: 'REFERRALS' | 'CLOSURE' | null;
+    mfa_required: boolean;
   }>;
 
   // Fetch all branches for display mapping
@@ -105,6 +109,8 @@ export async function listSystemUsers(): Promise<{ data: SystemUser[]; error: st
     last_sign_in_at: authById.get(r.id)?.last_sign_in_at ?? null,
     has_push: pushSet.has(r.id),
     is_staff: (authById.get(r.id)?.email ?? '').toLowerCase().endsWith(STAFF_EMAIL_DOMAIN),
+    mfa_required: !!r.mfa_required,
+    mfa_enrolled: (authById.get(r.id)?.factors ?? []).some((f) => f.status === 'verified'),
   }));
   // Real staff first, test accounts last.
   users.sort((a, b) => Number(b.is_staff) - Number(a.is_staff));
@@ -136,7 +142,11 @@ export async function updateSystemUser(
   // The office function only means something for OFFICE.
   if (updates.role !== undefined && updates.role !== 'OFFICE') updates = { ...updates, office_function: null };
 
-  const { error: updateError } = await supabase
+  // Service client after the CEO check: users can't update profiles directly
+  // (migration 20261015090000 — a user could otherwise change their own role).
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { error: updateError } = await admin
     .from('profiles')
     .update(updates as never)
     .eq('id', userId);
@@ -273,6 +283,37 @@ export async function createNewSystemUser(params: {
 
   revalidatePath('/settings');
   return { ok: true, userId: authUser.user.id, email, password };
+}
+
+/** CEO only: require Duo for one person, or for everyone (userId = 'ALL'). */
+export async function setMfaRequired(userId: string, required: boolean): Promise<{ ok?: true; error?: string; count?: number }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const q = admin.from('profiles').update({ mfa_required: required } as never);
+  const { data, error: upErr } = userId === 'ALL' ? await q.eq('is_active', true).select('id') : await q.eq('id', userId).select('id');
+  if (upErr) return { error: upErr.message };
+  revalidatePath('/settings');
+  return { ok: true, count: (data ?? []).length };
+}
+
+/** CEO only: remove a person's Duo link (new phone / lost phone) — they enrol again on the next sign-in. */
+export async function resetUserMfa(userId: string): Promise<{ ok?: true; error?: string; removed?: number }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { data, error: listErr } = await admin.auth.admin.mfa.listFactors({ userId });
+  if (listErr) return { error: listErr.message };
+  let removed = 0;
+  for (const f of data?.factors ?? []) {
+    const { error: delErr } = await admin.auth.admin.mfa.deleteFactor({ userId, id: f.id });
+    if (delErr) return { error: delErr.message };
+    removed++;
+  }
+  revalidatePath('/settings');
+  return { ok: true, removed };
 }
 
 /** CEO only (Amit: "רק אני יכול לאפס"): a new personal password, shown once. */

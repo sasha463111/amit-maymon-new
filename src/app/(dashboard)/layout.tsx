@@ -124,11 +124,11 @@ export default async function DashboardLayout({
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('full_name, role, branch_ids, is_active, office_function')
+    .select('full_name, role, branch_ids, is_active, office_function, mfa_required')
     .eq('id', user.id)
     .single();
 
-  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null } | null;
+  const profile = profileData as { full_name?: string; role: string; branch_ids: string[]; is_active?: boolean; office_function?: string | null; mfa_required?: boolean } | null;
   const isPreview = process.env.NEXT_PUBLIC_PREVIEW_MODE === 'true';
 
   // Mid-session deactivation: if a CEO disabled this account, kick them out
@@ -136,6 +136,13 @@ export default async function DashboardLayout({
   if (!isPreview && profile && profile.is_active === false) {
     await supabase.auth.signOut();
     redirect('/login');
+  }
+
+  // Two-step login (Amit, 15/10): whoever must use Duo and hasn't typed the
+  // code in this session goes to /mfa (enrol once, then the code).
+  if (!isPreview && profile?.mfa_required) {
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.currentLevel !== 'aal2') redirect('/mfa');
   }
 
   const actualRole = (profile?.role as UserRole) ?? 'SERVICE_ADVISOR';

@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 import { hasPermission } from '@/lib/permissions';
 
@@ -182,7 +183,13 @@ export async function toggleBodyworkAdvisor(
   const { error: authError, supabase } = await requireSettingsAccess();
   if (authError || !supabase) return { error: authError ?? 'שגיאת אימות' };
 
-  const { error } = await supabase
+  // Service client after the settings check: users can't update profiles
+  // directly (migration 20261015090000).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return { error: 'שרת לא מוגדר (service key)' };
+  const admin = createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await admin
     .from('profiles')
     .update({ is_bodywork_advisor: isAdvisor } as never)
     .eq('id', profileId);
