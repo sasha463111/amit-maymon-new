@@ -4,7 +4,7 @@
 // A tip points at an element marked data-tip="<anchor>"; the first VISIBLE one
 // of `anchors` is used (phone and computer may show different buttons), and a
 // tip whose anchor isn't on screen is simply not shown (and not marked seen).
-// Pilot: CEO only (incl. "view as" another role) — TIPS_LIVE_FOR in layout.
+// Live for everyone since 16/10 (CEO pilot first; "view as" shows that role's tips).
 
 export type Tip = {
   key: string;

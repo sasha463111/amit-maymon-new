@@ -200,8 +200,10 @@ export default async function DashboardLayout({
 
   // Unread notes/questions addressed to me — the badge on "הודעות". In
   // parallel: may I see the collections financial dashboard (CEO approved me)?
-  const [{ count: unreadMessages }, { data: viewerRow }] = isPreview
-    ? [{ count: 0 }, { data: null }]
+  // + the first-visit tips I've already seen (16/10, #10/#39 — everyone).
+  const tipsLive = !isPreview;
+  const [{ count: unreadMessages }, { data: viewerRow }, { data: tipRows }] = isPreview
+    ? [{ count: 0 }, { data: null }, { data: [] as { tip_key: string }[] }]
     : await Promise.all([
         supabase
           .from('notifications')
@@ -210,7 +212,9 @@ export default async function DashboardLayout({
           .eq('type', 'DIRECT_NOTE')
           .eq('read', false),
         role === 'CEO' ? Promise.resolve({ data: null }) : supabase.from('finance_viewers').select('user_id').eq('user_id', user.id).maybeSingle(),
+        supabase.from('user_tips_seen').select('tip_key').eq('user_id', user.id),
       ]);
+  const tipsSeen = ((tipRows ?? []) as { tip_key: string }[]).map((r) => r.tip_key);
   if (viewerRow && !links.some((l) => l.href === '/receivables')) links.push({ label: 'דשבורד גבייה', href: '/receivables' });
   // "רכב חליפי" for people given the module personally (profiles.loaners_access, 15/10).
   if (!isPreview && !viewAs && profile?.loaners_access && !links.some((l) => l.href === '/loaners')) links.push({ label: 'רכב חליפי', href: '/loaners' });
@@ -223,10 +227,6 @@ export default async function DashboardLayout({
     const { data: mc } = (await outlookDb()?.from('ms_connections').select('unread_count').eq('user_id', user.id).maybeSingle()) ?? { data: null };
     mailUnread = (mc as { unread_count: number } | null)?.unread_count ?? 0;
   }
-
-  // 💡 First-visit tips (16/10, #10/#39) — pilot: CEO only (also when viewing as another role).
-  const tipsLive = !isPreview && actualRole === 'CEO';
-  const tipsSeen = tipsLive ? (((await supabase.from('user_tips_seen').select('tip_key').eq('user_id', user.id)).data ?? []) as { tip_key: string }[]).map((r) => r.tip_key) : [];
 
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {
