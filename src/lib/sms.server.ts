@@ -151,3 +151,38 @@ export async function alertSmsCredit(balance: number | null): Promise<{ sent: nu
   );
   return error ? { error: error.message } : { sent: ids.length };
 }
+
+export type SmsSentRow = { date: string; phone: string; status: string; ok: boolean };
+
+/** 019 "dlrByDate": every message the account sent in the last `days` (≤7, the
+ *  provider's limit) — the source of truth for "how many SMS went out, to whom". */
+export async function smsSentReport(days = 7): Promise<{ rows?: SmsSentRow[]; error?: string }> {
+  if (provider() !== '019') return { error: 'ספק ה-SMS אינו 019' };
+  const fmt = (d: Date) => {
+    const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+    const g = (t: string) => p.find((x) => x.type === t)?.value ?? '00';
+    return `${g('day')}/${g('month')}/${g('year')} ${g('hour')}:${g('minute')}`;
+  };
+  const now = new Date();
+  const from = new Date(now.getTime() - Math.min(7, Math.max(1, days)) * 86_400_000 + 60_000);
+  try {
+    const res = await fetch('https://019sms.co.il/api', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.SMS019_TOKEN}` },
+      body: JSON.stringify({ dlrByDate: { user: { username: process.env.SMS019_USER }, transactions: { external_id: 'null' }, from: fmt(from), to: fmt(now) } }),
+      cache: 'no-store',
+    });
+    const body = (await res.json().catch(() => null)) as { status?: number | string; message?: string; transactions?: unknown } | null;
+    if (!res.ok || Number(body?.status) !== 0) return { error: `019: ${String(body?.message ?? res.status).slice(0, 120)}` };
+    const list = (Array.isArray(body?.transactions) ? body.transactions : body?.transactions ? [body.transactions] : []) as Record<string, unknown>[];
+    return {
+      rows: list.map((t) => {
+        const digits = String(t.phone ?? '').replace(/\D/g, '');
+        const phone = digits.startsWith('972') ? '0' + digits.slice(3) : digits.startsWith('0') ? digits : '0' + digits;
+        return { date: String(t.date ?? ''), phone, status: String(t.message_he ?? t.he_message ?? t.en_message ?? t.status ?? ''), ok: String(t.status) === '102' };
+      }),
+    };
+  } catch (e) {
+    return { error: String(e).slice(0, 120) };
+  }
+}

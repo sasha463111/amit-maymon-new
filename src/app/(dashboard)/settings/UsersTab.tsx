@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
 import { testClaudeConnection, testMailTransport } from '@/app/actions/aiCheck';
-import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, sendTestSmsToMe, type SystemUser } from '@/app/actions/users';
+import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, sendTestSmsToMe, smsSentLog, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
 import { AddUserForm } from '@/components/AddUserForm';
@@ -39,6 +39,7 @@ export function UsersTab({
   const [draft, setDraft] = useState<{ role: UserRole; office_function: OfficeFunction | null; branch_ids: string[]; is_active: boolean; full_name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [smsTest, setSmsTest] = useState<string | null>(null);
+  const [smsLog, setSmsLog] = useState<Awaited<ReturnType<typeof smsSentLog>> | null>(null);
   const [aiTest, setAiTest] = useState<string | null>(null);
   const [mailTest, setMailTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -261,6 +262,18 @@ export function UsersTab({
             <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleSms('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
               להפעיל לכולם (עם נייד)
             </button>
+            <button
+              type="button"
+              disabled={busyId === 'SMS_LOG'}
+              onClick={async () => {
+                setBusyId('SMS_LOG');
+                setSmsLog(await smsSentLog());
+                setBusyId(null);
+              }}
+              className="h-8 px-3 rounded-lg border border-indigo-300 bg-white text-indigo-800 text-xs font-semibold disabled:opacity-50"
+            >
+              {busyId === 'SMS_LOG' ? 'טוען…' : '📋 פירוט SMS (7 ימים)'}
+            </button>
             {smsCredit !== null && (
               <span className={`text-xs font-semibold ${smsCredit < smsLow ? 'text-red-700' : 'text-gray-600'}`}>
                 קרדיט ב-019: {smsCredit}{smsCredit < smsLow ? ' — להטעין!' : ''}
@@ -272,6 +285,44 @@ export function UsersTab({
           <span className="text-xs text-amber-800">⏳ ספק ה-SMS עוד לא מחובר — הקוד לא יידרש מאף אחד עד החיבור</span>
         )}
       </div>
+      {/* 📋 What 019 actually sent (16/10) — a number that isn't an employee's is flagged. */}
+      {smsLog && (
+        <div className="rounded-lg border border-indigo-200 bg-white p-3 text-sm space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-bold">📋 הודעות SMS שנשלחו מ-019 — 7 ימים אחרונים</p>
+            <button type="button" onClick={() => setSmsLog(null)} className="text-xs text-gray-500 underline">סגירה</button>
+          </div>
+          {smsLog.error ? (
+            <p className="text-red-700 text-xs">⚠️ {smsLog.error}</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-700">
+                נשלחו: <b>{smsLog.rows?.length ?? 0}</b> · הגיעו ליעד: <b>{smsLog.rows?.filter((r) => r.ok).length ?? 0}</b> · בקשות קוד במערכת: <b>{smsLog.codeRequests ?? 0}</b> ·{' '}
+                {(smsLog.rows ?? []).some((r) => !r.name) ? (
+                  <b className="text-red-700">⚠️ יש הודעות למספרים שאינם של עובדים</b>
+                ) : (
+                  <b className="text-green-700">✓ כל ההודעות נשלחו לעובדים</b>
+                )}
+              </p>
+              <div className="max-h-72 overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-gray-500"><tr><th className="text-right p-1">תאריך</th><th className="text-right p-1">עובד</th><th className="text-right p-1">נייד</th><th className="text-right p-1">סטטוס</th></tr></thead>
+                  <tbody>
+                    {(smsLog.rows ?? []).map((r, i) => (
+                      <tr key={i} className={`border-t ${r.name ? '' : 'bg-red-50 text-red-800 font-semibold'}`}>
+                        <td className="p-1 whitespace-nowrap" dir="ltr">{r.date}</td>
+                        <td className="p-1">{r.name ?? '⚠️ לא עובד'}</td>
+                        <td className="p-1" dir="ltr">{r.phone}</td>
+                        <td className="p-1">{r.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       {/* 🤖 Claude connection check (15/10): sticker / invoice reading + advisor. */}
       <div className="flex items-center gap-2 flex-wrap rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm">
         <span>🤖 קריאת מדבקות / חשבוניות (Claude)</span>

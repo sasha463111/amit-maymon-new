@@ -358,6 +358,30 @@ export async function sendTestSmsToMe(): Promise<{ ok?: true; error?: string; se
   return { ok: true, sentTo: phone.replace(/\D/g, '').replace(/^(\d{3})\d+(\d{3})$/, '$1-•••-$2') };
 }
 
+/** CEO only (16/10): what 019 actually sent in the last 7 days, each number
+ *  matched to the employee it belongs to — a number that is nobody's would
+ *  mean the SMS account is used from outside the system. */
+export async function smsSentLog(): Promise<{ error?: string; rows?: { date: string; phone: string; name: string | null; status: string; ok: boolean }[]; codeRequests?: number }> {
+  const { error } = await requireCeo();
+  if (error) return { error };
+  const admin = serviceClient();
+  if (!admin) return { error: 'שרת לא מוגדר (service key)' };
+  const { smsSentReport } = await import('@/lib/sms.server');
+  const [rep, { data: phones }, { count }] = await Promise.all([
+    smsSentReport(7),
+    admin.from('staff_phones').select('user_id, phone, profiles(full_name)'),
+    admin.from('login_codes').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 86_400_000).toISOString()),
+  ]);
+  if (rep.error) return { error: rep.error };
+  const byPhone = new Map(
+    ((phones ?? []) as { phone: string; profiles: { full_name: string | null } | { full_name: string | null }[] | null }[]).map((p) => {
+      const prof = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles;
+      return [p.phone.replace(/\D/g, ''), prof?.full_name ?? '—'];
+    }),
+  );
+  return { rows: (rep.rows ?? []).map((r) => ({ ...r, name: byPhone.get(r.phone) ?? null })), codeRequests: count ?? 0 };
+}
+
 /** CEO only: forget a person's remembered phones (lost phone) — the next sign-in asks for a code. */
 export async function forgetTrustedDevices(userId: string): Promise<{ ok?: true; error?: string }> {
   const { error } = await requireCeo();
