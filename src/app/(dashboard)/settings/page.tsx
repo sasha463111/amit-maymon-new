@@ -7,7 +7,7 @@ import { PermissionsTab } from './PermissionsTab';
 import { ChecklistTab } from './ChecklistTab';
 import { BodyworkAdvisorsTab } from './BodyworkAdvisorsTab';
 import { UsersTab } from './UsersTab';
-import { isSmsConfigured } from '@/lib/sms.server';
+import { isSmsConfigured, smsBalance, SMS_LOW_BALANCE } from '@/lib/sms.server';
 import { AuditTab } from './AuditTab';
 import type { RolePermission, WorkflowStepTemplate } from '@/types/database';
 
@@ -39,12 +39,13 @@ export default async function SettingsPage({
     tab === 'audit' ? 'audit' :
     'permissions';
 
-  const [permissionsResult, stepsResult, advisorsResult, usersResult, branchesResult] = await Promise.all([
+  const [permissionsResult, stepsResult, advisorsResult, usersResult, branchesResult, smsCredit] = await Promise.all([
     getRolePermissions(),
     getWorkflowStepTemplates(),
     getBodyworkAdvisors(),
     listSystemUsers(),
     supabase.from('branches').select('id, name').order('name'),
+    smsBalance(),
   ]);
 
   const permissions = (permissionsResult.data ?? []) as RolePermission[];
@@ -131,7 +132,7 @@ export default async function SettingsPage({
         ) : activeTab === 'advisors' ? (
           <BodyworkAdvisorsTab initialAdvisors={advisors} />
         ) : activeTab === 'users' ? (
-          <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} smsReady={isSmsConfigured()} />
+          <UsersTab initialUsers={systemUsers} branches={branches} currentUserId={user.id} smsReady={isSmsConfigured()} smsCredit={smsCredit} smsLow={SMS_LOW_BALANCE} />
         ) : (
           <AuditTab />
         )}

@@ -5,6 +5,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
 import { loadWeeklySummary, weeklyText } from '@/lib/collectionsWeekly.server';
 import { runMailWatch } from '@/lib/outlookWatch.server';
+import { SMS_LOW_BALANCE, alertSmsCredit, smsBalance } from '@/lib/sms.server';
 
 /**
  * Reminder sweep — despite the file/route name (kept as-is so the existing
@@ -1017,5 +1018,12 @@ export async function GET(req: NextRequest) {
   // the unread badge, due follow-ups for repair cases / referrals. Every run; dormant until Outlook is set up.
   const mailWatch = await runMailWatch().catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly, loanerTests, mailWatch });
+  // 13. 📱 019 SMS credit (16/10) — every run; a note to the CEOs when low (once per 12 h).
+  const smsCredit = await (async () => {
+    const balance = await smsBalance();
+    if (balance === null) return { balance: null };
+    return balance < SMS_LOW_BALANCE ? { balance, alert: await alertSmsCredit(balance) } : { balance };
+  })().catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly, loanerTests, mailWatch, smsCredit });
 }

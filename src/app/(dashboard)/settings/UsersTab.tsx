@@ -22,11 +22,16 @@ export function UsersTab({
   branches,
   currentUserId,
   smsReady = false,
+  smsCredit = null,
+  smsLow = 100,
 }: {
   initialUsers: SystemUser[];
   branches: Branch[];
   currentUserId: string;
   smsReady?: boolean;
+  /** 019 balance (16/10) — null when unknown. */
+  smsCredit?: number | null;
+  smsLow?: number;
 }) {
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
@@ -256,6 +261,11 @@ export function UsersTab({
             <button type="button" disabled={busyId === 'ALL'} onClick={() => void toggleSms('ALL', true)} className="h-8 px-3 rounded-lg bg-indigo-600 text-white text-xs font-semibold disabled:opacity-50">
               להפעיל לכולם (עם נייד)
             </button>
+            {smsCredit !== null && (
+              <span className={`text-xs font-semibold ${smsCredit < smsLow ? 'text-red-700' : 'text-gray-600'}`}>
+                קרדיט ב-019: {smsCredit}{smsCredit < smsLow ? ' — להטעין!' : ''}
+              </span>
+            )}
             {smsTest && <span className="text-xs">{smsTest}</span>}
           </>
         ) : (
