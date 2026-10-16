@@ -418,3 +418,5 @@ supabase/
   - `lookupVehicleByPlate` דורש עכשיו התחברות, כדי שלא יהיה proxy פתוח למשרד התחבורה.
   - נסרקו כל ה-server actions: כל פונקציה מיוצאת שעובדת עם service client בודקת זהות דרך helper (`ceo()`, `access()`, `requireReferralAccess`, `requireSettingsAccess`, `officeOrCeo`, `deliverNote`). שאר הפונקציות עובדות דרך client של המשתמש, שמוגן ב-RLS.
   - נתיבי ה-API: cron ו-push מאומתים ב-secret מה-Vault, customer-docs ב-token מוצפן, ו-perf רק למחוברים.
+  - **היסטוריית תיק (`audit_events`):** מיגרציה `20261016120000`. INSERT רק עם `user_id = auth.uid()`; לפני כן אפשר היה לכתוב `NULL`, שנראה כמו רישום של המערכת. 12 נקודות הכתיבה בקוד מעבירות את `user.id`; השורה האחרונה עם NULL היא מ-27/08 (ייבוא ישן). נבדק בהתחזות ב-`tests/db/checks.sql`: בשם עצמי עובר, בלי שם או בשם של אחר נדחה.
+  - **רישום push (`save_push_subscription` / upsert לפי `endpoint`):** ה-subscription עובר למשתמש החדש כשמישהו אחר מתחבר באותו מכשיר. **זה בכוונה** (מחשב משרד משותף), לא חור. כדי לנצל את זה צריך את ה-endpoint של המכשיר, כתובת סודית ששירות ה-push נותן רק לדפדפן עצמו. ב-DB היא קריאה רק לבעלים ול-CEO (`push_subscriptions_select`).

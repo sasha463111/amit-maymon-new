@@ -78,6 +78,34 @@ begin
 end
 $$;
 
+-- Case history (audit_events): a signed-in user writes only under their own
+-- name (security review 16/10) — checked by impersonating a real active user.
+do $$
+declare
+  v_me uuid;
+  v_other uuid;
+  v_case uuid;
+begin
+  select id into v_me from public.profiles where is_active and role <> 'CEO' limit 1;
+  select id into v_other from public.profiles where is_active and id <> v_me limit 1;
+  select id into v_case from public.cases limit 1;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_me, 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  insert into public.audit_events (entity_type, entity_id, action, user_id) values ('CASE', v_case, 'TEST_42', v_me);
+  begin
+    insert into public.audit_events (entity_type, entity_id, action, user_id) values ('CASE', v_case, 'TEST_42', null);
+    raise exception 'CHECK FAILED: a history event without a user was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.audit_events (entity_type, entity_id, action, user_id) values ('CASE', v_case, 'TEST_42', v_other);
+    raise exception 'CHECK FAILED: a history event under someone else''s name was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+end
+$$;
+
 rollback;
 
 select 'db checks passed' as result;
