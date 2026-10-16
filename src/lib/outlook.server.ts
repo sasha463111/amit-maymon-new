@@ -12,7 +12,9 @@ import { APP_ORIGIN } from '@/lib/customerDocLinks.server';
 // OUTLOOK_TOKEN_KEY (separate from MS_* — those switch the app's own report
 // mailbox to Graph app-only sending, see mailer.ts).
 
-export const OUTLOOK_SCOPES = 'openid profile email offline_access User.Read Mail.Read Mail.Send';
+// Mail.ReadWrite (16/10, Tomer: "הכל באפליקציה"): mark read, delete, and drafts —
+// sending with attachments goes draft → attachments (upload session for big files) → send.
+export const OUTLOOK_SCOPES = 'openid profile email offline_access User.Read Mail.ReadWrite Mail.Send';
 export const OUTLOOK_REDIRECT = `${APP_ORIGIN}/api/outlook/callback`;
 
 export function outlookConfigured(): boolean {
@@ -162,6 +164,55 @@ export async function graphPost(userId: string, path: string, body: unknown): Pr
   if (!res.ok) {
     const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
     return { ok: false, error: `Microsoft: ${res.status} ${(j.error?.message ?? '').slice(0, 160)}` };
+  }
+  return { ok: true };
+}
+
+/** Any Graph call as this user; JSON in / out. 202/204 = ok with no body. */
+export async function graphJson<T = unknown>(userId: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<{ ok: true; data: T } | { ok: false; error: string; reconnect?: boolean }> {
+  const token = await accessTokenFor(userId);
+  if (!token) return { ok: false, error: 'צריך לחבר מחדש את תיבת הדואר', reconnect: true };
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (res.status === 401) {
+    forgetAccess(userId);
+    return { ok: false, error: 'החיבור לתיבת הדואר פג — מתחברים מחדש', reconnect: true };
+  }
+  if (res.status === 403) return { ok: false, error: 'אין הרשאה מ-Microsoft לפעולה הזו — צריך להתחבר מחדש (או שמנהל Microsoft לא אישר Mail.ReadWrite / Mail.Send)', reconnect: true };
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    return { ok: false, error: `Microsoft: ${res.status} ${(j.error?.message ?? '').slice(0, 160)}` };
+  }
+  const text = await res.text();
+  return { ok: true, data: (text ? JSON.parse(text) : {}) as T };
+}
+
+const SMALL_ATTACHMENT = 3 * 1024 * 1024;
+const CHUNK = 12 * 327_680; // ~3.75MB, a multiple of 320KB as Graph requires
+
+/** Add a file to a draft: inline up to 3MB, an upload session above that (up to 150MB). */
+export async function addDraftAttachment(userId: string, draftId: string, file: { name: string; contentType: string; bytes: Buffer }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = encodeURIComponent(draftId);
+  if (file.bytes.length <= SMALL_ATTACHMENT) {
+    const r = await graphJson(userId, 'POST', `/me/messages/${id}/attachments`, { '@odata.type': '#microsoft.graph.fileAttachment', name: file.name, contentType: file.contentType, contentBytes: file.bytes.toString('base64') });
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  }
+  const s = await graphJson<{ uploadUrl?: string }>(userId, 'POST', `/me/messages/${id}/attachments/createUploadSession`, { AttachmentItem: { attachmentType: 'file', name: file.name, size: file.bytes.length, contentType: file.contentType } });
+  if (!s.ok || !s.data.uploadUrl) return { ok: false, error: s.ok ? 'Microsoft לא פתח העלאה' : s.error };
+  for (let start = 0; start < file.bytes.length; start += CHUNK) {
+    const end = Math.min(start + CHUNK, file.bytes.length);
+    // The upload URL is pre-authorised: no bearer token on these requests.
+    const res = await fetch(s.data.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Length': String(end - start), 'Content-Range': `bytes ${start}-${end - 1}/${file.bytes.length}` },
+      body: new Uint8Array(file.bytes.subarray(start, end)),
+      cache: 'no-store',
+    });
+    if (!res.ok) return { ok: false, error: `העלאת ${file.name} נכשלה (${res.status})` };
   }
   return { ok: true };
 }

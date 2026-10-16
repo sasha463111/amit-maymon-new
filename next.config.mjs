@@ -32,7 +32,8 @@ const nextConfig = {
   // the 1 MB default is too small for a phone photo of a page. Stays under
   // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.
   experimental: {
-    serverActions: { bodySizeLimit: '4mb' },
+    // 30MB (16/10): email attachments from the computer / phone go through a server action.
+    serverActions: { bodySizeLimit: '30mb' },
   },
   // The advisor chat (/requests) reads the system docs at runtime (~95KB, traced into every function — the per-route key did not match the route group).
   // Top-level since Next 15 (was experimental.outputFileTracingIncludes).

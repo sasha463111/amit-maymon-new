@@ -10,6 +10,9 @@ export type MailListItem = { id: string; subject: string; fromName: string; from
 export type MailAttachment = { id: string; name: string; contentType: string; size: number };
 export type MailFull = MailListItem & { to: string; cc: string; bodyHtml: string; internetMessageId: string | null; attachments: MailAttachment[] };
 export type AttachTarget = { type: 'CASE' | 'COLLECTION' | 'REFERRAL'; id: string; label: string; plate: string | null; sub?: string };
+export type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward';
+/** A file of a case / claim / referral that can go out with an email ("📁 מהתיק"). */
+export type TargetFile = { src: 'CASE_DOC' | 'CLAIM_FILE' | 'REFERRAL_DOC' | 'CASE_EMAIL'; id: string; name: string; size: number; group: string };
 export type CaseEmail = { id: string; subject: string | null; fromName: string | null; fromEmail: string | null; receivedAt: string | null; preview: string | null; bodyHtml: string | null; attachments: { name: string; path: string; size: number }[]; attachedBy: string | null; attachedAt: string };
 
 /** Israeli plates (7 / 8 digits, with or without dashes) mentioned in an email — to suggest the case. */
