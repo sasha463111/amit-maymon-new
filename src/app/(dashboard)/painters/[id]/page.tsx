@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { PainterCaseClient } from './PainterCaseClient';
 import { getCaseAdvisors } from '@/lib/caseAdvisors';
 
-export default async function PainterCasePage({ params }: { params: { id: string } }) {
+export default async function PainterCasePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

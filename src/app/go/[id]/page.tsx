@@ -18,13 +18,14 @@ import { redirect } from 'next/navigation';
  * has no such concept) is harmless — every highlight consumer checks the id
  * actually matches something before acting on it, so a mismatch is a no-op.
  */
-export default async function GoToCase({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+export default async function GoToCase(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const supabase = await createClient();
   const {
     data: { user },

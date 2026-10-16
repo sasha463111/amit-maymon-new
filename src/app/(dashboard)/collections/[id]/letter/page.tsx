@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCollectionFile } from '@/app/actions/collectionFile';
 import { LetterClient } from './LetterClient';
@@ -7,7 +8,8 @@ export const dynamic = 'force-dynamic';
 
 // Payment demand letter (Amit approved, 14/10): built from the case data,
 // printed / saved as PDF, opened in the mail app, marked as sent.
-export default async function CollectionLetterPage({ params }: { params: { id: string } }) {
+export default async function CollectionLetterPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -16,7 +18,7 @@ export default async function CollectionLetterPage({ params }: { params: { id: s
     return (
       <div className="max-w-xl mx-auto py-10 text-center space-y-3" dir="rtl">
         <p className="text-gray-700">{r.error ?? 'התיק לא נמצא'}</p>
-        <a href="/collections" className="text-indigo-700 font-semibold">→ חזרה לניהול תביעות ביטוח</a>
+        <Link href="/collections" className="text-indigo-700 font-semibold">→ חזרה לניהול תביעות ביטוח</Link>
       </div>
     );
   }

@@ -1,5 +1,4 @@
 /** @type {import('next').NextConfig} */
-import withPWA from 'next-pwa';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -34,23 +33,15 @@ const nextConfig = {
   // Vercel's 4.5 MB request cap; screens shrink photos before sending anyway.
   experimental: {
     serverActions: { bodySizeLimit: '4mb' },
-    // The advisor chat (/requests) reads the system docs at runtime (~95KB, traced into every function — the per-route key did not match the route group).
-    outputFileTracingIncludes: {
-      '/**': ['./docs/reference/modules-and-gotchas.md', './docs/reference/automation-notifications.md'],
-    },
+  },
+  // The advisor chat (/requests) reads the system docs at runtime (~95KB, traced into every function — the per-route key did not match the route group).
+  // Top-level since Next 15 (was experimental.outputFileTracingIncludes).
+  outputFileTracingIncludes: {
+    '/**': ['./docs/reference/modules-and-gotchas.md', './docs/reference/automation-notifications.md'],
   },
 };
 
-// next-pwa is fully disabled. push-sw.js (registered explicitly by
-// PushSubscriber) is the single service worker for the app. Leaving
-// next-pwa active was causing stale workbox sw.js installs to intercept
-// fetch requests on returning users.
-const pwaConfig = withPWA({
-  dest: 'public',
-  register: false,
-  skipWaiting: true,
-  disable: true,
-  buildExcludes: [/middleware-manifest\.json$/],
-});
-
-export default pwaConfig(nextConfig);
+// next-pwa was removed with the Next 15 upgrade (16/10): it had been fully
+// disabled for a while; push-sw.js (registered by PushSubscriber) is the
+// app's only service worker.
+export default nextConfig;

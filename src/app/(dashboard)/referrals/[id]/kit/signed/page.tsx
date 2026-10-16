@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic';
 
 // The kit documents the customer signed through the link (stage 2, 15/10):
 // each one as signed — the values, the signature, when and from where. Printable.
-export default async function KitSignedPage({ params }: { params: { id: string } }) {
+export default async function KitSignedPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

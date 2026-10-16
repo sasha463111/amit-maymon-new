@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 // "📄 קיט מסמכים" for a referral (Amit, 15/10, Discussion #4). Same gate as the
 // customer link for now (CEO only until the lawyers approve the consent text).
-export default async function ReferralKitPage({ params }: { params: { id: string } }) {
+export default async function ReferralKitPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

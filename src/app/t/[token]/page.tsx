@@ -18,7 +18,8 @@ export const metadata: Metadata = {
 const PHONE = '08-9933818';
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'short', day: '2-digit', month: '2-digit' }) : '');
 
-export default async function TrackPage({ params }: { params: { token: string } }) {
+export default async function TrackPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const v = await caseByTrackToken(params.token);
   return (
     <main className="min-h-screen bg-gray-50" dir="rtl">

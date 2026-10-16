@@ -8,7 +8,8 @@ import { canSendCustomerLink, consentText, docItemsFor, firstName, whatsAppUrl }
 import { CustomerLinkPanel, type CustomerLinkRow } from './CustomerLinkPanel';
 import { serviceClient } from '@/lib/customerDocLinks.server';
 
-export default async function ReferralDetailPage({ params }: { params: { id: string } }) {
+export default async function ReferralDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const {
     data: { user },

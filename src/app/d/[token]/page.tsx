@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 
 // Public page of the customer documents link (Amit, 2026-10-14). Shows only
 // the customer's first name and plate; everything else stays on the server.
-export default async function CustomerDocsPage({ params }: { params: { token: string } }) {
+export default async function CustomerDocsPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const state = await resolveToken(params.token);
 
   if (!state.ok) {

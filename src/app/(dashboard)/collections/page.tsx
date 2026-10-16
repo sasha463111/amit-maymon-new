@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 // "גבייה" — collection cases per collector (Amit, 2026-10-14). Collectors see
 // their own cases; the CEO sees all, per collector. Each row opens the case
 // file (/collections/[id]); my open reminders are listed on top.
-export default async function CollectionsPage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default async function CollectionsPage(props: { searchParams?: Promise<{ tab?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

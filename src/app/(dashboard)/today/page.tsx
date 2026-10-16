@@ -13,7 +13,8 @@ const ROLE_VIEW: Record<string, TodayRole> = {
   CEO: 'ceo', SERVICE_ADVISOR: 'advisor', SERVICE_MANAGER: 'advisor', PAINTER: 'painter', OFFICE: 'office',
   WAREHOUSE: 'warehouse', WAREHOUSE_MANAGER: 'warehouse', COLLECTIONS: 'collections', ACCOUNTANT: 'collections', DRIVER: 'driver',
 };
-export default async function TodayPage({ searchParams }: { searchParams?: { as?: string } }) {
+export default async function TodayPage(props: { searchParams?: Promise<{ as?: string }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

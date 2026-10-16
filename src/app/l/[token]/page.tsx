@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 
 // The customer's copy of the signed replacement-car documents (Amit, 14/10:
 // "שלא יהיה מצב שלא ידעתי לא הבנתי"). Personal link, read-only, time-limited.
-export default async function LoanerCopyPage({ params }: { params: { token: string } }) {
+export default async function LoanerCopyPage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const r = await loanerByShareToken(params.token);
   return (
     <main className="min-h-screen bg-gray-50">

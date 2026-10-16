@@ -420,3 +420,8 @@ supabase/
   - נתיבי ה-API: cron ו-push מאומתים ב-secret מה-Vault, customer-docs ב-token מוצפן, ו-perf רק למחוברים.
   - **היסטוריית תיק (`audit_events`):** מיגרציה `20261016120000`. INSERT רק עם `user_id = auth.uid()`; לפני כן אפשר היה לכתוב `NULL`, שנראה כמו רישום של המערכת. 12 נקודות הכתיבה בקוד מעבירות את `user.id`; השורה האחרונה עם NULL היא מ-27/08 (ייבוא ישן). נבדק בהתחזות ב-`tests/db/checks.sql`: בשם עצמי עובר, בלי שם או בשם של אחר נדחה.
   - **רישום push (`save_push_subscription` / upsert לפי `endpoint`):** ה-subscription עובר למשתמש החדש כשמישהו אחר מתחבר באותו מכשיר. **זה בכוונה** (מחשב משרד משותף), לא חור. כדי לנצל את זה צריך את ה-endpoint של המכשיר, כתובת סודית ששירות ה-push נותן רק לדפדפן עצמו. ב-DB היא קריאה רק לבעלים ול-CEO (`push_subscriptions_select`).
+- **⬆️ שדרוג Next 15.5.28 + React 19 (16/10, ענף `next15`):**
+  - הרצנו את ה-codemod `next-async-request-api`: `params` ו-`searchParams` הם Promise, ו-`cookies()` / `headers()` עם await (15 קבצים).
+  - `next-pwa` הוסר (היה כבוי). `outputFileTracingIncludes` עבר מ-`experimental` לרמה העליונה של הקונפיג.
+  - lint החמיר את `no-html-link-for-pages`, ולכן שלושה קישורי "חזרה" הפכו ל-`Link`.
+  - כל פגיעויות ה-Next נסגרו. נשאר רק `postcss` שארוז בתוך Next: רץ רק ב-build על ה-CSS שלנו, ולא ניתן לניצול מבחוץ. התיקון שלו רק ב-Next 16.

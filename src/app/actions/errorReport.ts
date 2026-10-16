@@ -23,7 +23,7 @@ export async function reportClientError(e: ClientError): Promise<void> {
       path: typeof e?.path === 'string' ? e.path : '/',
       stack: typeof e?.stack === 'string' ? e.stack : null,
       userId: user?.id ?? null,
-      userAgent: headers().get('user-agent'),
+      userAgent: (await headers()).get('user-agent'),
     });
   } catch {
     // never throw from the reporter

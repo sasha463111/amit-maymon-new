@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { updatePainterChecklist, createPainterRequest, updatePainterRequestStatus, setPainterFinished, confirmPartsReceived } from '@/app/actions/painter';
 import { uploadCaseDocument } from '@/app/actions/documents';
@@ -426,7 +427,7 @@ export function PainterCaseClient({
 
       {/* Back navigation */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <a href="/painters" className="text-sm text-blue-600 hover:underline">← חזרה ללוח פחחים</a>
+        <Link href="/painters" className="text-sm text-blue-600 hover:underline">← חזרה ללוח פחחים</Link>
         {(role === 'SERVICE_MANAGER' || role === 'CEO') && (
           <a
             href={`/cases/${caseId}`}

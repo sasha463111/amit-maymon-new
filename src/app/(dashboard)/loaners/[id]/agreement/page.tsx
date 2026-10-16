@@ -8,7 +8,8 @@ import { PrintButton } from './PrintButton';
 export const dynamic = 'force-dynamic';
 
 // The signed replacement-car documents — printable / save as PDF.
-export default async function LoanerAgreementPage({ params }: { params: { id: string } }) {
+export default async function LoanerAgreementPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
