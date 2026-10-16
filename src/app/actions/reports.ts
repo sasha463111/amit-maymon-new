@@ -5,8 +5,8 @@ import { formatDate } from '@/lib/dates';
 import { sendMail } from '@/lib/mailer';
 
 /**
- * Summary email report (#11). Sends via Resend's plain REST API — no SDK
- * dependency, just a fetch call with the API key from env (RESEND_API_KEY).
+ * Summary email report (#11). Sent through src/lib/mailer.ts — the company's
+ * Microsoft 365 mailbox when MS_* is set, else Resend (RESEND_API_KEY).
  *
  * Counts:
  *  - open cases per branch (closed_at IS NULL)

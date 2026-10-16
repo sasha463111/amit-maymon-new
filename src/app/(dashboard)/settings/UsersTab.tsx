@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, Save, Users as UsersIcon, BellRing } from 'lucide-react';
-import { testClaudeConnection } from '@/app/actions/aiCheck';
+import { testClaudeConnection, testMailTransport } from '@/app/actions/aiCheck';
 import { updateSystemUser, startViewAsUser, resetUserPassword, setStaffPhone, setSmsRequired, forgetTrustedDevices, sendTestSmsToMe, type SystemUser } from '@/app/actions/users';
 import { PasswordReveal } from '@/components/PasswordReveal';
 import { sendTestPushToSelf } from '@/app/actions/push';
@@ -35,6 +35,7 @@ export function UsersTab({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [smsTest, setSmsTest] = useState<string | null>(null);
   const [aiTest, setAiTest] = useState<string | null>(null);
+  const [mailTest, setMailTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const [pushTest, setPushTest] = useState<{ msg: string; ok: boolean } | null>(null);
@@ -278,6 +279,24 @@ export function UsersTab({
           {busyId === 'AI_TEST' ? 'בודק…' : 'בדיקת חיבור'}
         </button>
         {aiTest && <span className="text-xs">{aiTest}</span>}
+      </div>
+      {/* 📧 The app's own mail: Microsoft 365 mailbox or Resend (16/10). */}
+      <div className="flex items-center gap-2 flex-wrap rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+        <span>📧 דואר המערכת (דוחות וגיבוי התראות)</span>
+        <button
+          type="button"
+          disabled={busyId === 'MAIL_TEST'}
+          onClick={async () => {
+            setBusyId('MAIL_TEST');
+            const r = await testMailTransport();
+            setBusyId(null);
+            setMailTest(r.error ? `⚠️ ${r.error}` : `${r.ok ? '✅' : '⚠️'} ${r.detail}`);
+          }}
+          className="h-8 px-3 rounded-lg border border-blue-300 bg-white text-blue-800 text-xs font-semibold disabled:opacity-50"
+        >
+          {busyId === 'MAIL_TEST' ? 'שולח…' : 'בדיקת דואר אליי'}
+        </button>
+        {mailTest && <span className="text-xs">{mailTest}</span>}
       </div>
       {revealed && <PasswordReveal name={revealed.name} email={revealed.email} password={revealed.password} phone={revealed.phone} onClose={() => setRevealed(null)} />}
       {error && (

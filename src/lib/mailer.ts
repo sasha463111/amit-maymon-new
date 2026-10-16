@@ -35,6 +35,9 @@ function graphConfigured(): boolean {
 }
 
 /** Which transport is live — for diagnostics only (no secrets). */
+/** The mailbox the app sends from (Graph). */
+export const mailSender = () => SENDER;
+
 export function mailTransport(): 'graph' | 'resend' {
   return graphConfigured() ? 'graph' : 'resend';
 }
