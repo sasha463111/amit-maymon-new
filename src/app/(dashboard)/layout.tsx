@@ -9,6 +9,7 @@ import { CaseSearch } from '@/components/CaseSearch';
 import { AutoRefresh } from '@/components/AutoRefresh';
 import { UserMenu } from '@/components/UserMenu';
 import { UpdateBanner } from '@/components/UpdateBanner';
+import { Toaster } from '@/components/Toaster';
 import { DictationAssist } from '@/components/DictationAssist';
 import { db as outlookDb } from '@/lib/outlook.server';
 import { canUseOutlook } from '@/lib/outlook';
@@ -268,6 +269,7 @@ export default async function DashboardLayout({
 
       {/* A newer version is live → offer a refresh (16/10). */}
       {!isPreview && <UpdateBanner />}
+      <Toaster />
 
       {/* One banner at a time (16/10, design round): "מה חדש" first; the
           push-enable nudge only when there is nothing new to announce. */}

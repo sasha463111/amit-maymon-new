@@ -11,6 +11,7 @@ import { CaseNotesComposer } from '@/components/CaseNotesComposer';
 import { shrinkImage } from '@/lib/shrinkImage';
 import { CameraBatchUpload } from '@/components/CameraBatchUpload';
 import { PainterStatusPicker } from './PainterStatusPicker';
+import { toast } from '@/components/Toaster';
 
 type PainterRequest = {
   id: string;
@@ -321,7 +322,8 @@ export function PainterCaseClient({
   const [finishError, setFinishError] = useState<string | null>(null);
 
   async function handleFinish(finished: boolean) {
-    if (finished && !window.confirm('לסמן שהעבודה ברכב הסתיימה? הרכב ירד מלוח הפחחים (ויישאר בתיקים עד הסגירה).')) return;
+    // 16/10 (UI round): no confirm() — it acts at once and the toast offers
+    // "ביטול" for 8 seconds (it is fully reversible: "↩️ החזר ללוח").
     setFinishing(true);
     setFinishError(null);
     const res = await setPainterFinished(caseId, finished);
@@ -331,7 +333,20 @@ export function PainterCaseClient({
       return;
     }
     setFinishedAtLocal(finished && 'at' in res ? res.at ?? null : null);
-    if (finished) router.push('/painters');
+    if (finished) {
+      const label = licensePlate ?? caseKey ?? 'הרכב';
+      toast(`✅ ${label} — העבודה הסתיימה, ירד מלוח הפחחים`, {
+        undo: async () => {
+          const back = await setPainterFinished(caseId, false);
+          if ('error' in back && back.error) toast(`⚠️ ${back.error}`, { tone: 'error' });
+          else {
+            toast(`↩️ ${label} חזר ללוח הפחחים`);
+            router.refresh();
+          }
+        },
+      });
+      router.push('/painters');
+    }
   }
 
   async function handleChecklistChange(field: 'enteredWork' | 'partsArrived', value: boolean) {

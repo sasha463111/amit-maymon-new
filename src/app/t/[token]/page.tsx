@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Logo } from '@/components/Logo';
 import { caseByTrackToken } from '@/lib/caseTrack.server';
 import { TRACK_STEPS } from '@/lib/caseTrack';
 import { LicensePlate } from '@/components/ui/LicensePlate';
@@ -25,8 +26,7 @@ export default async function TrackPage(props: { params: Promise<{ token: string
     <main className="min-h-screen bg-gray-50" dir="rtl">
       <div className="max-w-lg mx-auto px-4 py-5 space-y-4">
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-10 w-auto" />
+          <Logo />
           <div>
             <div className="font-bold text-gray-900">מרכז שירות תהילה</div>
             <div className="text-xs text-gray-600">מעקב אחרי הרכב שלך{v?.branchName ? ` · סניף ${v.branchName}` : ''}</div>

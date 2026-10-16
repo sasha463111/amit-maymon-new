@@ -3,6 +3,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Text size from the personal menu (16/10): Tailwind sizes are rem, so this scales the app. */
+html[data-text="lg"] { font-size: 112.5%; }
+html[data-text="xl"] { font-size: 125%; }
+
 /* ===========================================================================
    Tehila Bodyshop CRM — Design System tokens (from Claude Design handoff).
    Warm paper neutrals (never pure white/black) + petrol functional accent +

@@ -86,14 +86,20 @@ const SW_CLEANUP_SCRIPT = `
 })();
 `;
 
+// Text size (16/10, UI round): "א / א+ / א++" in the personal menu. Applied
+// before paint so the page doesn't jump; Tailwind sizes are rem, so the root
+// font-size scales the whole app. Per device (localStorage).
+const TEXT_SIZE_SCRIPT = `try{var t=localStorage.getItem('tehila-text');if(t==='lg'||t==='xl')document.documentElement.setAttribute('data-text',t)}catch(e){}`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="he" dir="rtl" className={`${heebo.variable} ${jetbrainsMono.variable}`}>
+    <html lang="he" dir="rtl" className={`${heebo.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: SW_CLEANUP_SCRIPT }} />
       </head>
       <body className={`antialiased ${heebo.className}`}>

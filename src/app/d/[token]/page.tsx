@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Logo } from '@/components/Logo';
 import { resolveToken, serviceClient } from '@/lib/customerDocLinks.server';
 import { consentText, docItemsFor, firstName } from '@/lib/customerDocs';
 import { CustomerDocsForm } from './CustomerDocsForm';
@@ -78,8 +79,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-lg mx-auto px-4 py-5">
         <div className="flex items-center gap-3 mb-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-10 w-auto" />
+          <Logo />
           <div>
             <div className="font-bold text-gray-900">מרכז שירות תהילה</div>
             <div className="text-xs text-gray-500">העלאת מסמכים מאובטחת</div>

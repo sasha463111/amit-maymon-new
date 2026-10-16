@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, KeyRound, LogOut, Mail } from 'lucide-react';
+import { ChevronDown, KeyRound, LogOut, Mail, Type } from 'lucide-react';
 import { SendReportModal } from './SendReportModal';
 
 // One personal menu instead of separate small buttons in the header (16/10,
@@ -23,6 +23,23 @@ export function UserMenu({ name, roleLabel, branchName, email, isCeo }: { name: 
     return () => document.removeEventListener('mousedown', close);
   }, [open]);
   const initial = (name.trim()[0] ?? '?').toUpperCase();
+  // Text size (16/10): set on <html data-text>, remembered on this device.
+  const [textSize, setTextSize] = useState<'md' | 'lg' | 'xl'>('md');
+  useEffect(() => {
+    const t = document.documentElement.getAttribute('data-text');
+    setTextSize(t === 'lg' || t === 'xl' ? t : 'md');
+  }, []);
+  function chooseText(t: 'md' | 'lg' | 'xl') {
+    setTextSize(t);
+    if (t === 'md') document.documentElement.removeAttribute('data-text');
+    else document.documentElement.setAttribute('data-text', t);
+    try {
+      if (t === 'md') localStorage.removeItem('tehila-text');
+      else localStorage.setItem('tehila-text', t);
+    } catch {
+      // private mode — applies for this visit only
+    }
+  }
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -45,6 +62,23 @@ export function UserMenu({ name, roleLabel, branchName, email, isCeo }: { name: 
               {roleLabel}
               {branchName !== '—' ? ` · ${branchName}` : ''}
             </p>
+          </div>
+          <div className="flex items-center gap-2.5 h-11 px-3 text-sm text-gray-800">
+            <Type size={17} className="text-gray-500" aria-hidden="true" />
+            <span className="flex-1 whitespace-nowrap">גודל טקסט</span>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden" role="group" aria-label="גודל טקסט">
+              {([['md', 'א', 'text-xs'], ['lg', 'א+', 'text-sm'], ['xl', 'א++', 'text-base']] as const).map(([k, l, cls]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => chooseText(k)}
+                  aria-pressed={textSize === k}
+                  className={`h-8 min-w-[40px] px-2 font-bold ${cls} ${textSize === k ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
           <a href="/account/password" className="flex items-center gap-2.5 h-11 px-3 rounded-lg text-sm text-gray-800 hover:bg-gray-50">
             <KeyRound size={17} className="text-gray-500" aria-hidden="true" />

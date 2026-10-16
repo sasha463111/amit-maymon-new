@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { PAINTER_STATUS_LABELS } from '@/types/database';
@@ -182,7 +183,7 @@ export function PaintersBoard({ rows }: { rows: PainterRow[] }) {
   // shown as: branch tabs → one strip of status counts (tap = show only that
   // status) → full-height sections with one compact row per case.
   const [selected, setSelected] = useState<PainterRow | null>(null);
-  const [branch, setBranch] = useState('all');
+  const [branch, setBranch] = useRemembered<string>('painters-branch', 'all');
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 

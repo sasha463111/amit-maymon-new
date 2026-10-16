@@ -1,44 +1,16 @@
-'use client';
+import { BRAND_NAME } from '@/lib/demo';
 
-import { useState } from 'react';
-import { BRAND_NAME, DEMO_MODE } from '@/lib/demo';
+// The brand mark (16/10): drawn as text. public/logo.png is white letters in
+// the middle of a big transparent square — at header / login size the word
+// came out tiny, and on the white customer pages (/t, /d, /l) invisible.
 
 type LogoVariant = 'header' | 'login';
 
-const variantClasses: Record<LogoVariant, { wrapper: string; text: string; imgSize: string }> = {
-  header: {
-    wrapper: 'bg-brand-red rounded px-2.5 py-1',
-    text: 'font-black text-xl text-white tracking-tight',
-    imgSize: 'h-7 w-auto max-w-[90px]',
-  },
-  login: {
-    wrapper: 'bg-brand-red rounded-xl px-5 py-2',
-    text: 'font-black text-3xl text-white tracking-tight',
-    imgSize: 'h-11 w-auto max-w-[140px]',
-  },
+const variantClasses: Record<LogoVariant, string> = {
+  header: 'bg-brand-red rounded-lg px-2.5 py-1 font-black text-xl text-white tracking-tight',
+  login: 'bg-brand-red rounded-xl px-5 py-2 font-black text-3xl text-white tracking-tight',
 };
 
 export function Logo({ variant = 'header' }: { variant?: LogoVariant }) {
-  // Demo site: never show the real business logo image.
-  const [useTextFallback, setUseTextFallback] = useState(DEMO_MODE);
-  const { wrapper, text, imgSize } = variantClasses[variant];
-
-  if (useTextFallback) {
-    return (
-      <div className={`${wrapper} inline-flex items-center justify-center`}>
-        <span className={text}>{BRAND_NAME}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${wrapper} inline-flex items-center justify-center overflow-hidden`}>
-      <img
-        src="/logo.png"
-        alt={BRAND_NAME}
-        className={`object-contain ${imgSize}`}
-        onError={() => setUseTextFallback(true)}
-      />
-    </div>
-  );
+  return <span className={`inline-flex items-center justify-center leading-tight ${variantClasses[variant]}`}>{BRAND_NAME}</span>;
 }

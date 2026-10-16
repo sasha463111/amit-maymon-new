@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { lookupPlateHistory, type ExistingCollection, type Feedback, type MyReminder, type RepairMatch } from '@/app/actions/collectionFile';
@@ -57,13 +58,13 @@ export function CollectionsClient({
   error: string | null;
 }) {
   const router = useRouter();
-  const [who, setWho] = useState<string>('');
+  const [who, setWho] = useRemembered<string>('collections-who', '');
   const [tab, setTab] = useState<Tab>(initialTab === 'feedback' ? 'feedback' : initialTab === 'summary' && weekly ? 'summary' : 'active');
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   // Table or cards (Amit, 14/10: "כמו עכשיו וכמו בתיקים") — remembered per device.
-  const [view, setView] = useState<'table' | 'cards'>('table');
+  const [view, setView] = useRemembered<'table' | 'cards'>('collections-view', 'table', (v) => v === 'table' || v === 'cards');
   useEffect(() => {
     try {
       const v = localStorage.getItem('collections.view');

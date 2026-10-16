@@ -3,6 +3,7 @@
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { StatCard, StatGrid, EmptyState } from '@/components/ui/kit';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -86,7 +87,7 @@ async function uploadDocsOneByOne(handoverId: string, stage: 'OUT' | 'IN', files
 }
 
 export function LoanersClient({ fleet, handovers, branches, error, canEdit = false }: { fleet: FleetCar[]; handovers: Handover[]; branches: { id: string; name: string }[]; error: string | null; canEdit?: boolean }) {
-  const [tab, setTab] = useState<Tab>('out');
+  const [tab, setTab] = useRemembered<Tab>('loaners-tab', 'out', (v) => v === 'out' || v === 'back' || v === 'fleet');
   const [query, setQuery] = useState('');
   const [giving, setGiving] = useState(false);
   // ?new=1 (the main button on "היום", 16/10) opens a new handover straight away.
@@ -994,7 +995,7 @@ function FleetTab({ fleet, branches, handovers, onDone }: { fleet: FleetCar[]; b
 
   // Split by branch (אשקלון / נתיבות) + filter free / handed over (Amit, 14/10).
   const [branchTab, setBranchTab] = useState<string>(branches[0]?.id ?? '');
-  const [status, setStatus] = useState<'all' | 'free' | 'busy'>('all');
+  const [status, setStatus] = useRemembered<'all' | 'free' | 'busy'>('loaners-fleet-status', 'all', (v) => v === 'all' || v === 'free' || v === 'busy');
   const groups = [...branches.map((b) => ({ id: b.id, name: b.name })), ...(fleet.some((f) => !f.branch_id) ? [{ id: '', name: 'ללא סניף' }] : [])];
   const inBranch = fleet.filter((f) => (f.branch_id ?? '') === branchTab);
   const shownCars = inBranch

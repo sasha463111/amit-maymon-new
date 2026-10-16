@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Logo } from '@/components/Logo';
 import { loanerByShareToken } from '@/lib/loanerShare.server';
 import { LoanerDocsView } from '@/components/LoanerDocsView';
 
@@ -19,8 +20,7 @@ export default async function LoanerCopyPage(props: { params: Promise<{ token: s
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto px-4 py-5 space-y-3">
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="h-10 w-auto" />
+          <Logo />
           <div>
             <div className="font-bold text-gray-900">מרכז שירות תהילה</div>
             <div className="text-xs text-gray-500">עותק המסמכים שנחתמו — רכב חליפי</div>

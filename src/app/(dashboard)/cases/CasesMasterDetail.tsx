@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import { useRouter, usePathname } from 'next/navigation';
 import { CaseRow } from '@/components/design/CaseRow';
 import { CompactCaseRow } from '@/components/design/CompactCaseRow';
@@ -78,7 +79,7 @@ export function CasesMasterDetail({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [branchFilter, setBranchFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useRemembered<string>('cases-branch', 'all');
   const [mineOnly, setMineOnly] = useState(!!mineFirstFor);
 
   // Auto-refresh: <AutoRefresh /> in (dashboard)/layout.tsx covers every page.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import Link from 'next/link';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { SegmentedControl } from '@/components/design/SegmentedControl';
@@ -33,7 +34,7 @@ export function ReferralsGrid({
   branches: { id: string; name: string }[];
   branchNameById: Map<string, string>;
 }) {
-  const [branchFilter, setBranchFilter] = useState('all');
+  const [branchFilter, setBranchFilter] = useRemembered<string>('referrals-branch', 'all');
   const [query, setQuery] = useState('');
   const showBranchFilter = branches.length > 1;
 

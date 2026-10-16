@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { markRead, markAllRead } from '@/app/actions/notifications';
+import { markRead, markAllRead, markManyRead } from '@/app/actions/notifications';
+import { useRemembered } from '@/lib/useRemembered';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { formatDate } from '@/lib/dates';
 
@@ -174,6 +176,11 @@ export function NotificationsList({
   unreadCount: number;
 }) {
   const router = useRouter();
+  // 16/10 (UI round): "רק חדשות" filter (remembered), per-car "סמן כנקרא",
+  // and cars with nothing new stay folded until opened.
+  const [show, setShow] = useRemembered<'all' | 'new'>('notifications-show', 'all', (v) => v === 'all' || v === 'new');
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const [busyGroup, setBusyGroup] = useState<string | null>(null);
 
   if (notifications.length === 0) {
     return (
@@ -215,7 +222,8 @@ export function NotificationsList({
   const groups = new Map<string, { plate: string | null; vehicle: string | null; items: NotificationRow[] }>();
   const ungrouped: NotificationRow[] = [];
 
-  for (const n of notifications) {
+  const visible = show === 'new' ? notifications.filter((n) => !n.read) : notifications;
+  for (const n of visible) {
     if (n.case_id) {
       if (!groups.has(n.case_id)) {
         groups.set(n.case_id, { plate: n.license_plate, vehicle: n.vehicle ?? null, items: [] });
@@ -235,8 +243,15 @@ export function NotificationsList({
 
   return (
     <div className="space-y-4">
-      {unreadCount > 0 && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex rounded-xl border border-gray-200 bg-white overflow-hidden text-sm" role="group" aria-label="סינון התראות">
+          {([['all', 'הכל'], ['new', `רק חדשות (${unreadCount})`]] as const).map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setShow(k)} aria-pressed={show === k} className={`h-9 px-3 font-semibold ${show === k ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {unreadCount > 0 && (
           <button
             type="button"
             onClick={async () => { await markAllRead(); router.refresh(); }}
@@ -244,12 +259,21 @@ export function NotificationsList({
           >
             ✓ סמן הכל כנקרא
           </button>
+        )}
+      </div>
+
+      {visible.length === 0 && (
+        <div className="py-12 text-center text-gray-500">
+          <div className="text-4xl mb-2">✅</div>
+          אין התראות חדשות
         </div>
       )}
 
       {/* Groups per vehicle */}
       {sortedGroups.map(([caseId, group]) => {
-        const hasUnread = group.items.some((n) => !n.read);
+        const unreadIds = group.items.filter((n) => !n.read).map((n) => n.id);
+        const hasUnread = unreadIds.length > 0;
+        const expanded = hasUnread || opened.has(caseId);
         return (
           <div key={caseId} className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Group header */}
@@ -272,17 +296,52 @@ export function NotificationsList({
               </span>
               {hasUnread && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-brand-red text-white text-[10px] font-bold">
-                  {group.items.filter((n) => !n.read).length} חדשות
+                  {unreadIds.length} חדשות
                 </span>
+              )}
+              {hasUnread ? (
+                <button
+                  type="button"
+                  disabled={busyGroup === caseId}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setBusyGroup(caseId);
+                    await markManyRead(unreadIds);
+                    setBusyGroup(null);
+                    router.refresh();
+                  }}
+                  className="h-8 px-2.5 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  ✓ סמן כנקרא
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpened((cur) => {
+                      const next = new Set(cur);
+                      if (next.has(caseId)) next.delete(caseId);
+                      else next.add(caseId);
+                      return next;
+                    });
+                  }}
+                  className="h-8 px-2.5 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-100"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? 'הסתר ▴' : 'הצג ▾'}
+                </button>
               )}
             </div>
 
-            {/* Notifications in this group */}
-            <div className="divide-y divide-gray-100">
-              {group.items.map((n) => (
-                <NotificationItem key={n.id} n={n} onNavigate={handleClick} onMarkRead={handleMarkRead} />
-              ))}
-            </div>
+            {/* Notifications in this group (folded when nothing is new) */}
+            {expanded && (
+              <div className="divide-y divide-gray-100">
+                {group.items.map((n) => (
+                  <NotificationItem key={n.id} n={n} onNavigate={handleClick} onMarkRead={handleMarkRead} />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

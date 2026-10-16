@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useRemembered } from '@/lib/useRemembered';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -47,7 +48,7 @@ export function ReturnsClient({
   docs?: SupplierDocRow[] | null;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('pickup');
+  const [tab, setTab] = useRemembered<Tab>(`returns-tab-${role}`, 'pickup', (v) => ['pickup', 'credit', 'done', 'all', 'docs'].includes(v) && (v !== 'docs' || !!docs));
   const [adding, setAdding] = useState(false);
   // ?new=1 (the main button on "היום", 16/10) opens the new-return form straight away.
   useEffect(() => {
@@ -1112,8 +1113,8 @@ const waitingDays = (r: PartReturnRow) => (r.status === 'WAITING_PICKUP' ? daysS
 
 function ReturnsTable({ rows: input, onDone, canCredit }: { rows: PartReturnRow[]; onDone: (m: string) => void; canCredit: boolean }) {
   const [view, setView] = useState<string | null>(null);
-  const [status, setStatus] = useState('');
-  const [sort, setSort] = useState<TableSort>('new');
+  const [status, setStatus] = useRemembered<string>('returns-table-status', '');
+  const [sort, setSort] = useRemembered<TableSort>('returns-table-sort', 'new', (v) => TABLE_SORTS.some(([k]) => k === v));
   if (input.length === 0) return <p className="text-gray-400 py-8 text-center">לא נמצאו החזרות</p>;
   const rows = input
     .filter((r) => !status || r.status === status)
