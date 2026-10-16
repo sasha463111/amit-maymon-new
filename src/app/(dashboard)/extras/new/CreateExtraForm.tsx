@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { createExtra } from '@/app/actions/extras';
+import { shrinkImage } from '@/lib/shrinkImage';
 
 interface CaseOption {
   id: string;
@@ -28,12 +29,15 @@ export function CreateExtraForm({ cases }: { cases: CaseOption[] }) {
     setLoading(true);
 
     const supabase = createClient();
-    const ext = file.name.split('.').pop() ?? 'jpg';
+    // Speed (16/10): painters send this from the phone (92%) — a full camera photo is
+    // 4-10MB over cellular. Shrink first, like the other photo forms.
+    const small = await shrinkImage(file);
+    const ext = small.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() ?? 'jpg');
     const path = `${caseId}/${Date.now()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
       .from('extras-images')
-      .upload(path, file, { upsert: false });
+      .upload(path, small, { upsert: false, contentType: small.type || undefined });
 
     if (uploadErr) {
       setError(uploadErr.message);

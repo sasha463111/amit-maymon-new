@@ -101,7 +101,27 @@ async function CaseDetailData({
   // case page itself with a "טופל" button — the reason for a rejection used
   // to live only in the bell, away from the case it was about. Filtered to
   // the current user explicitly: CEOs can read everyone's notifications.
-  const [{ data: caseNotifData }, canDeleteCase] = await Promise.all([
+  //
+  // Speed (16/10): everything that only needs the case id loads in ONE round
+  // — the steps through an inner join on their run (they used to wait for the
+  // runs query), plus the part returns and the Outlook status that used to
+  // run after everything else. Only the step audit + the names lookup follow.
+  const showMail = canUseOutlook(profile?.role);
+  const [
+    { data: caseNotifData },
+    canDeleteCase,
+    { data: allRuns },
+    { data: stepTemplatesData },
+    { data: joinedSteps },
+    { data: approvals },
+    { data: extras },
+    { data: caseAudit },
+    { data: documentsData },
+    { data: advisorsData },
+    { data: painterRequestsData },
+    { rows: partReturns },
+    mailStatus,
+  ] = await Promise.all([
     supabase
       .from('notifications')
       .select('id, title, body, created_at, type')
@@ -111,13 +131,7 @@ async function CaseDetailData({
       .order('created_at', { ascending: false })
       .limit(10),
     hasPermission(supabase, 'delete_cases'),
-  ]);
-  const caseNotifications = (caseNotifData ?? []) as { id: string; title: string; body: string | null; created_at: string; type: string }[];
-
-  // CRITICAL FIX: Load steps by case_id (through all runs) to find steps even if run_id changes.
-  // Load templates in parallel — used only if we need to seed steps, but cheap enough to fetch
-  // alongside runs to avoid a second sequential round-trip when seeding is required.
-  const [{ data: allRuns }, { data: stepTemplatesData }] = await Promise.all([
+    // CRITICAL FIX: steps are loaded by case_id (through all runs) so they're found even if run_id changes.
     supabase
       .from('case_workflow_runs')
       .select('id, status')
@@ -128,20 +142,27 @@ async function CaseDetailData({
       .select('step_key, step_label, order_index, requires_link, requires_file_or_link, requires_ceo_approval')
       .eq('is_enabled', true)
       .order('order_index'),
+    supabase
+      .from('case_workflow_steps')
+      .select('id, step_key, state, order_index, completed_at, completed_by, activated_at, case_workflow_runs!inner(case_id, workflow_type)')
+      .eq('case_workflow_runs.case_id', id)
+      .eq('case_workflow_runs.workflow_type', 'PROFESSIONAL')
+      .order('order_index'),
+    supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
+    supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
+    supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'CASE').eq('entity_id', id).limit(50),
+    supabase.from('case_documents').select('id, file_name, file_path, file_size, mime_type, document_type, created_at').eq('case_id', id).order('created_at', { ascending: false }),
+    supabase.from('profiles').select('id, full_name').eq('is_bodywork_advisor', true).eq('is_active', true).order('full_name'),
+    supabase.from('painter_requests').select('id, description, request_type, status, response_note, created_at, received_at').eq('case_id', id).order('created_at', { ascending: false }),
+    // Parts returned from this case (empty for roles that may not see them).
+    listPartReturns({ caseId: id }),
+    showMail ? outlookStatus().then((s) => ({ configured: s.configured, connected: s.connected })) : Promise.resolve(null),
   ]);
+  const caseNotifications = (caseNotifData ?? []) as { id: string; title: string; body: string | null; created_at: string; type: string }[];
   const stepTemplates: StepTemplate[] = (stepTemplatesData ?? []) as StepTemplate[];
 
-  let steps: { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null; activated_at?: string | null }[] = [];
-
-  if (allRuns && allRuns.length > 0) {
-    const runIds = allRuns.map((r) => (r as { id: string }).id);
-    const { data: stepsData } = await supabase
-      .from('case_workflow_steps')
-      .select('id, step_key, state, order_index, completed_at, completed_by, activated_at')
-      .in('run_id', runIds)
-      .order('order_index');
-    steps = stepsData ?? [];
-  }
+  type StepRow = { id: string; step_key: string; state: string; order_index: number; completed_at?: string | null; completed_by?: string | null; activated_at?: string | null };
+  let steps: StepRow[] = ((joinedSteps ?? []) as (StepRow & { case_workflow_runs?: unknown })[]).map(({ case_workflow_runs: _run, ...s }) => s);
 
   // Derive active run from allRuns (avoids a separate DB round-trip)
   const activeRunEntry = (allRuns ?? []).find(
@@ -231,30 +252,14 @@ async function CaseDetailData({
     }
   }
 
-  // Parallelise independent queries
+  // Second round: the step audit needs the step ids.
   const stepIds = steps.map((s) => s.id);
   type AuditRow = { id: string; action: string; user_id: string | null; created_at: string; payload: unknown };
   type AuditResult = { data: AuditRow[] | null };
 
-  const [
-    { data: approvals },
-    { data: extras },
-    { data: caseAudit },
-    { data: documentsData },
-    stepAuditResult,
-    { data: advisorsData },
-    { data: painterRequestsData },
-  ] = await Promise.all([
-    supabase.from('ceo_approvals').select('id, approval_type, status, rejection_note').eq('case_id', id),
-    supabase.from('bodywork_extras').select('id, description, status').eq('case_id', id),
-    supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'CASE').eq('entity_id', id).limit(50),
-    supabase.from('case_documents').select('id, file_name, file_path, file_size, mime_type, document_type, created_at').eq('case_id', id).order('created_at', { ascending: false }),
-    (stepIds.length > 0
-      ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
-      : Promise.resolve({ data: null })) as Promise<AuditResult>,
-    supabase.from('profiles').select('id, full_name').eq('is_bodywork_advisor', true).eq('is_active', true).order('full_name'),
-    supabase.from('painter_requests').select('id, description, request_type, status, response_note, created_at, received_at').eq('case_id', id).order('created_at', { ascending: false }),
-  ]);
+  const stepAuditResult = (await (stepIds.length > 0
+    ? supabase.from('audit_events').select('id, action, user_id, created_at, payload').eq('entity_type', 'WORKFLOW_STEP').in('entity_id', stepIds)
+    : Promise.resolve({ data: null }))) as AuditResult;
 
   const painterRequests = (painterRequestsData ?? []) as {
     id: string; description: string; request_type: string; status: string; response_note: string | null; created_at: string;
@@ -334,18 +339,15 @@ async function CaseDetailData({
     }
   }
 
-  // Parts returned from this case (empty for roles that may not see them).
-  const { rows: partReturns } = await listPartReturns({ caseId: id });
-
   return (
     <>
     <CasePartReturns rows={partReturns} />
     {/* "מעקב רכב" link for the customer (16/10; pilot: CEO) — open cases only. */}
     {TRACK_LINK_ROLES.includes(profile?.role ?? '') && !caseRow.closed_at && <CaseTrackButton caseId={id} />}
     {/* 📧 emails saved from Outlook (16/10; pilot) */}
-    {canUseOutlook(profile?.role) && (
+    {showMail && mailStatus && (
       <div className="mb-3">
-        <CaseEmails type="CASE" id={id} load={listCaseEmails} compact compose={{ api: MAIL_API, status: await outlookStatus().then((s) => ({ configured: s.configured, connected: s.connected })) }} />
+        <CaseEmails type="CASE" id={id} load={listCaseEmails} compact compose={{ api: MAIL_API, status: mailStatus }} />
       </div>
     )}
     <CaseDetailClientV2

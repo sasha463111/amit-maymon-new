@@ -5,7 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { listCollectionCases, type CollectionCase } from '@/app/actions/collections';
 import type { PaymentRule } from '@/lib/collections';
-import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { after } from 'next/server';
+import { lookupVehicle } from '@/lib/vehicleLookup.server';
+
+const lookupVehicleType = async (plate: string) => (await lookupVehicle(plate)).vehicle_type;
 import { CLAIM_STAGES } from '@/lib/collectionStages';
 
 const DEFAULT_SHORTCUTS = CLAIM_STAGES.slice(0, 6).map((s) => s.stage);
@@ -109,47 +112,48 @@ export async function getCollectionFile(id: string): Promise<{
   const row = await caseFor(ctx, id);
   if (!row) return { ...empty, error: 'התיק לא נמצא או משויך למסלקת אחרת' };
 
-  // Reuse the list's mapping (numbers, names, branch) — scoped by the same rules.
-  const list = await listCollectionCases();
-  const c = list.cases.find((x) => x.id === id) ?? null;
+  // Speed (16/10 — the claim file's slowest 10% took 10s): this claim only (not
+  // the whole list), everything independent in parallel, and the Ministry of
+  // Transport car-type lookup after the response instead of before it.
   const { db } = ctx;
-  // Car type (Amit, 14/10): fetched once from the Ministry of Transport, then kept.
-  if (c && !c.vehicle_type) {
-    const v = await lookupVehicleByPlate(c.plate).catch(() => null);
-    if (v?.vehicle_type) {
-      c.vehicle_type = v.vehicle_type;
-      await db.from('collection_cases').update({ vehicle_type: v.vehicle_type } as never).eq('id', id);
-    }
-  }
-  const shortcuts = await myShortcuts(ctx);
-
-  const [evRes, fileRes, fin] = await Promise.all([
+  const [list, shortcuts, evRes, fileRes, fin, refByCase] = await Promise.all([
+    listCollectionCases(id),
+    myShortcuts(ctx),
     db.from('collection_case_events').select('id, kind, body, remind_at, remind_user, reminded_at, remind_done_at, created_by, created_at').eq('case_id', id).order('created_at', { ascending: false }).limit(500),
     db.from('collection_case_files').select('id, file_path, file_name, label, mime_type, file_size, uploaded_by, created_at').eq('case_id', id).order('created_at', { ascending: false }),
     row.finance_closure_id ? db.from('finance_closures').select('case_id').eq('id', row.finance_closure_id).maybeSingle() : Promise.resolve({ data: null }),
+    !row.referral_id && row.case_id ? db.from('referrals').select('id').eq('case_id', row.case_id) : Promise.resolve({ data: [] }),
   ]);
+  const c = list.cases.find((x) => x.id === id) ?? null;
+  // Car type (Amit, 14/10): fetched once from the Ministry of Transport, then kept — in the background.
+  if (c && !c.vehicle_type && c.plate) {
+    const plate = c.plate;
+    after(async () => {
+      const v = await lookupVehicleType(plate).catch(() => null);
+      if (v) await db.from('collection_cases').update({ vehicle_type: v } as never).eq('id', id);
+    });
+  }
   type Ev = { id: string; kind: CaseEventKind; body: string; remind_at: string | null; remind_user: string | null; reminded_at: string | null; remind_done_at: string | null; created_by: string | null; created_at: string };
   type Fl = { id: string; file_path: string; file_name: string | null; label: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string };
   const evs = (evRes.data ?? []) as Ev[];
   const fls = (fileRes.data ?? []) as Fl[];
   const repairCaseId = row.case_id ?? (fin.data as { case_id: string | null } | null)?.case_id ?? null;
 
-  // The repair case's documents (appraiser report, invoice, licences…) — shown, not copied.
+  // The repair case's documents (appraiser report, invoice, licences…) and the
+  // referral's (ID, licences, policy) — shown, not copied. In parallel.
   type Rd = { id: string; file_path: string; file_name: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string; document_type: string | null };
-  const repairDocs = repairCaseId
-    ? (((await db.from('case_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, document_type').eq('case_id', repairCaseId).order('created_at', { ascending: false })).data ?? []) as Rd[])
-    : [];
-
-  // …and the referral's (ID, licences, policy — scanned at intake or sent by the customer).
   type Fd = { id: string; file_path: string; file_name: string | null; mime_type: string | null; file_size: number | null; uploaded_by: string | null; created_at: string; doc_kind: string | null };
-  let referralIds: string[] = row.referral_id ? [row.referral_id] : [];
-  if (!referralIds.length && repairCaseId) {
+  let referralIds: string[] = row.referral_id ? [row.referral_id] : ((refByCase.data ?? []) as { id: string }[]).map((r) => r.id);
+  if (!referralIds.length && repairCaseId && repairCaseId !== row.case_id) {
     const { data: rfs } = await db.from('referrals').select('id').eq('case_id', repairCaseId);
     referralIds = ((rfs ?? []) as { id: string }[]).map((r) => r.id);
   }
-  const referralDocs = referralIds.length
-    ? (((await db.from('referral_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, doc_kind').in('referral_id', referralIds).order('created_at', { ascending: false })).data ?? []) as Fd[])
-    : [];
+  const [repairRes, referralRes] = await Promise.all([
+    repairCaseId ? db.from('case_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, document_type').eq('case_id', repairCaseId).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+    referralIds.length ? db.from('referral_documents').select('id, file_path, file_name, mime_type, file_size, uploaded_by, created_at, doc_kind').in('referral_id', referralIds).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+  ]);
+  const repairDocs = (repairRes.data ?? []) as Rd[];
+  const referralDocs = (referralRes.data ?? []) as Fd[];
 
   const people = Array.from(new Set([...evs.flatMap((e) => [e.created_by, e.remind_user]), ...fls.map((f) => f.uploaded_by), ...repairDocs.map((d) => d.uploaded_by), ...referralDocs.map((d) => d.uploaded_by)].filter((x): x is string => !!x)));
   const [names, ownSigned, repairSigned, referralSigned] = await Promise.all([

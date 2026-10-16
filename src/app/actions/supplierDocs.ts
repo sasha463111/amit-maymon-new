@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { getSessionUser, getMyProfile } from '@/lib/currentUser.server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { canUsePartReturns } from '@/lib/partReturns';
 import { readInvoice, type InvoiceFields } from '@/lib/invoiceReader';
@@ -24,11 +25,9 @@ function serviceClient() {
 }
 
 async function me() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getSessionUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('id, role, branch_ids, is_active, sees_all_branches').eq('id', user.id).maybeSingle();
-  const p = data as { id: string; role: string; branch_ids: string[] | null; is_active: boolean; sees_all_branches?: boolean } | null;
+  const p = await getMyProfile();
   if (!p || p.is_active === false || !DOC_ROLES.has(p.role) || !canUsePartReturns(p.role)) return null;
   return { supabase, user, profile: p };
 }

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { getSessionUser, getMyProfile } from '@/lib/currentUser.server';
 import { redirect } from 'next/navigation';
 import { listPartReturns } from '@/app/actions/partReturns';
 import { ReturnsClient } from './ReturnsClient';
@@ -17,14 +17,11 @@ const ALLOWED = new Set(['CEO', 'SERVICE_ADVISOR', 'SERVICE_MANAGER', 'WAREHOUSE
 
 // "החזרות" — parts returns & credits (Amit, 2026-10-12).
 export default async function ReturnsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Cached per request — listPartReturns / listSupplierDocs below reuse it.
+  const { supabase, user } = await getSessionUser();
   if (!user) redirect('/login');
 
-  const { data: prof } = await supabase.from('profiles').select('role, branch_ids').eq('id', user.id).maybeSingle();
-  const profile = prof as { role: string; branch_ids: string[] | null } | null;
+  const profile = await getMyProfile();
   if (!profile || !ALLOWED.has(profile.role) || !canUsePartReturns(profile.role)) redirect('/');
 
   const docsAllowed = DOC_ROLES.has(profile.role);

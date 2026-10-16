@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import type { PaymentRule } from '@/lib/collections';
 import { defaultStageDays, israelTimeToIso, israelWorkDateIn, stageRule } from '@/lib/collectionStages';
-import { lookupVehicleByPlate } from '@/app/actions/vehicleLookup';
+import { lookupVehicle } from '@/lib/vehicleLookup.server';
 
 const LEGAL_STAGE = 'טיפול משפטי';
 
@@ -149,7 +149,9 @@ export async function searchCollectionCases(raw: string): Promise<{ id: string; 
   }));
 }
 
-export async function listCollectionCases(): Promise<{
+/** All claims this user may see — or just one (`onlyId`, the claim file: 16/10 perf,
+ *  it used to load the whole list to show one claim). Same scope rules either way. */
+export async function listCollectionCases(onlyId?: string): Promise<{
   cases: CollectionCase[];
   collectors: { id: string; name: string }[];
   terms: Record<string, PaymentRule>;
@@ -166,6 +168,7 @@ export async function listCollectionCases(): Promise<{
   const isCeo = ctx.supervisor;
   let q = db.from('collection_cases').select(CASE_COLS).order('opened_at', { ascending: false }).limit(5000);
   if (!isCeo) q = q.eq('assigned_to', ctx.user.id);
+  if (onlyId) q = q.eq('id', onlyId);
   const [casesRes, people, branches, termRows] = await Promise.all([
     q,
     db.from('profiles').select('id, full_name, role, is_active').in('role', ['COLLECTIONS', 'CEO']),
@@ -346,7 +349,7 @@ export async function openCollectionCase(
     const cr = (car as { cars: { vehicle_type: string | null } | { vehicle_type: string | null }[] | null } | null)?.cars;
     vehicleType = (Array.isArray(cr) ? cr[0] : cr)?.vehicle_type ?? null;
   }
-  if (!vehicleType) vehicleType = (await lookupVehicleByPlate(plate).catch(() => null))?.vehicle_type ?? null;
+  if (!vehicleType) vehicleType = (await lookupVehicle(plate).catch(() => null))?.vehicle_type ?? null;
   // Appraiser + deductible come with the closure data, so the case file starts filled.
   let fromClosure: { appraiser_name: string | null; deductible: number | null; appraiser_fee: number | null } = { appraiser_name: null, deductible: null, appraiser_fee: null };
   if (input.finance_closure_id) {

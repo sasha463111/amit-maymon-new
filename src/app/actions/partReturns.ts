@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { getSessionUser, getMyProfile } from '@/lib/currentUser.server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { PART_RETURN_REASONS, PART_RETURN_SUPPLIERS, canUsePartReturns } from '@/lib/partReturns';
 import { readStickerDetailed, type StickerFields } from '@/lib/stickerReader';
@@ -28,11 +29,9 @@ function serviceClient() {
 }
 
 async function me() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getSessionUser();
   if (!user) return null;
-  const { data } = await supabase.from('profiles').select('id, full_name, role, branch_ids, is_active').eq('id', user.id).maybeSingle();
-  const p = data as { id: string; full_name: string | null; role: string; branch_ids: string[] | null; is_active: boolean } | null;
+  const p = await getMyProfile();
   if (!p || p.is_active === false) return null;
   return { supabase, user, profile: p };
 }
