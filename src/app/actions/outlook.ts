@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { addDraftAttachment, db, forgetAccess, graphGet, graphJson, outlookConfigured } from '@/lib/outlook.server';
 import { canUseOutlook, parseRecipients, platesIn, textToHtml, type AttachTarget, type CaseEmail, type ComposeMode, type MailFolder, type MailFull, type MailListItem, type TargetFile } from '@/lib/outlook';
+import type { MailVars } from '@/lib/mailTemplates';
 
 // 📧 Outlook in the app (16/10) — what the browser may call. Each user reads
 // ONLY their own mailbox (their own token); attaching checks that the user may
@@ -326,9 +327,11 @@ export async function sendOutlookMail(fd: FormData): Promise<{ ok?: true; error?
   if (mode === 'new' && !subject) return { error: 'נא להזין נושא' };
   if (mode === 'new' && !text) return { error: 'נא לכתוב את תוכן המייל' };
 
+  const followUpDays = Math.min(60, Math.max(0, Number(fd.get('followUpDays') ?? 0) || 0));
   const saveRaw = String(fd.get('saveTo') ?? '');
   const saveTo = saveRaw ? { type: saveRaw.split(':')[0] as AttachTarget['type'], id: saveRaw.split(':')[1] } : null;
   if (saveTo && !(await canSeeTarget(c, saveTo.type, saveTo.id))) return { error: 'אין גישה לתיק שנבחר' };
+  if (followUpDays && !saveTo) return { error: 'תזכורת "אם לא ענו" נשמרת בתיק — בחרו תיק' };
 
   // The files: from the device + picked from the case (the case is the one they were picked from).
   const files: { name: string; contentType: string; bytes: Buffer }[] = [];
@@ -346,7 +349,7 @@ export async function sendOutlookMail(fd: FormData): Promise<{ ok?: true; error?
 
   const html = textToHtml(text);
   const rcpt = (list: string[]) => list.map((address) => ({ emailAddress: { address } }));
-  type Draft = { id: string; toRecipients?: { emailAddress: { address: string } }[]; ccRecipients?: { emailAddress: { address: string } }[]; subject?: string };
+  type Draft = { id: string; conversationId?: string; toRecipients?: { emailAddress: { address: string } }[]; ccRecipients?: { emailAddress: { address: string } }[]; subject?: string };
 
   // 1) the draft
   let draft: Awaited<ReturnType<typeof graphJson<Draft>>>;
@@ -401,9 +404,21 @@ export async function sendOutlookMail(fd: FormData): Promise<{ ok?: true; error?
       const { data: meRow } = await d.from('ms_connections').select('ms_email, ms_name').eq('user_id', c.user.id).maybeSingle();
       const m = meRow as { ms_email: string; ms_name: string | null } | null;
       const recipients = [...(draft.data.toRecipients ?? []).map((r) => r.emailAddress.address), ...to.ok, ...cc.ok];
+      // ⏰ "תזכיר לי אם לא ענו": a claim → a reminder in its log (the cron sends it; a reply cancels it).
+      let followUpEvent: string | null = null;
+      const followUpAt = followUpDays ? new Date(Date.now() + followUpDays * 86_400_000).toISOString() : null;
+      if (followUpAt && saveTo.type === 'COLLECTION') {
+        const { data: ev } = await d.from('collection_case_events').insert({ case_id: saveTo.id, kind: 'EMAIL', body: `⏰ לבדוק אם ענו: ${finalSubject.slice(0, 150)}`, remind_at: followUpAt, remind_user: c.user.id, created_by: c.user.id } as never).select('id').single();
+        followUpEvent = (ev as { id: string } | null)?.id ?? null;
+      }
       await d.from('case_emails').insert({
         target_type: saveTo.type,
         target_id: saveTo.id,
+        direction: 'OUT',
+        conversation_id: draft.data.conversationId ?? null,
+        follow_up_at: followUpAt,
+        follow_up_user: followUpAt ? c.user.id : null,
+        follow_up_event: followUpEvent,
         subject: finalSubject.slice(0, 500),
         from_name: m?.ms_name ?? c.name,
         from_email: m?.ms_email ?? null,
@@ -439,4 +454,83 @@ export async function deleteMail(messageId: string): Promise<{ ok?: true; error?
   if (!/^[A-Za-z0-9_=+/-]{10,400}$/.test(messageId)) return { error: 'מזהה לא תקין' };
   const r = await graphJson(c.user.id, 'POST', `/me/messages/${encodeURIComponent(messageId)}/move`, { destinationId: 'deleteditems' });
   return r.ok ? { ok: true } : { error: r.error };
+}
+
+/** "✉️ שליחת מייל" from a case: who to send to (the case's contacts) and the details for the templates. */
+export async function mailContext(type: AttachTarget['type'], id: string): Promise<{ target: AttachTarget; recipients: { label: string; email: string }[]; vars: MailVars } | null> {
+  const c = await me();
+  if (!c || !canUseOutlook(c.role) || !(await canSeeTarget(c, type, id))) return null;
+  const d = db();
+  if (!d) return null;
+  const recipients: { label: string; email: string }[] = [];
+  const add = (label: string, email: string | null | undefined) => {
+    const e = (email ?? '').trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && !recipients.some((r) => r.email === e)) recipients.push({ label, email: e });
+  };
+  const ils = (n: number | null | undefined) => (n == null ? null : `₪${Math.round(n).toLocaleString('he-IL')}`);
+  const dmy = (iso: string | null | undefined) => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : null);
+  let target: AttachTarget = { type, id, label: '', plate: null };
+  let vars: MailVars = { myName: c.name };
+  if (type === 'COLLECTION') {
+    const { data } = await d.from('collection_cases').select('plate, customer_name, insurer, claim_number, insurer_handler, insurer_handler_email, appraiser_name, appraiser_email, approved_amount, amount_due, payment_approved_on, case_id').eq('id', id).maybeSingle();
+    const r = data as Record<string, string | number | null> | null;
+    if (!r) return null;
+    add(`מטפל/ת בחברת הביטוח${r.insurer_handler ? ` · ${r.insurer_handler}` : ''}`, r.insurer_handler_email as string);
+    add(`שמאי${r.appraiser_name ? ` · ${r.appraiser_name}` : ''}`, r.appraiser_email as string);
+    if (r.case_id) {
+      const { data: cs } = await d.from('cases').select('customer_email').eq('id', r.case_id).maybeSingle();
+      add('לקוח/ה', (cs as { customer_email: string | null } | null)?.customer_email);
+    }
+    target = { type, id, label: `תביעת ביטוח · ${r.customer_name ?? '—'}`, plate: (r.plate as string) ?? null, sub: (r.insurer as string) ?? undefined };
+    vars = { ...vars, customer: r.customer_name as string, plate: r.plate as string, claimNumber: r.claim_number as string, insurer: r.insurer as string, handler: r.insurer_handler as string, appraiser: r.appraiser_name as string, amount: ils((r.approved_amount ?? r.amount_due) as number | null), approvedOn: dmy(r.payment_approved_on as string) };
+  } else if (type === 'CASE') {
+    const { data } = await c.supabase.from('cases').select('customer_name, customer_email, insurance_company, appraiser_name, claim_number, cars(license_plate)').eq('id', id).maybeSingle();
+    const r = data as { customer_name: string | null; customer_email: string | null; insurance_company: string | null; appraiser_name: string | null; claim_number: string | null; cars: { license_plate: string } | { license_plate: string }[] | null } | null;
+    if (!r) return null;
+    const plate = (Array.isArray(r.cars) ? r.cars[0] : r.cars)?.license_plate ?? null;
+    add('לקוח/ה', r.customer_email);
+    target = { type, id, label: `תיק תיקון · ${r.customer_name ?? '—'}`, plate };
+    vars = { ...vars, customer: r.customer_name, plate, claimNumber: r.claim_number, insurer: r.insurance_company, appraiser: r.appraiser_name };
+  } else {
+    const { data } = await c.supabase.from('referrals').select('customer_name, plate_number, insurance_company, appraiser_name').eq('id', id).maybeSingle();
+    const r = data as { customer_name: string | null; plate_number: string | null; insurance_company: string | null; appraiser_name: string | null } | null;
+    if (!r) return null;
+    target = { type, id, label: `הפניה · ${r.customer_name ?? '—'}`, plate: r.plate_number };
+    vars = { ...vars, customer: r.customer_name, plate: r.plate_number, insurer: r.insurance_company, appraiser: r.appraiser_name };
+  }
+  // Addresses already used with this case.
+  const { data: em } = await d.from('case_emails').select('from_email, to_list').eq('target_type', type).eq('target_id', id).limit(30);
+  for (const e of (em ?? []) as { from_email: string | null; to_list: string | null }[]) {
+    add('מכותב/ת קודם/ת בתיק', e.from_email);
+    for (const t of (e.to_list ?? '').split(/[,;]\s*/)) add('מכותב/ת קודם/ת בתיק', t);
+  }
+  return { target, recipients: recipients.slice(0, 12), vars };
+}
+
+/** Address autocomplete: addresses this user has emailed with (from emails saved in cases) + claim contacts. */
+export async function recentAddresses(): Promise<string[]> {
+  const c = await me();
+  if (!c || !canUseOutlook(c.role)) return [];
+  const d = db();
+  if (!d) return [];
+  const set = new Set<string>();
+  const ok = (e: string | null | undefined) => {
+    const v = (e ?? '').trim().toLowerCase();
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) set.add(v);
+  };
+  const { data: em } = await d.from('case_emails').select('from_email, to_list').eq('attached_by', c.user.id).order('attached_at', { ascending: false }).limit(300);
+  for (const e of (em ?? []) as { from_email: string | null; to_list: string | null }[]) {
+    ok(e.from_email);
+    for (const t of (e.to_list ?? '').split(/[,;]\s*/)) ok(t);
+  }
+  if (COLLECTION_ROLES.has(c.role)) {
+    let q = d.from('collection_cases').select('insurer_handler_email, appraiser_email').is('closed_at', null).limit(400);
+    if (!c.collectionsSupervisor) q = q.eq('assigned_to', c.user.id);
+    const { data } = await q;
+    for (const r of (data ?? []) as { insurer_handler_email: string | null; appraiser_email: string | null }[]) {
+      ok(r.insurer_handler_email);
+      ok(r.appraiser_email);
+    }
+  }
+  return Array.from(set).slice(0, 500);
 }

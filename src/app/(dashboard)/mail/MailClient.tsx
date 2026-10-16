@@ -6,6 +6,7 @@ import { Inbox, Send, Search, RefreshCw, Paperclip, LogOut, ArrowRight, Check, P
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { EmptyState } from '@/components/ui/kit';
 import type { AttachTarget, ComposeMode, MailFolder, MailFull, MailListItem, TargetFile } from '@/lib/outlook';
+import { MAIL_TEMPLATES, fillTemplate, type MailVars } from '@/lib/mailTemplates';
 
 // "📧 דואר" (16/10): the user's own Outlook mailbox inside the app, so nobody
 // works in two apps (Tomer: "שהכל יהיה פה"). Read, open attachments, reply /
@@ -25,7 +26,10 @@ export type MailApi = {
   listTargetFiles: (type: AttachTarget['type'], id: string) => Promise<TargetFile[]>;
   getMailAttachment: (messageId: string, attachmentId: string) => Promise<{ name?: string; contentType?: string; base64?: string; error?: string }>;
   deleteMail: (messageId: string) => Promise<{ ok?: true; error?: string }>;
+  mailContext: (type: AttachTarget['type'], id: string) => Promise<MailCtx | null>;
+  recentAddresses: () => Promise<string[]>;
 };
+export type MailCtx = { target: AttachTarget; recipients: { label: string; email: string }[]; vars: MailVars };
 export type MailStatus = { configured: boolean; connected: boolean; email: string | null };
 
 const MAX_MB = 30;
@@ -89,7 +93,7 @@ function Connect({ error }: { error?: string | null }) {
   );
 }
 
-type ComposeReq = { mode: ComposeMode; mail?: MailFull; suggest?: AttachTarget[] };
+type ComposeReq = { mode: ComposeMode; mail?: MailFull; suggest?: AttachTarget[]; /** Opened from a case: that case is fixed (save + files + template details). */ targetRef?: { type: AttachTarget['type']; id: string } };
 
 function Mailbox({ email, api }: { email: string; api: MailApi }) {
   const [folder, setFolder] = useState<MailFolder>('inbox');
@@ -101,6 +105,10 @@ function Mailbox({ email, api }: { email: string; api: MailApi }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [compose, setCompose] = useState<ComposeReq | null>(null);
   const seq = useRef(0);
+  useEffect(() => {
+    const o = new URLSearchParams(window.location.search).get('open');
+    if (o) setOpenId(o);
+  }, []);
 
   async function load(more = false) {
     const my = ++seq.current;
@@ -384,7 +392,9 @@ type Picked = { key: string; name: string; size: number } & ({ kind: 'device'; f
 
 /** New / reply / reply all / forward — sent from the user's own mailbox, with files from the device or the case. */
 function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq; onClose: () => void; onSent: () => void }) {
-  const { mode, mail, suggest = [] } = req;
+  const { mode, mail, suggest = [], targetRef } = req;
+  const [ctx, setCtx] = useState<MailCtx | null>(null);
+  const [followUp, setFollowUp] = useState(0);
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [subject, setSubject] = useState('');
@@ -398,6 +408,23 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
   const fileInput = useRef<HTMLInputElement>(null);
   const field = 'w-full h-11 px-3 rounded-xl border border-gray-300 bg-white text-sm';
   const totalMb = files.reduce((s, f) => s + f.size, 0) / 1024 / 1024;
+  // The case's context: fixed when opened from a case; otherwise the case chosen under "לשמור עותק בתיק".
+  const ctxKey = targetRef ? `${targetRef.type}:${targetRef.id}` : saveTo;
+  useEffect(() => {
+    if (!ctxKey) return setCtx(null);
+    const [t, i] = ctxKey.split(':') as [AttachTarget['type'], string];
+    void api.mailContext(t, i).then(setCtx);
+  }, [ctxKey, api]);
+  useEffect(() => {
+    if (targetRef) setSaveTo(`${targetRef.type}:${targetRef.id}`);
+  }, [targetRef]);
+  function applyTemplate(id: string) {
+    const t = MAIL_TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    const vars = { ...(ctx?.vars ?? {}) };
+    if (mode === 'new') setSubject(fillTemplate(t.subject, vars));
+    setText(fillTemplate(t.body, vars));
+  }
   const title = mode === 'new' ? 'מייל חדש' : mode === 'forward' ? `העברה: ${mail?.subject ?? ''}` : `${mode === 'replyAll' ? 'תשובה לכולם' : 'תשובה'} ל${mail?.fromName || mail?.fromEmail || ''}`;
 
   function addDevice(list: FileList | null) {
@@ -419,6 +446,7 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
     fd.append('subject', subject);
     fd.append('text', text);
     if (saveTo) fd.append('saveTo', saveTo);
+    if (followUp) fd.append('followUpDays', String(followUp));
     for (const f of files) if (f.kind === 'device') fd.append('files', f.file);
     const fromCase = files.flatMap((f) => (f.kind === 'case' ? [{ type: f.type, targetId: f.targetId, src: f.src, id: f.id }] : []));
     fd.append('caseFiles', JSON.stringify(fromCase));
@@ -433,7 +461,7 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
     return (
       <div className="flex items-center gap-2 text-sm py-2" role="status" dir="rtl">
         <Check size={18} className="text-green-700" aria-hidden="true" />
-        <span className="flex-1 text-green-900 font-semibold">המייל נשלח ✓ (נמצא גם בפריטים שנשלחו ב-Outlook){saveTo ? ' · נשמר בתיק' : ''}</span>
+        <span className="flex-1 text-green-900 font-semibold">המייל נשלח ✓ (נמצא גם בפריטים שנשלחו ב-Outlook){saveTo ? ' · נשמר בתיק' : ''}{followUp ? ` · ⏰ תזכורת בעוד ${followUp} ימים אם לא יענו` : ''}</span>
         <button type="button" onClick={onClose} className="h-10 px-3 rounded-lg border border-gray-300 bg-white">סגירה</button>
       </div>
     );
@@ -447,11 +475,33 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
       {(mode === 'reply' || mode === 'replyAll') && mail && (
         <p className="text-xs text-gray-600">נשלח אל <b dir="ltr">{mail.fromEmail}</b>{mode === 'replyAll' ? ' וכל המכותבים' : ''} · נושא: RE: {mail.subject}</p>
       )}
+      {targetRef && ctx && <p className="text-xs text-gray-600">מתיק: <b>{ctx.target.label}</b>{ctx.target.plate ? ` · ${ctx.target.plate}` : ''} — המייל יישמר בתיק</p>}
+      <label className="block">
+        <span className="block text-sm font-semibold mb-1">📝 תבנית <span className="font-normal text-gray-500">(לא חובה — פרטי התיק נכנסים לבד)</span></span>
+        <select defaultValue="" onChange={(e) => applyTemplate(e.target.value)} className={field}>
+          <option value="">— בלי תבנית —</option>
+          {MAIL_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>{t.label}</option>
+          ))}
+        </select>
+      </label>
       {(mode === 'new' || mode === 'forward') && (
-        <label className="block"><span className="block text-sm font-semibold mb-1">אל</span><input value={to} onChange={(e) => setTo(e.target.value)} className={field} dir="ltr" inputMode="email" placeholder="name@example.com" /></label>
+        <div>
+          <span className="block text-sm font-semibold mb-1">אל</span>
+          <AddressInput value={to} onChange={setTo} api={api} />
+          {ctx && ctx.recipients.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {ctx.recipients.map((r) => (
+                <button key={r.email} type="button" onClick={() => setTo((cur) => (cur.toLowerCase().includes(r.email) ? cur : [cur.trim(), r.email].filter(Boolean).join(', ')))} className="h-9 px-2.5 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-900">
+                  + {r.label} <span dir="ltr">({r.email})</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       {mode === 'new' && <label className="block"><span className="block text-sm font-semibold mb-1">נושא</span><input value={subject} onChange={(e) => setSubject(e.target.value)} className={field} /></label>}
-      <label className="block"><span className="block text-sm font-semibold mb-1">עותק <span className="font-normal text-gray-500">(לא חובה)</span></span><input value={cc} onChange={(e) => setCc(e.target.value)} className={field} dir="ltr" inputMode="email" /></label>
+      <div><span className="block text-sm font-semibold mb-1">עותק <span className="font-normal text-gray-500">(לא חובה)</span></span><AddressInput value={cc} onChange={setCc} api={api} /></div>
       <label className="block">
         <span className="block text-sm font-semibold mb-1">תוכן{mode === 'forward' && mail?.attachments.length ? <span className="font-normal text-gray-500"> · הקבצים של המייל המקורי עוברים איתו</span> : null}</span>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={mode === 'new' ? 7 : 5} className="w-full rounded-xl border border-gray-300 bg-white p-3 text-sm" />
@@ -468,7 +518,7 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
         {picker && (
           <CaseFilePicker
             api={api}
-            suggest={suggest}
+            suggest={ctx && targetRef ? [ctx.target] : suggest}
             chosen={files.map((f) => f.key)}
             onPick={(p) => setFiles((cur) => (cur.some((x) => x.key === p.key) ? cur.filter((x) => x.key !== p.key) : [...cur, p]))}
           />
@@ -485,7 +535,7 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
         )}
       </div>
 
-      {suggest.length > 0 && (
+      {!targetRef && suggest.length > 0 && (
         <label className="block">
           <span className="block text-sm font-semibold mb-1">לשמור עותק בתיק <span className="font-normal text-gray-500">(לא חובה)</span></span>
           <select value={saveTo} onChange={(e) => setSaveTo(e.target.value)} className={field}>
@@ -496,6 +546,17 @@ function Compose({ api, req, onClose, onSent }: { api: MailApi; req: ComposeReq;
           </select>
         </label>
       )}
+      <label className="block">
+        <span className="block text-sm font-semibold mb-1">⏰ תזכורת אם לא יענו</span>
+        <select value={followUp} onChange={(e) => setFollowUp(Number(e.target.value))} disabled={!saveTo} className={`${field} disabled:bg-gray-100 disabled:text-gray-400`}>
+          <option value={0}>— בלי תזכורת —</option>
+          <option value={2}>בעוד יומיים</option>
+          <option value={3}>בעוד 3 ימים</option>
+          <option value={7}>בעוד שבוע</option>
+          <option value={14}>בעוד שבועיים</option>
+        </select>
+        <span className="block text-xs text-gray-500 mt-1">{saveTo ? 'אם תגיע תשובה לפני — התזכורת מתבטלת לבד' : 'נשמרת בתיק — בחרו קודם תיק לשמירת עותק'}</span>
+      </label>
       {err && <p className="text-sm text-red-700">⚠️ {err}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={busy} onClick={() => void send()} className="h-12 px-6 rounded-xl bg-[#0078D4] hover:bg-[#106EBE] text-white font-bold inline-flex items-center gap-2 disabled:opacity-50">
@@ -563,5 +624,64 @@ function CaseFilePicker({ api, suggest, chosen, onPick }: { api: MailApi; sugges
           </div>
         ))}
     </div>
+  );
+}
+
+let addressCache: Promise<string[]> | null = null;
+
+/** Addresses, comma separated, with suggestions for the one being typed. */
+function AddressInput({ value, onChange, api }: { value: string; onChange: (v: string) => void; api: MailApi }) {
+  const [all, setAll] = useState<string[]>([]);
+  const [focus, setFocus] = useState(false);
+  useEffect(() => {
+    if (!focus || all.length) return;
+    addressCache ??= api.recentAddresses().catch(() => []);
+    void addressCache.then(setAll);
+  }, [focus, all.length, api]);
+  const parts = value.split(/,\s*/);
+  const last = (parts[parts.length - 1] ?? '').trim().toLowerCase();
+  const matches = last.length >= 2 ? all.filter((a) => a.includes(last) && !parts.slice(0, -1).map((x) => x.trim().toLowerCase()).includes(a)).slice(0, 6) : [];
+  return (
+    <div className="relative">
+      <input value={value} onChange={(e) => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 150)} className="w-full h-11 px-3 rounded-xl border border-gray-300 bg-white text-sm" dir="ltr" inputMode="email" placeholder="name@example.com" />
+      {focus && matches.length > 0 && (
+        <ul className="absolute z-10 inset-x-0 top-full mt-1 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden" role="listbox">
+          {matches.map((m) => (
+            <li key={m}>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onChange([...parts.slice(0, -1).map((x) => x.trim()), m].filter(Boolean).join(', ') + ', ')} className="w-full text-start px-3 h-10 text-sm hover:bg-gray-50" dir="ltr">
+                {m}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** "✉️ שליחת מייל" inside a case / claim / referral: the composer, with that case fixed. */
+export function CaseMailButton({ type, id, api, status }: { type: AttachTarget['type']; id: string; api: MailApi; status: { configured: boolean; connected: boolean } }) {
+  const [open, setOpen] = useState(false);
+  if (!status.configured) return null;
+  if (!status.connected)
+    return (
+      <Link href="/mail" className="h-10 px-3 rounded-xl border border-gray-300 bg-white text-sm inline-flex items-center gap-1.5">
+        ✉️ חברו את תיבת הדואר
+      </Link>
+    );
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="h-10 px-3 rounded-xl bg-[#0078D4] hover:bg-[#106EBE] text-white text-sm font-bold inline-flex items-center gap-1.5">
+        <PenSquare size={15} aria-hidden="true" />
+        שליחת מייל
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-0 sm:p-6 overflow-y-auto" onClick={() => setOpen(false)} dir="rtl">
+          <div className="w-full max-w-2xl bg-white sm:rounded-2xl shadow-2xl p-4 min-h-full sm:min-h-0 text-start" onClick={(e) => e.stopPropagation()}>
+            <Compose api={api} req={{ mode: 'new', targetRef: { type, id } }} onClose={() => setOpen(false)} onSent={() => undefined} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

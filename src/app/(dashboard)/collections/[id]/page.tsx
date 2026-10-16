@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCollectionFile } from '@/app/actions/collectionFile';
 import { CaseFileClient } from './CaseFileClient';
-import { listCaseEmails } from '@/app/actions/outlook';
+import { listCaseEmails, outlookStatus } from '@/app/actions/outlook';
+import { MAIL_API } from '../../mail/api';
 import { canUseOutlook } from '@/lib/outlook';
 
 export const dynamic = 'force-dynamic';
@@ -27,5 +28,6 @@ export default async function CollectionCasePage(props: { params: Promise<{ id: 
   }
   const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const mail = canUseOutlook((prof as { role: string } | null)?.role);
-  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} collectors={r.collectors} shortcuts={r.shortcuts} mailLoad={mail ? listCaseEmails : undefined} />;
+  const ms = mail ? await outlookStatus() : null;
+  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} collectors={r.collectors} shortcuts={r.shortcuts} mailLoad={mail ? listCaseEmails : undefined} mailCompose={ms ? { api: MAIL_API, status: { configured: ms.configured, connected: ms.connected } } : undefined} />;
 }

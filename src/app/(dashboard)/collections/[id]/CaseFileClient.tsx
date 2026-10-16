@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { CaseEmails } from '@/components/CaseEmails';
 import type { AttachTarget, CaseEmail } from '@/lib/outlook';
+import type { MailApi } from '@/app/(dashboard)/mail/MailClient';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setCollectionClosed, updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
@@ -73,6 +74,7 @@ export function CaseFileClient({
   collectors = [],
   shortcuts = [],
   mailLoad,
+  mailCompose,
 }: {
   c: CollectionCase;
   events: CaseEvent[];
@@ -84,6 +86,7 @@ export function CaseFileClient({
   shortcuts?: string[];
   /** "📧 מיילים" (16/10): emails saved from Outlook — the listCaseEmails action; absent = no tab. */
   mailLoad?: (type: AttachTarget['type'], id: string) => Promise<CaseEmail[]>;
+  mailCompose?: { api: MailApi; status: { configured: boolean; connected: boolean } };
 }) {
   const [tab, setTab] = useState<Tab>('log');
   const t0 = today();
@@ -243,7 +246,7 @@ export function CaseFileClient({
         />
       )}
       {tab === 'docs' && <DocsTab c={c} files={files} />}
-      {tab === 'mail' && mailLoad && <CaseEmails type="COLLECTION" id={c.id} load={mailLoad} />}
+      {tab === 'mail' && mailLoad && <CaseEmails type="COLLECTION" id={c.id} load={mailLoad} compose={mailCompose} />}
       {tab === 'status' && <StatusTab c={c} />}
 
       <datalist id="insurers">

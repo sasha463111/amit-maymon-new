@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { attachMailToTarget, deleteMail, disconnectOutlook, getMail, getMailAttachment, listMail, listTargetFiles, outlookStatus, searchAttachTargets, sendOutlookMail } from '@/app/actions/outlook';
+import { outlookStatus } from '@/app/actions/outlook';
+import { MAIL_API } from './api';
 import { MailClient } from './MailClient';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
   return (
     <MailClient
       status={{ configured: s.configured, connected: s.connected, email: s.email }}
-      api={{ listMail, getMail, searchAttachTargets, attachMailToTarget, disconnectOutlook, sendOutlookMail, listTargetFiles, getMailAttachment, deleteMail }}
+      api={MAIL_API}
       initialError={sp.err ? sp.err.slice(0, 200) : null}
     />
   );

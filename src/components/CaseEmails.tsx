@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Paperclip, ChevronDown } from 'lucide-react';
-import { MailBody } from '@/app/(dashboard)/mail/MailClient';
+import { CaseMailButton, MailBody, type MailApi } from '@/app/(dashboard)/mail/MailClient';
 import type { AttachTarget, CaseEmail } from '@/lib/outlook';
 
 // "📧 מיילים" in a repair case / insurance claim / referral (16/10): the emails
@@ -12,7 +12,7 @@ import type { AttachTarget, CaseEmail } from '@/lib/outlook';
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
 
-export function CaseEmails({ type, id, load, compact = false }: { type: AttachTarget['type']; id: string; load: (type: AttachTarget['type'], id: string) => Promise<CaseEmail[]>; compact?: boolean }) {
+export function CaseEmails({ type, id, load, compact = false, compose }: { type: AttachTarget['type']; id: string; load: (type: AttachTarget['type'], id: string) => Promise<CaseEmail[]>; compact?: boolean; /** "✉️ שליחת מייל" from this case (16/10). */ compose?: { api: MailApi; status: { configured: boolean; connected: boolean } } }) {
   const [rows, setRows] = useState<CaseEmail[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
@@ -23,7 +23,10 @@ export function CaseEmails({ type, id, load, compact = false }: { type: AttachTa
     <section className={`rounded-2xl border border-gray-200 bg-white ${compact ? 'p-3' : 'p-4'} space-y-2`} dir="rtl">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-bold text-gray-900">📧 מיילים בתיק {rows ? <span className="text-sm font-normal text-gray-500">({rows.length})</span> : null}</h3>
-        <Link href="/mail" className="text-sm text-indigo-700 font-semibold">לתיבת הדואר ←</Link>
+        <span className="flex items-center gap-2">
+          {compose && <CaseMailButton type={type} id={id} api={compose.api} status={compose.status} />}
+          <Link href="/mail" className="text-sm text-indigo-700 font-semibold">לתיבת הדואר ←</Link>
+        </span>
       </div>
       {rows === null && <div className="h-12 rounded-lg bg-gray-100 animate-pulse" />}
       {rows?.length === 0 && <p className="text-sm text-gray-600">עוד אין מיילים בתיק. ב&quot;📧 דואר&quot; פותחים מייל ולוחצים &quot;📎 שייך לתיק&quot;.</p>}

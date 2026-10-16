@@ -4,7 +4,8 @@ import { CasePartReturns } from './CasePartReturns';
 import { CaseTrackButton } from './CaseTrackButton';
 import { TRACK_LINK_ROLES } from '@/lib/caseTrack';
 import { CaseEmails } from '@/components/CaseEmails';
-import { listCaseEmails } from '@/app/actions/outlook';
+import { listCaseEmails, outlookStatus } from '@/app/actions/outlook';
+import { MAIL_API } from '../../mail/api';
 import { canUseOutlook } from '@/lib/outlook';
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
@@ -344,7 +345,7 @@ async function CaseDetailData({
     {/* 📧 emails saved from Outlook (16/10; pilot) */}
     {canUseOutlook(profile?.role) && (
       <div className="mb-3">
-        <CaseEmails type="CASE" id={id} load={listCaseEmails} compact />
+        <CaseEmails type="CASE" id={id} load={listCaseEmails} compact compose={{ api: MAIL_API, status: await outlookStatus().then((s) => ({ configured: s.configured, connected: s.connected })) }} />
       </div>
     )}
     <CaseDetailClientV2

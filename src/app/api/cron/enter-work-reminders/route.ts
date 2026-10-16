@@ -4,6 +4,7 @@ import { DAILY_EMAIL_LIMIT, EMAIL_TYPES, EMAIL_BACKUP_DELAY_MS, sendNotification
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { DAILY_REPORT_HOUR, sendDailyReport } from '@/lib/dailyReport';
 import { loadWeeklySummary, weeklyText } from '@/lib/collectionsWeekly.server';
+import { runMailWatch } from '@/lib/outlookWatch.server';
 
 /**
  * Reminder sweep — despite the file/route name (kept as-is so the existing
@@ -1012,5 +1013,9 @@ export async function GET(req: NextRequest) {
     ? { skipped: true as const }
     : await runLoanerTestReminders(supabase, isoDate).catch((e: unknown) => ({ error: String(e) }));
 
-  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly, loanerTests });
+  // 12. 📧 Mail watch (16/10) — replies cancel follow-ups, new email about an open case → a note,
+  // the unread badge, due follow-ups for repair cases / referrals. Every run; dormant until Outlook is set up.
+  const mailWatch = await runMailWatch().catch((e: unknown) => ({ error: String(e) }));
+
+  return NextResponse.json({ ok: true, enterWork, painterRequests, officeClosure, referralFollowUps, backupEmails, dailyReport, partReturns, supplierStatements, collectionReminders, collectionsWeekly, loanerTests, mailWatch });
 }

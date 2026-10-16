@@ -10,6 +10,8 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 import { UserMenu } from '@/components/UserMenu';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { DictationAssist } from '@/components/DictationAssist';
+import { db as outlookDb } from '@/lib/outlook.server';
+import { canUseOutlook } from '@/lib/outlook';
 import { BottomNav } from '@/components/BottomNav';
 import { RealtimeProfileSync } from '@/components/RealtimeProfileSync';
 import { PushEnableBanner } from '@/components/PushEnableBanner';
@@ -213,6 +215,13 @@ export default async function DashboardLayout({
   // "💡 הערות לשיפור" for everyone (15/10); a CEO already has "הצעות ייעול".
   if (!isPreview && !links.some((l) => l.href === '/requests')) links.push({ label: '💡 הערות לשיפור', href: '/requests' });
 
+  // 📧 unread count for the "דואר" badge — kept by the cron's mail watch (no Microsoft call per page).
+  let mailUnread = 0;
+  if (!isPreview && canUseOutlook(actualRole) && links.some((l) => l.href === '/mail')) {
+    const { data: mc } = (await outlookDb()?.from('ms_connections').select('unread_count').eq('user_id', user.id).maybeSingle()) ?? { data: null };
+    mailUnread = (mc as { unread_count: number } | null)?.unread_count ?? 0;
+  }
+
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {
     // For OFFICE staff with multiple branches, show "כל הסניפים"
@@ -280,14 +289,14 @@ export default async function DashboardLayout({
 
         <div className="hidden md:block px-6 border-t border-gray-100 bg-gray-50">
           <div className="py-2">
-            <SidebarNav links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
+            <SidebarNav links={links} badges={{ '/messages': unreadMessages ?? 0, '/mail': mailUnread }} />
           </div>
         </div>
       </header>
 
       {/* Main content — room at the bottom for the phone's bottom bar. */}
       <main className="flex-1 p-3 pb-24 sm:p-6 sm:pb-24 md:pb-6 bg-surface min-h-screen overflow-x-hidden">{children}</main>
-      <BottomNav role={role} links={links} badges={{ '/messages': unreadMessages ?? 0 }} />
+      <BottomNav role={role} links={links} badges={{ '/messages': unreadMessages ?? 0, '/mail': mailUnread }} />
       {/* 🎤 dictation in every text box (#15) */}
       {!isPreview && <DictationAssist />}
     </div>
