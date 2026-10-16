@@ -10,7 +10,8 @@ import { reportClientError, type ClientError } from '@/app/actions/errorReport';
 const sent = new Set<string>();
 
 // Browser noise that isn't ours / isn't a bug.
-const IGNORE = [/ResizeObserver loop/i, /^Script error\.?$/i, /chrome-extension:|moz-extension:|safari-extension:/i, /Loading chunk \d+ failed|ChunkLoadError/i, /NEXT_REDIRECT|NEXT_NOT_FOUND/, /AbortError|The user aborted a request/i, /Failed to fetch|NetworkError|Load failed/i];
+// Version skew (an old tab after a deploy) is not a bug — UpdateBanner tells the user to refresh.
+const IGNORE = [/Server Action .*not found|Failed to find Server Action|unexpected response was received from the server/i, /ResizeObserver loop/i, /^Script error\.?$/i, /chrome-extension:|moz-extension:|safari-extension:/i, /Loading chunk \d+ failed|ChunkLoadError/i, /NEXT_REDIRECT|NEXT_NOT_FOUND/, /AbortError|The user aborted a request/i, /Failed to fetch|NetworkError|Load failed/i];
 
 export function reportError(source: ClientError['source'], err: unknown, digest?: string) {
   try {

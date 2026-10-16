@@ -88,8 +88,8 @@ export function Composer({ requestId, onDone, placeholder, cta, defaultKind }: {
       <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={requestId ? 2 : 4} placeholder={placeholder} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm" />
       <div className="flex items-center gap-2 flex-wrap">
         <label className="h-10 px-3 inline-flex items-center rounded-xl border border-gray-300 bg-white text-sm cursor-pointer">
-          📷 {file ? 'הוחלף צילום' : 'צירוף צילום מסך'}
-          <input ref={ref} type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          📎 {file ? 'הוחלף קובץ' : 'צירוף צילום מסך / PDF'}
+          <input ref={ref} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
         {file && <span className="text-xs text-gray-500 truncate max-w-[160px]">{file.name}</span>}
         <button type="button" disabled={busy || (!body.trim() && !file)} onClick={() => void send()} className="h-10 px-5 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-40">
@@ -250,12 +250,16 @@ export function RequestCard({ r, isCeo, highlight = false, collapsible = false }
                   {m.from_dev ? '🛠 צוות הפיתוח' : m.author} · {at(m.at)}
                 </p>
                 {m.body && <p className="whitespace-pre-wrap text-gray-900">{m.body}</p>}
-                {m.image_url && (
+                {m.image_url && (/\.pdf(\?|$)/i.test(m.image_url.split('?')[0]) ? (
+                  <a href={m.image_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-indigo-700 font-semibold">
+                    📄 קובץ PDF מצורף — פתיחה
+                  </a>
+                ) : (
                   <a href={m.image_url} target="_blank" rel="noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={m.image_url} alt="צילום מסך" className="mt-2 max-h-56 rounded-lg border border-gray-200" />
                   </a>
-                )}
+                ))}
               </div>
             ))}
           </div>

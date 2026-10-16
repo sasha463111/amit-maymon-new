@@ -14,7 +14,7 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 // asked for fewer pushes; he sees the staff notes on the page.
 
 const BUCKET = 'app-requests';
-const MAX_FILE = 4 * 1024 * 1024;
+const MAX_FILE = 10 * 1024 * 1024;
 
 function service() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -100,8 +100,9 @@ export async function listAppRequests(): Promise<AppRequest[]> {
 
 async function saveImage(c: NonNullable<Awaited<ReturnType<typeof member>>>, requestId: string, file: FormDataEntryValue | null): Promise<{ path?: string | null; error?: string }> {
   if (!(file instanceof File) || file.size === 0) return { path: null };
-  if (file.size > MAX_FILE) return { error: 'התמונה גדולה מדי (עד 4MB)' };
-  if (!/^image\//.test(file.type)) return { error: 'אפשר לצרף רק תמונה (צילום מסך)' };
+  if (file.size > MAX_FILE) return { error: 'הקובץ גדול מדי (עד 10MB)' };
+  // Images and PDF (Ilanit 16/10 tried to attach a PDF).
+  if (!/^image\//.test(file.type) && file.type !== 'application/pdf') return { error: 'אפשר לצרף תמונה (צילום מסך) או PDF' };
   const ext = (file.name.match(/\.([a-z0-9]{1,5})$/i)?.[1] ?? 'jpg').toLowerCase();
   const path = `${requestId}/${crypto.randomUUID()}.${ext}`;
   const up = await c.db.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
