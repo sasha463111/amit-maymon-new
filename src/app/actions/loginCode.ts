@@ -44,16 +44,21 @@ export async function requestLoginCode(): Promise<{ ok?: true; sentTo?: string; 
   if (rows[0] && Date.now() - new Date(rows[0].created_at).getTime() < 60_000) return { ok: true, sentTo: mask(phone) }; // the last one is still on its way
 
   const code = String(randomInt(100000, 1000000));
-  const { error } = await c.db.from('login_codes').insert({
+  const { data: inserted, error } = await c.db.from('login_codes').insert({
     user_id: c.user.id,
     session_id: c.sid,
     code_hash: hashCode(c.user.id, code),
     expires_at: new Date(Date.now() + CODE_MINUTES * 60_000).toISOString(),
-  } as never);
+  } as never).select('id').single();
   if (error) return { error: 'שגיאה ביצירת הקוד' };
   // Last line = the standard one-time-code format, so Android offers to fill it in.
   const sent = await sendSms(phone, `קוד הכניסה שלך לתהילה: ${code}\n\n@${SITE_HOST} #${code}`);
-  if (sent.error) return { error: sent.error };
+  if (sent.error) {
+    // Never sent (no 019 credit, provider down…) → doesn't count toward the
+    // 5-per-hour limit (16/10: Ilanit got "too many codes" without one SMS).
+    await c.db.from('login_codes').delete().eq('id', (inserted as { id: string }).id);
+    return { error: sent.error };
+  }
   return { ok: true, sentTo: mask(phone) };
 }
 
