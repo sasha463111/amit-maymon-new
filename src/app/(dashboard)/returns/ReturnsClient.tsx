@@ -21,6 +21,7 @@ import type { SupplierDocRow } from '@/app/actions/supplierDocs';
 import { DocsTable, SupplierDocsTab, docLines, matchesDoc } from './SupplierDocsTab';
 import { BranchFilter, StatCard, StatGrid, ils, EmptyState } from '@/components/ui/kit';
 import { reportError } from '@/components/ErrorReporter';
+import { LicensePlate } from '@/components/ui/LicensePlate';
 
 type Tab = 'pickup' | 'credit' | 'done' | 'all' | 'docs';
 
@@ -1159,10 +1160,56 @@ function ReturnsTable({ rows: input, onDone, canCredit }: { rows: PartReturnRow[
     ) : (
       <span>{label}</span>
     );
+  const waitTone = (r: PartReturnRow) => (waitingDays(r) > 14 ? 'text-red-600 font-bold' : waitingDays(r) > 7 ? 'text-amber-600 font-semibold' : 'text-gray-500');
   return (
     <div className="space-y-2">
     {filters}
-    <div className="overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
+    {/* Phone (16/10, UI round — 38% of /returns is on phones): one card per
+        part instead of a 900px table to scroll sideways. */}
+    <div className="md:hidden space-y-2">
+      <p className="text-xs text-gray-500">{rows.length} שורות{creditSum ? ` · סה"כ זיכוי ${ils(creditSum)}` : ''}</p>
+      {rows.map((r) => (
+        <div key={r.id} className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-bold text-gray-900 break-words">
+                {pic(r.photo_url, r.description || '—')}
+                {r.quantity > 1 && <span className="text-gray-500 font-normal"> ×{r.quantity}</span>}
+              </p>
+              <p className="text-[11px] text-gray-500">{r.reason_label}</p>
+            </div>
+            <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_CHIP[r.status] ?? 'bg-gray-100 text-gray-700'}`}>
+              {PART_RETURN_STATUS_LABEL[r.status] ?? r.status}
+            </span>
+          </div>
+          <Fields>
+            <Field label="תאריך">{formatDate(r.created_at)}</Field>
+            <Field label="ספק">{r.supplier_label}</Field>
+            {r.sku && <Field label={'מק"ט'}><span dir="ltr">{r.sku}</span></Field>}
+            <Field label="רכב">
+              {r.plate ? (
+                r.case_id ? <Link href={`/go/${r.case_id}`} className="inline-block"><LicensePlate plate={r.plate} size="sm" /></Link> : <LicensePlate plate={r.plate} size="sm" />
+              ) : (
+                'כללי'
+              )}
+              {r.branch_name && <span className="text-gray-400"> · {r.branch_name}</span>}
+            </Field>
+            {r.document_number && <Field label="חשבונית מקור"><CreditsInvoice r={r} compact /></Field>}
+            {waitingDays(r) > 0 && <Field label="ממתין" tone={waitTone(r)}>{waitingDays(r)} ימים</Field>}
+            {r.collected_at && (
+              <Field label="נמסר לנהג">
+                {r.driver_name} · {formatDate(r.collected_at)}
+                {r.driver_signature_url && <SignatureThumb url={r.driver_signature_url} />}
+              </Field>
+            )}
+            {(r.credit_invoice_number || r.credit_invoice_url) && <Field label="חשבונית זיכוי">{pic(r.credit_invoice_url, r.credit_invoice_number || '📄 תמונה')}</Field>}
+            {r.credit_amount != null && <Field label="סכום זיכוי" strong>₪{r.credit_amount.toLocaleString('he-IL')}</Field>}
+          </Fields>
+          <InvoiceButtons r={r} canCredit={canCredit} onDone={onDone} />
+        </div>
+      ))}
+    </div>
+    <div className="hidden md:block overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
       <table className="min-w-[900px] w-full text-sm">
         <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
           <tr>
@@ -1226,13 +1273,13 @@ function ReturnsTable({ rows: input, onDone, canCredit }: { rows: PartReturnRow[
           </tr>
         </tfoot>
       </table>
+    </div>
       {view && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={view} alt="" className="max-w-full max-h-full rounded-lg" />
         </div>
       )}
-    </div>
     </div>
   );
 }

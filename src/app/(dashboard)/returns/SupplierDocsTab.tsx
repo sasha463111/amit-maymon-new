@@ -157,10 +157,59 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
     onDone(r.error ? `⚠️ ${r.error}` : 'סומן כנבדק ✓');
   }
 
+  const verifyCell = (l: DocLine) =>
+    l.source === 'return' ? (
+      <span className="text-gray-400 text-xs">בהחזרה</span>
+    ) : l.doc?.verified_at ? (
+      <span className="text-green-700 text-xs font-semibold" title={formatDate(l.doc.verified_at)}>✓ {l.doc.verified_by_name ?? 'נבדק'}</span>
+    ) : l.doc?.mine || !canVerify ? (
+      <span className="text-amber-700 text-xs">ממתין לבדיקה</span>
+    ) : (
+      <button
+        type="button"
+        disabled={busy === l.key}
+        onClick={() => void verify(l.key)}
+        className="px-2 h-8 rounded-lg border border-green-300 bg-green-50 text-green-800 text-xs font-semibold disabled:opacity-50"
+      >
+        ✓ נבדק
+      </button>
+    );
+  const typeChip = (l: DocLine) => <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${l.type.startsWith('חשבונית זיכוי') ? 'bg-green-100 text-green-800' : l.type.startsWith('תעודת') ? 'bg-sky-100 text-sky-800' : 'bg-gray-100 text-gray-800'}`}>{l.type}</span>;
+
   return (
-    // Clear at a glance (Amit 15/10, #32): type chip, the items column, amount
-    // aligned and bold, plates as licence plates, a totals row.
-    <div className="overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
+    <>
+    {/* Phone (16/10, UI round): one card per document instead of a 900px table. */}
+    <div className="md:hidden space-y-2">
+      {rows.map((l) => (
+        <div key={l.key} className="rounded-xl border border-gray-200 bg-white p-3 space-y-1.5 text-[13px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-bold text-gray-900">{l.supplier}</span>
+            {typeChip(l)}
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+            <dt className="text-gray-400">תאריך:</dt><dd>{formatDate(l.date)}</dd>
+            <dt className="text-gray-400">מספר מסמך:</dt><dd dir="ltr" className="text-right">{l.number ?? <span className="text-red-600">חסר</span>}</dd>
+            {l.items && (<><dt className="text-gray-400">פריטים:</dt><dd className="break-words">{l.items}</dd></>)}
+            {l.notes && (<><dt className="text-gray-400">הערות:</dt><dd className="break-words text-gray-600">{l.notes}</dd></>)}
+            {l.plate && (<><dt className="text-gray-400">רכב:</dt><dd><LicensePlate plate={l.plate} size="sm" /></dd></>)}
+            <dt className="text-gray-400">סכום:</dt><dd className="font-bold tabular-nums">{l.amount != null ? ils(l.amount) : '—'}</dd>
+            {l.by && (<><dt className="text-gray-400">צילם:</dt><dd>{l.by}</dd></>)}
+          </dl>
+          <div className="flex items-center justify-between gap-2 pt-1">
+            {verifyCell(l)}
+            {l.photo_url && (
+              <button type="button" onClick={() => setView(l.photo_url)} className="h-9 px-3 rounded-lg border border-gray-300 text-xs font-semibold">
+                📄 צפייה
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      <p className="text-xs text-gray-500">{rows.length} מסמכים · סה&quot;כ {ils(rows.reduce((s, l) => s + (l.amount ?? 0), 0))}</p>
+    </div>
+    {/* Clear at a glance (Amit 15/10, #32): type chip, the items column, amount
+        aligned and bold, plates as licence plates, a totals row. */}
+    <div className="hidden md:block overflow-auto max-h-[70vh] rounded-xl border border-gray-200 bg-white">
       <table className="min-w-[900px] w-full text-[13px]">
         <thead className="bg-gray-100 text-gray-700 text-xs sticky top-0 z-10 shadow-sm">
           <tr>
@@ -173,9 +222,7 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
           {rows.map((l) => (
             <tr key={l.key} className="border-t border-gray-100 align-top hover:bg-indigo-50/40">
               <td className="px-2 py-1.5 whitespace-nowrap text-gray-600">{formatDate(l.date)}</td>
-              <td className="px-2 py-1.5 whitespace-nowrap">
-                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${l.type.startsWith('חשבונית זיכוי') ? 'bg-green-100 text-green-800' : l.type.startsWith('תעודת') ? 'bg-sky-100 text-sky-800' : 'bg-gray-100 text-gray-800'}`}>{l.type}</span>
-              </td>
+              <td className="px-2 py-1.5 whitespace-nowrap">{typeChip(l)}</td>
               <td className="px-2 py-1.5 whitespace-nowrap font-semibold">{l.supplier}</td>
               <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{l.number ?? <span className="text-red-600">חסר</span>}</td>
               <td className="px-2 py-1.5 min-w-[160px] max-w-[260px]">
@@ -186,22 +233,7 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
               <td className="px-2 py-1.5 whitespace-nowrap text-left font-bold tabular-nums">{l.amount != null ? ils(l.amount) : <span className="text-gray-300 font-normal">—</span>}</td>
               <td className="px-2 py-1.5 whitespace-nowrap text-gray-500">{l.by ?? ''}</td>
               <td className="px-2 py-1.5 whitespace-nowrap">
-                {l.source === 'return' ? (
-                  <span className="text-gray-400 text-xs">בהחזרה</span>
-                ) : l.doc?.verified_at ? (
-                  <span className="text-green-700 text-xs font-semibold" title={formatDate(l.doc.verified_at)}>✓ {l.doc.verified_by_name ?? 'נבדק'}</span>
-                ) : l.doc?.mine || !canVerify ? (
-                  <span className="text-amber-700 text-xs">ממתין לבדיקה</span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={busy === l.key}
-                    onClick={() => void verify(l.key)}
-                    className="px-2 h-8 rounded-lg border border-green-300 bg-green-50 text-green-800 text-xs font-semibold disabled:opacity-50"
-                  >
-                    ✓ נבדק
-                  </button>
-                )}
+                {verifyCell(l)}
               </td>
               <td className="px-2 py-1.5 whitespace-nowrap">
                 {l.photo_url && (
@@ -221,13 +253,14 @@ export function DocsTable({ rows, onDone, canVerify = true }: { rows: DocLine[];
           </tr>
         </tfoot>
       </table>
+    </div>
       {view && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setView(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={view} alt="מסמך" className="max-w-full max-h-full rounded-lg" />
         </div>
       )}
-    </div>
+    </>
   );
 }
 

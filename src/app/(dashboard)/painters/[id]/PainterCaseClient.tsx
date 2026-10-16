@@ -416,12 +416,26 @@ export function PainterCaseClient({
     }
   }
 
+  // Phone action bar (16/10, UI round): the painter's three everyday actions
+  // stay at his thumb above the bottom tabs — no scrolling to find them.
+  // 📷 opens the same multi-shot camera as the header (its tray shows there).
+  const showActionBar = canEdit || (canFinish && !finishedAtLocal);
+  function openCamera() {
+    const box = document.getElementById('painter-docs');
+    box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    box?.querySelector<HTMLInputElement>('input[capture]')?.click();
+  }
+  function openRequest() {
+    setShowRequestForm(true);
+    requestAnimationFrame(() => document.getElementById('painter-requests')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
   // Case creation fills only vehicle_type (make/model are almost always
   // empty) — show it, like the painters board does (Amit, 2026-10-12).
   const carLabel = [carVehicleType?.trim() || [carMake, carModel].filter(Boolean).join(' '), carYear].filter(Boolean).join(' · ');
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto" dir="rtl">
+    <div className={`space-y-6 max-w-2xl mx-auto ${showActionBar ? 'pb-20 md:pb-0' : ''}`} dir="rtl">
       {/* Question / note to chosen people (Amit, 2026-10-08) */}
       <CaseNotesComposer caseId={caseId} collapsible />
 
@@ -514,7 +528,7 @@ export function PainterCaseClient({
 
         {/* Attach documentation for this case (multi-file, same pattern as
             the case detail and closure screens) */}
-        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap">
+        <div id="painter-docs" className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 flex-wrap scroll-mt-24">
           <label className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ${docsUploading ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
             <input
               type="file"
@@ -626,7 +640,7 @@ export function PainterCaseClient({
       </div>
 
       {/* Painter Requests */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <div id="painter-requests" className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 scroll-mt-24">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-800">בקשות לפחח</h2>
           {canEdit && (
@@ -761,6 +775,31 @@ export function PainterCaseClient({
           </div>
         )}
       </div>
+
+      {showActionBar && (
+        <div
+          className="md:hidden fixed inset-x-0 z-30 bottom-[calc(4rem+env(safe-area-inset-bottom))] bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] px-3 py-2"
+          dir="rtl"
+        >
+          <div className={`grid gap-2 ${canEdit && canFinish && !finishedAtLocal ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {canEdit && (
+              <button type="button" onClick={openCamera} disabled={docsUploading} className="h-12 rounded-xl border border-gray-300 bg-white text-sm font-bold text-gray-800 active:bg-gray-100 disabled:opacity-50">
+                {docsUploading ? 'מעלה…' : '📷 צילום'}
+              </button>
+            )}
+            {canEdit && (
+              <button type="button" onClick={openRequest} className="h-12 rounded-xl border border-blue-300 bg-blue-50 text-sm font-bold text-blue-800 active:bg-blue-100">
+                ✋ בקשה
+              </button>
+            )}
+            {canFinish && !finishedAtLocal && (
+              <button type="button" disabled={finishing} onClick={() => void handleFinish(true)} className="h-12 rounded-xl bg-green-600 text-sm font-bold text-white active:bg-green-700 disabled:opacity-50">
+                {finishing ? 'שומר…' : '✅ סיום עבודה'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
