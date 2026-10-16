@@ -3,6 +3,9 @@ import { listPartReturns } from '@/app/actions/partReturns';
 import { CasePartReturns } from './CasePartReturns';
 import { CaseTrackButton } from './CaseTrackButton';
 import { TRACK_LINK_ROLES } from '@/lib/caseTrack';
+import { CaseEmails } from '@/components/CaseEmails';
+import { listCaseEmails } from '@/app/actions/outlook';
+import { canUseOutlook } from '@/lib/outlook';
 import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import type { PartsStatus, GeneralStatus } from '@/types/database';
@@ -338,6 +341,12 @@ async function CaseDetailData({
     <CasePartReturns rows={partReturns} />
     {/* "מעקב רכב" link for the customer (16/10; pilot: CEO) — open cases only. */}
     {TRACK_LINK_ROLES.includes(profile?.role ?? '') && !caseRow.closed_at && <CaseTrackButton caseId={id} />}
+    {/* 📧 emails saved from Outlook (16/10; pilot) */}
+    {canUseOutlook(profile?.role) && (
+      <div className="mb-3">
+        <CaseEmails type="CASE" id={id} load={listCaseEmails} compact />
+      </div>
+    )}
     <CaseDetailClientV2
       caseId={id}
       caseKey={caseRow.case_key}

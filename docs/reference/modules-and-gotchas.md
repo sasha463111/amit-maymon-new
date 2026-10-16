@@ -425,3 +425,13 @@ supabase/
   - `next-pwa` הוסר (היה כבוי). `outputFileTracingIncludes` עבר מ-`experimental` לרמה העליונה של הקונפיג.
   - lint החמיר את `no-html-link-for-pages`, ולכן שלושה קישורי "חזרה" הפכו ל-`Link`.
   - כל פגיעויות ה-Next נסגרו. נשאר רק `postcss` שארוז בתוך Next: רץ רק ב-build על ה-CSS שלנו, ולא ניתן לניצול מבחוץ. התיקון שלו רק ב-Next 16.
+- **📧 Outlook במערכת (16/10, תומר/עמית, כמו B-mail של באפי; פיילוט: CEO, `OUTLOOK_ROLES` ב-`src/lib/outlook.ts`):**
+  - **"רדום" עד ההגדרה:** כל עובד מחבר את התיבה **שלו** (OAuth delegated עם PKCE, קריאה בלבד: `openid profile email offline_access User.Read Mail.Read`). רק תיבות `@toyota-tehila.co.il`.
+  - **משתני סביבה (נפרדים מ-`MS_*` של תיבת הדוחות ב-`mailer.ts`, שמעבירים את Report@ לשליחה app-only):** `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET`, `OUTLOOK_TOKEN_KEY` (32 בתים ב-base64). כל עוד אחד מהם חסר, `/mail` מציג "ממתין להגדרה".
+  - **רישום ב-Entra:** Redirect URI (Web) = `https://amit-maymon-new-psi.vercel.app/api/outlook/callback`; הרשאות Delegated: User.Read, Mail.Read, offline_access, openid, profile, email; Grant admin consent.
+  - **זרימה:** `/api/outlook/connect` (verifier + state ב-cookies httpOnly ל-10 דקות, path `/api/outlook`) → Microsoft → `/api/outlook/callback` (בדיקת state, החלפת קוד). ה-refresh token נשמר **מוצפן** (AES-256-GCM) ב-`ms_connections`, ומתחלף בכל רענון. `invalid_grant` מוחק את החיבור, והמשתמש מתחבר מחדש. הכל ב-`src/lib/outlook.server.ts`.
+  - **מסך `/mail` (`MailClient`):** דואר נכנס ונשלח, חיפוש (`$search`), קריאה. גוף המייל מוצג ב-iframe עם `sandbox` (בלי סקריפטים וטפסים; קישורים נפתחים בטאב חדש). "📎 שייך לתיק" מציע תיקים לפי מספרי הרכב במייל (`platesIn`: 7-8 ספרות, לא טלפון) ומאפשר חיפוש חופשי.
+  - **שיוך (`attachMailToTarget`):** נשמר **עותק** ב-`case_emails` (נושא, שולח, נמענים, HTML, קבצים עד 15MB כל אחד ועד 10 קבצים) ב-bucket פרטי `case-emails`, פעם אחת לכל מייל ותיק (unique לפי `internet_message_id`). בתביעה נכתבת גם שורת "📧 שויך מייל" ב"טיפול שוטף".
+  - **הרשאות:** תיק ו-הפניה דרך RLS של המשתמש; תביעה רק ל-COLLECTIONS / CEO / ACCOUNTANT, ומסלקת רק לתביעות שלה (כמו `collectionFile.ts`).
+  - **תצוגה בתיק:** `components/CaseEmails.tsx`: לשונית "📧 מיילים" בתיק התביעה, ומקטע בתיק התיקון.
+  - מיגרציה `20261016130000_outlook_mail`; טבלאות server-only. בדיקות ב-`tests/outlook.test.ts`.

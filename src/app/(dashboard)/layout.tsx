@@ -51,6 +51,7 @@ const ROLE_LINKS: Record<UserRole, { label: string; href: string }[]> = {
     { label: '📊 דשבורדים', href: '/dashboards' },
     { label: 'תיקים', href: '/cases' },
     { label: 'הודעות', href: '/messages' },
+    { label: '📧 דואר', href: '/mail' }, // Outlook in the app (16/10, pilot)
     { label: 'אישורים', href: '/approvals' },
     { label: 'סגירה', href: '/closure' },
     { label: 'הפניות', href: '/referrals' },

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CaseEmails } from '@/components/CaseEmails';
+import type { AttachTarget, CaseEmail } from '@/lib/outlook';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { setCollectionClosed, updateCollectionCase, type CaseUpdate, type CollectionCase } from '@/app/actions/collections';
@@ -22,7 +24,7 @@ import { STATUS_CHIP, STATUS_LABEL, StatusEditor, ils, isClosed, num, toCollect,
 // The collection case file (Amit, 2026-10-14). The list is the outer view;
 // here — every detail, one value per line with its label (Amit's rule).
 
-type Tab = 'log' | 'claim' | 'appraiser' | 'tp' | 'contacts' | 'docs' | 'status';
+type Tab = 'log' | 'claim' | 'appraiser' | 'tp' | 'contacts' | 'docs' | 'mail' | 'status';
 
 const at = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -70,6 +72,7 @@ export function CaseFileClient({
   supervisor,
   collectors = [],
   shortcuts = [],
+  mailLoad,
 }: {
   c: CollectionCase;
   events: CaseEvent[];
@@ -79,6 +82,8 @@ export function CaseFileClient({
   supervisor: boolean;
   collectors?: { id: string; name: string }[];
   shortcuts?: string[];
+  /** "📧 מיילים" (16/10): emails saved from Outlook — the listCaseEmails action; absent = no tab. */
+  mailLoad?: (type: AttachTarget['type'], id: string) => Promise<CaseEmail[]>;
 }) {
   const [tab, setTab] = useState<Tab>('log');
   const t0 = today();
@@ -99,6 +104,7 @@ export function CaseFileClient({
     ['tp', 'צד ג׳'],
     ['contacts', 'אנשי קשר'],
     ['docs', `מסמכים (${files.length})`],
+    ...(mailLoad ? ([['mail', '📧 מיילים']] as [Tab, string][]) : []),
     ['status', 'סטטוס ותשלום'],
   ];
 
@@ -237,6 +243,7 @@ export function CaseFileClient({
         />
       )}
       {tab === 'docs' && <DocsTab c={c} files={files} />}
+      {tab === 'mail' && mailLoad && <CaseEmails type="COLLECTION" id={c.id} load={mailLoad} />}
       {tab === 'status' && <StatusTab c={c} />}
 
       <datalist id="insurers">

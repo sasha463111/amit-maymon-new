@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCollectionFile } from '@/app/actions/collectionFile';
 import { CaseFileClient } from './CaseFileClient';
+import { listCaseEmails } from '@/app/actions/outlook';
+import { canUseOutlook } from '@/lib/outlook';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,5 +25,7 @@ export default async function CollectionCasePage(props: { params: Promise<{ id: 
       </div>
     );
   }
-  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} collectors={r.collectors} shortcuts={r.shortcuts} />;
+  const { data: prof } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  const mail = canUseOutlook((prof as { role: string } | null)?.role);
+  return <CaseFileClient c={r.c} events={r.events} files={r.files} repairCaseId={r.repairCaseId} terms={r.terms} supervisor={r.supervisor} collectors={r.collectors} shortcuts={r.shortcuts} mailLoad={mail ? listCaseEmails : undefined} />;
 }
