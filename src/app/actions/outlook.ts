@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { addDraftAttachment, db, forgetAccess, graphGet, graphJson, outlookConfigured } from '@/lib/outlook.server';
 import { canUseOutlook, parseRecipients, platesIn, textToHtml, type AttachTarget, type CaseEmail, type ComposeMode, type MailFolder, type MailFull, type MailListItem, type TargetFile } from '@/lib/outlook';
 import type { MailVars } from '@/lib/mailTemplates';
+import { storageFileName } from '@/lib/storageKey';
 
 // 📧 Outlook in the app (16/10) — what the browser may call. Each user reads
 // ONLY their own mailbox (their own token); attaching checks that the user may
@@ -175,7 +176,7 @@ export async function attachMailToTarget(messageId: string, type: AttachTarget['
   for (const att of mail.attachments.filter((x) => x.size <= MAX_ATTACHMENT).slice(0, 10)) {
     const r = await graphGet<{ contentBytes?: string }>(c.user.id, `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(att.id)}`);
     if (!r.ok || !r.data.contentBytes) continue;
-    const safe = att.name.replace(/[^\w.\-א-ת ]+/g, '_').slice(0, 100) || 'file';
+    const safe = storageFileName(att.name);
     const path = `${folder}/${files.length + 1}-${safe}`;
     const up = await d.storage.from(BUCKET).upload(path, Buffer.from(r.data.contentBytes, 'base64'), { contentType: att.contentType || 'application/octet-stream', upsert: true });
     if (!up.error) files.push({ name: att.name, path, size: att.size });
@@ -397,7 +398,7 @@ export async function sendOutlookMail(fd: FormData): Promise<{ ok?: true; error?
       const folder = `${saveTo.type.toLowerCase()}/${saveTo.id}/sent-${Date.now()}`;
       const saved: { name: string; path: string; size: number }[] = [];
       for (const [i, f] of files.slice(0, 10).entries()) {
-        const path = `${folder}/${i + 1}-${f.name.replace(/[^\w.\-א-ת ]+/g, '_').slice(0, 100) || 'file'}`;
+        const path = `${folder}/${i + 1}-${storageFileName(f.name)}`;
         const up = await d.storage.from('case-emails').upload(path, f.bytes, { contentType: f.contentType, upsert: true });
         if (!up.error) saved.push({ name: f.name, path, size: f.bytes.length });
       }

@@ -1,5 +1,6 @@
 'use server';
 
+import { safeExt } from '@/lib/storageKey';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { branchRecipients } from '@/lib/recipients';
@@ -135,7 +136,7 @@ export async function createPainterRequest(
     const files = (imageFiles.getAll('images') as File[]).filter((f) => f instanceof File);
     await Promise.all(
       files.map(async (file, i) => {
-        const ext = file.name.split('.').pop() ?? 'jpg';
+        const ext = safeExt(file.name, 'jpg');
         const path = `${caseId}/${reqId}/${Date.now()}-${i}.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from('painter-images')

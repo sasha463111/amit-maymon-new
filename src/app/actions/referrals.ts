@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import type { CreateReferralInput, UpdateReferralInput } from '@/types/database';
 import { hasPermission } from '@/lib/permissions';
+import { storageFileName } from '@/lib/storageKey';
 
 // Who may work with referrals is governed by Settings > Permissions
 // (role_permissions.create_referral), which defaults to OFFICE + CEO and
@@ -289,7 +290,7 @@ export async function uploadReferralDocument(formData: FormData) {
     return { error: `סוג קובץ לא נתמך: ${file.type}. תמונות + PDF בלבד.` };
   }
 
-  const safeName = file.name.replace(/[^\w.\-א-ת ]/g, '_');
+  const safeName = storageFileName(file.name); // ASCII key — Storage rejects Hebrew (16/10)
   const path = `${referralId}/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await supabase.storage

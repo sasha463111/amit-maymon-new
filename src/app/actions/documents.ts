@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { hasPermission } from '@/lib/permissions';
+import { storageFileName } from '@/lib/storageKey';
 
 /**
  * Batch-create signed URLs for storage objects. Used by the case detail page,
@@ -97,7 +98,7 @@ export async function uploadCaseDocument(formData: FormData) {
   }
 
   // Upload file to storage. Path is namespaced by caseId so RLS can scope by prefix.
-  const safeName = file.name.replace(/[^\w.\-א-ת ]/g, '_');
+  const safeName = storageFileName(file.name); // ASCII key — Storage rejects Hebrew (16/10)
   const path = `${caseId}/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await supabase.storage

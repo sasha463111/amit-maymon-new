@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { createExtra } from '@/app/actions/extras';
 import { shrinkImage } from '@/lib/shrinkImage';
+import { safeExt } from '@/lib/storageKey';
 
 interface CaseOption {
   id: string;
@@ -32,7 +33,7 @@ export function CreateExtraForm({ cases }: { cases: CaseOption[] }) {
     // Speed (16/10): painters send this from the phone (92%) — a full camera photo is
     // 4-10MB over cellular. Shrink first, like the other photo forms.
     const small = await shrinkImage(file);
-    const ext = small.type === 'image/jpeg' ? 'jpg' : (file.name.split('.').pop() ?? 'jpg');
+    const ext = small.type === 'image/jpeg' ? 'jpg' : safeExt(file.name, 'jpg');
     const path = `${caseId}/${Date.now()}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
