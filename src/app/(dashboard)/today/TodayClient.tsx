@@ -52,7 +52,7 @@ export function TodayClient({ role, cards, name, preview }: { role: TodayRole; c
         const Main = a.main.icon;
         return (
           <div className="flex flex-col sm:flex-row gap-2">
-            <Link href={a.main.href} className="h-14 px-6 rounded-2xl bg-brand-red hover:bg-brand-red-dark text-white text-lg font-bold inline-flex items-center justify-center gap-2.5 shadow-sm">
+            <Link href={a.main.href} data-tip="today-main" className="h-14 px-6 rounded-2xl bg-brand-red hover:bg-brand-red-dark text-white text-lg font-bold inline-flex items-center justify-center gap-2.5 shadow-sm">
               <Main size={22} aria-hidden="true" />
               {a.main.label}
             </Link>

@@ -643,6 +643,7 @@ export function PainterCaseClient({
                 type="button"
                 disabled={finishing}
                 onClick={() => void handleFinish(true)}
+                data-tip="painter-finish"
                 className="w-full p-4 rounded-lg bg-green-600 text-white font-bold text-base hover:bg-green-700 disabled:opacity-50"
               >
                 {finishing ? 'שומר…' : '✅ סיום עבודה'}
@@ -662,6 +663,7 @@ export function PainterCaseClient({
             <button
               type="button"
               onClick={() => setShowRequestForm((v) => !v)}
+              data-tip="painter-request"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               {showRequestForm ? '✕ סגור' : '+ בקשה חדשה'}
@@ -808,7 +810,7 @@ export function PainterCaseClient({
               </button>
             )}
             {canFinish && !finishedAtLocal && (
-              <button type="button" disabled={finishing} onClick={() => void handleFinish(true)} className="h-12 rounded-xl bg-green-600 text-sm font-bold text-white active:bg-green-700 disabled:opacity-50">
+              <button type="button" disabled={finishing} onClick={() => void handleFinish(true)} data-tip="painter-bar" className="h-12 rounded-xl bg-green-600 text-sm font-bold text-white active:bg-green-700 disabled:opacity-50">
                 {finishing ? 'שומר…' : '✅ סיום עבודה'}
               </button>
             )}

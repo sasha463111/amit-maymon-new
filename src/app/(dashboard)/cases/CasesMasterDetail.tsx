@@ -130,7 +130,7 @@ export function CasesMasterDetail({
             <h1 className="text-xl font-bold text-stone-900">תיקים</h1>
             <span className="text-sm font-medium text-stone-500">{filtered.length} פתוחים</span>
           </div>
-          <div className="order-last w-full sm:order-none sm:w-80 lg:w-96">
+          <div className="order-last w-full sm:order-none sm:w-80 lg:w-96" data-tip="cases-search">
             <SearchField
               value={query}
               onChange={(e) => setQuery(e.target.value)}

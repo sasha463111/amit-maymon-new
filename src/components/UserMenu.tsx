@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, KeyRound, LogOut, Mail, Type } from 'lucide-react';
+import { ChevronDown, KeyRound, Lightbulb, LogOut, Mail, Type } from 'lucide-react';
+import { resetMyTips } from '@/app/actions/tips';
 import { SendReportModal } from './SendReportModal';
 
 // One personal menu instead of separate small buttons in the header (16/10,
 // design round): who I am, change password, the daily report (CEO), log out.
 
-export function UserMenu({ name, roleLabel, branchName, email, isCeo }: { name: string; roleLabel: string; branchName: string; email: string; isCeo: boolean }) {
+export function UserMenu({ name, roleLabel, branchName, email, isCeo, tipsEnabled = false }: { name: string; roleLabel: string; branchName: string; email: string; isCeo: boolean; tipsEnabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -95,6 +96,20 @@ export function UserMenu({ name, roleLabel, branchName, email, isCeo }: { name: 
             >
               <Mail size={17} className="text-gray-500" aria-hidden="true" />
               שליחת דוח סיכום יומי
+            </button>
+          )}
+          {tipsEnabled && (
+            <button
+              type="button"
+              onClick={async () => {
+                setOpen(false);
+                await resetMyTips();
+                window.location.reload();
+              }}
+              className="w-full flex items-center gap-2.5 h-11 px-3 rounded-lg text-sm text-gray-800 hover:bg-gray-50"
+            >
+              <Lightbulb size={17} className="text-gray-500" aria-hidden="true" />
+              הצג טיפים שוב
             </button>
           )}
           <a href="/logout" className="flex items-center gap-2.5 h-11 px-3 rounded-lg text-sm text-red-700 hover:bg-red-50">

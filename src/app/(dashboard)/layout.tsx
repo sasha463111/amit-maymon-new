@@ -10,6 +10,7 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 import { UserMenu } from '@/components/UserMenu';
 import { UpdateBanner } from '@/components/UpdateBanner';
 import { Toaster } from '@/components/Toaster';
+import { FirstVisitTips } from '@/components/FirstVisitTips';
 import { DictationAssist } from '@/components/DictationAssist';
 import { db as outlookDb } from '@/lib/outlook.server';
 import { canUseOutlook } from '@/lib/outlook';
@@ -223,6 +224,10 @@ export default async function DashboardLayout({
     mailUnread = (mc as { unread_count: number } | null)?.unread_count ?? 0;
   }
 
+  // 💡 First-visit tips (16/10, #10/#39) — pilot: CEO only (also when viewing as another role).
+  const tipsLive = !isPreview && actualRole === 'CEO';
+  const tipsSeen = tipsLive ? (((await supabase.from('user_tips_seen').select('tip_key').eq('user_id', user.id)).data ?? []) as { tip_key: string }[]).map((r) => r.tip_key) : [];
+
   let branchName = '—';
   if (profile?.branch_ids && profile.branch_ids.length > 0) {
     // For OFFICE staff with multiple branches, show "כל הסניפים"
@@ -270,6 +275,7 @@ export default async function DashboardLayout({
       {/* A newer version is live → offer a refresh (16/10). */}
       {!isPreview && <UpdateBanner />}
       <Toaster />
+      {tipsLive && <FirstVisitTips role={role} seen={tipsSeen} />}
 
       {/* One banner at a time (16/10, design round): "מה חדש" first; the
           push-enable nudge only when there is nothing new to announce. */}
@@ -284,9 +290,9 @@ export default async function DashboardLayout({
             <span className="text-xl sm:text-2xl font-black text-primary-container tracking-tight">{BRAND_NAME}</span>
             <span className="text-xs text-gray-400 font-medium hidden lg:inline">ניהול מוסך</span>
           </a>
-          <div className="flex-1 flex justify-center min-w-0">{!isPreview && <CaseSearch />}</div>
+          <div className="flex-1 flex justify-center min-w-0">{!isPreview && <CaseSearch links={links} />}</div>
           {!isPreview && <NotificationsBell userId={user.id} role={actualRole} />}
-          <UserMenu name={profile?.full_name ?? user.email ?? ''} roleLabel={roleLabel} branchName={branchName} email={user.email ?? ''} isCeo={actualRole === 'CEO'} />
+          <UserMenu name={profile?.full_name ?? user.email ?? ''} roleLabel={roleLabel} branchName={branchName} email={user.email ?? ''} isCeo={actualRole === 'CEO'} tipsEnabled={tipsLive} />
         </div>
 
         <div className="hidden md:block px-6 border-t border-gray-100 bg-gray-50">

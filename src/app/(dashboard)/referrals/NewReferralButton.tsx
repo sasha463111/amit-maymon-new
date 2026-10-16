@@ -264,6 +264,7 @@ export function NewReferralButton({
       <button
         type="button"
         onClick={handleOpen}
+        data-tip="referral-new"
         className="flex items-center gap-2 px-4 py-2.5 bg-brand-red hover:bg-brand-red-dark text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
       >
         <Plus size={16} />

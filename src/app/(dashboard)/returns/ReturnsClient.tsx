@@ -140,6 +140,7 @@ export function ReturnsClient({
         <button
           type="button"
           onClick={() => setAdding(true)}
+          data-tip="returns-new"
           className="px-5 py-3 bg-red-600 text-white rounded-xl text-base font-bold shadow-sm hover:bg-red-700"
         >
           📷 חלק להחזרה
