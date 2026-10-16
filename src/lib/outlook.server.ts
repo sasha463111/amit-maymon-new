@@ -4,14 +4,15 @@ import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { APP_ORIGIN } from '@/lib/customerDocLinks.server';
 
 // 📧 Outlook in the app (16/10). Each employee connects their OWN Microsoft
-// 365 mailbox (delegated OAuth 2.0 + PKCE, read-only: Mail.Read). The refresh
+// 365 mailbox (delegated OAuth 2.0 + PKCE: Mail.Read + Mail.Send — Tomer 16/10:
+// "גם קבלה וגם שליחה"; the app sends only when the user presses שליחה). The refresh
 // token is stored encrypted (AES-256-GCM, key OUTLOOK_TOKEN_KEY — in the env,
 // never in the DB). Dormant until the Entra app is registered and these are
 // set in Vercel: OUTLOOK_TENANT_ID, OUTLOOK_CLIENT_ID, OUTLOOK_CLIENT_SECRET,
 // OUTLOOK_TOKEN_KEY (separate from MS_* — those switch the app's own report
 // mailbox to Graph app-only sending, see mailer.ts).
 
-export const OUTLOOK_SCOPES = 'openid profile email offline_access User.Read Mail.Read';
+export const OUTLOOK_SCOPES = 'openid profile email offline_access User.Read Mail.Read Mail.Send';
 export const OUTLOOK_REDIRECT = `${APP_ORIGIN}/api/outlook/callback`;
 
 export function outlookConfigured(): boolean {
@@ -141,4 +142,26 @@ export async function graphGet<T>(userId: string, path: string): Promise<{ ok: t
   }
   if (!res.ok) return { ok: false, error: `Microsoft: ${res.status}` };
   return { ok: true, data: (await res.json()) as T };
+}
+
+/** POST to Microsoft Graph as this user (send / reply). 202 Accepted = sent. */
+export async function graphPost(userId: string, path: string, body: unknown): Promise<{ ok: true } | { ok: false; error: string; reconnect?: boolean }> {
+  const token = await accessTokenFor(userId);
+  if (!token) return { ok: false, error: 'צריך לחבר מחדש את תיבת הדואר', reconnect: true };
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (res.status === 401) {
+    forgetAccess(userId);
+    return { ok: false, error: 'החיבור לתיבת הדואר פג — מתחברים מחדש', reconnect: true };
+  }
+  if (res.status === 403) return { ok: false, error: 'אין הרשאת שליחה — צריך להתחבר מחדש (או שמנהל Microsoft לא אישר Mail.Send)', reconnect: true };
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    return { ok: false, error: `Microsoft: ${res.status} ${(j.error?.message ?? '').slice(0, 160)}` };
+  }
+  return { ok: true };
 }

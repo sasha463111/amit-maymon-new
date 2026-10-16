@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { canUseOutlook, platesIn } from '@/lib/outlook';
+import { canUseOutlook, parseRecipients, platesIn, textToHtml } from '@/lib/outlook';
 
 // 📧 Outlook (16/10): the case suggestion under "📎 שייך לתיק" comes from the
 // plate numbers found in the email.
@@ -22,4 +22,19 @@ describe('platesIn', () => {
 test('pilot: Outlook for the CEO first', () => {
   expect(canUseOutlook('CEO')).toBe(true);
   expect(canUseOutlook('PAINTER')).toBe(false);
+});
+
+describe('sending', () => {
+  test('recipients: commas / semicolons / spaces, lower-cased, unique; bad ones reported', () => {
+    expect(parseRecipients('A@B.co; c@d.co,a@b.co')).toEqual({ ok: ['a@b.co', 'c@d.co'], bad: [] });
+    expect(parseRecipients('x@y, דני').bad).toEqual(['x@y', 'דני']);
+    expect(parseRecipients('').ok).toEqual([]);
+  });
+  test('typed text becomes safe HTML (no tags get through), line breaks kept', () => {
+    const h = textToHtml('שלום <script>x</script>\nשורה 2 & "ציטוט"');
+    expect(h).not.toContain('<script>');
+    expect(h).toContain('&lt;script&gt;');
+    expect(h).toContain('<br>');
+    expect(h).toContain('&amp;');
+  });
 });

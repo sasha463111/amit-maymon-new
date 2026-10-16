@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Inbox, Send, Search, RefreshCw, Paperclip, LogOut, ArrowRight, Check } from 'lucide-react';
+import { Inbox, Send, Search, RefreshCw, Paperclip, LogOut, ArrowRight, Check, PenSquare, Reply, X } from 'lucide-react';
 import { LicensePlate } from '@/components/ui/LicensePlate';
 import { EmptyState } from '@/components/ui/kit';
 import type { AttachTarget, MailFolder, MailFull, MailListItem } from '@/lib/outlook';
@@ -19,6 +19,7 @@ export type MailApi = {
   searchAttachTargets: (q: string) => Promise<AttachTarget[]>;
   attachMailToTarget: (messageId: string, type: AttachTarget['type'], targetId: string) => Promise<{ ok?: true; error?: string }>;
   disconnectOutlook: () => Promise<{ ok?: true; error?: string }>;
+  sendOutlookMail: (input: { to: string; cc?: string; subject: string; text: string; replyToId?: string; saveTo?: { type: AttachTarget['type']; id: string } }) => Promise<{ ok?: true; error?: string }>;
 };
 export type MailStatus = { configured: boolean; connected: boolean; email: string | null };
 
@@ -73,7 +74,7 @@ function Connect({ error }: { error?: string | null }) {
         </a>
         {error && <p className="text-sm text-red-700">⚠️ {error}</p>}
         <ul className="text-xs text-gray-600 space-y-1 text-start max-w-sm mx-auto">
-          <li>✓ קריאה בלבד — המערכת לא שולחת ולא מוחקת מיילים בשמך</li>
+          <li>✓ קריאה ושליחה — מייל יוצא רק כשאת/ה לוחצ/ת &quot;שליחה&quot;; המערכת לא מוחקת מיילים</li>
           <li>✓ רק תיבה של toyota-tehila.co.il, ורק שלך</li>
           <li>✓ אפשר לנתק בכל רגע</li>
         </ul>
@@ -90,6 +91,7 @@ function Mailbox({ email, api }: { email: string; api: MailApi }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
   const seq = useRef(0);
 
   async function load(more = false) {
@@ -114,7 +116,11 @@ function Mailbox({ email, api }: { email: string; api: MailApi }) {
       <div className="flex items-center gap-2 flex-wrap">
         <h1 className="text-2xl font-extrabold text-gray-900">📧 דואר</h1>
         <span className="text-sm text-gray-500 truncate">{email}</span>
-        <div className="flex rounded-xl border border-gray-300 bg-white p-1 ms-auto" role="group" aria-label="תיקייה">
+        <button type="button" onClick={() => setComposing(true)} className="h-11 px-4 rounded-xl bg-[#0078D4] hover:bg-[#106EBE] text-white text-sm font-bold inline-flex items-center gap-1.5 ms-auto">
+          <PenSquare size={16} aria-hidden="true" />
+          מייל חדש
+        </button>
+        <div className="flex rounded-xl border border-gray-300 bg-white p-1" role="group" aria-label="תיקייה">
           {(
             [
               ['inbox', 'דואר נכנס', Inbox],
@@ -143,6 +149,14 @@ function Mailbox({ email, api }: { email: string; api: MailApi }) {
           ניתוק
         </button>
       </div>
+
+      {composing && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-0 sm:p-6 overflow-y-auto" onClick={() => setComposing(false)}>
+          <div className="w-full max-w-2xl bg-white sm:rounded-2xl shadow-2xl p-4 min-h-full sm:min-h-0" onClick={(e) => e.stopPropagation()}>
+            <Compose api={api} onClose={() => setComposing(false)} />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
         <section className={`rounded-2xl border border-gray-200 bg-white overflow-hidden ${openId ? 'hidden lg:block' : ''}`}>
@@ -194,6 +208,7 @@ function Reader({ id, api, onBack }: { id: string; api: MailApi; onBack: () => v
   const [suggest, setSuggest] = useState<AttachTarget[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
+  const [replying, setReplying] = useState(false);
   useEffect(() => {
     let alive = true;
     void api.getMail(id).then((r) => {
@@ -227,9 +242,15 @@ function Reader({ id, api, onBack }: { id: string; api: MailApi; onBack: () => v
             {mail.cc ? ` · עותק: ${mail.cc}` : ''} · {new Date(mail.receivedAt).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
-        <button type="button" onClick={() => setAttaching((v) => !v)} className="h-11 px-4 rounded-xl bg-brand-red hover:bg-brand-red-dark text-white font-bold inline-flex items-center gap-2 shrink-0">
-          📎 שייך לתיק
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button type="button" onClick={() => setReplying((v) => !v)} className="h-11 px-4 rounded-xl border-2 border-gray-300 bg-white font-bold inline-flex items-center gap-2">
+            <Reply size={17} aria-hidden="true" />
+            השב
+          </button>
+          <button type="button" onClick={() => setAttaching((v) => !v)} className="h-11 px-4 rounded-xl bg-brand-red hover:bg-brand-red-dark text-white font-bold inline-flex items-center gap-2">
+            📎 שייך לתיק
+          </button>
+        </div>
       </div>
       {mail.attachments.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -239,6 +260,11 @@ function Reader({ id, api, onBack }: { id: string; api: MailApi; onBack: () => v
               {a.name} <span className="text-gray-500">· {kb(a.size)}</span>
             </span>
           ))}
+        </div>
+      )}
+      {replying && (
+        <div className="rounded-xl border-2 border-blue-200 bg-blue-50/40 p-3">
+          <Compose api={api} reply={mail} suggest={suggest} onClose={() => setReplying(false)} />
         </div>
       )}
       {attaching && <AttachPanel mail={mail} suggest={suggest} api={api} />}
@@ -301,6 +327,79 @@ function AttachPanel({ mail, suggest, api }: { mail: MailFull; suggest: AttachTa
       </ul>
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש תיק אחר: מספר רכב, שם לקוח, מספר תביעה" className="w-full h-11 px-3 rounded-lg border border-amber-200 bg-white text-sm" aria-label="חיפוש תיק" />
       {err && <p className="text-sm text-red-700">⚠️ {err}</p>}
+    </div>
+  );
+}
+
+/** "✉️ מייל חדש" / "↩️ השב" — sent from the user's own mailbox; optionally a copy saved with a case. */
+function Compose({ api, reply, suggest = [], onClose }: { api: MailApi; reply?: MailFull; suggest?: AttachTarget[]; onClose: () => void }) {
+  const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
+  const [subject, setSubject] = useState('');
+  const [text, setText] = useState('');
+  const [saveTo, setSaveTo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const field = 'w-full h-11 px-3 rounded-xl border border-gray-300 bg-white text-sm';
+
+  async function send() {
+    setBusy(true);
+    setErr(null);
+    const t = suggest.find((x) => `${x.type}:${x.id}` === saveTo);
+    const r = await api.sendOutlookMail({ to, cc, subject, text, replyToId: reply?.id, saveTo: t ? { type: t.type, id: t.id } : undefined });
+    setBusy(false);
+    if (r.error) return setErr(r.error);
+    setSent(true);
+  }
+
+  if (sent)
+    return (
+      <div className="flex items-center gap-2 text-sm" role="status">
+        <Check size={18} className="text-green-700" aria-hidden="true" />
+        <span className="flex-1 text-green-900 font-semibold">המייל נשלח ✓ (נמצא גם בפריטים שנשלחו ב-Outlook){saveTo ? ' · נשמר בתיק' : ''}</span>
+        <button type="button" onClick={onClose} className="h-10 px-3 rounded-lg border border-gray-300 bg-white">סגירה</button>
+      </div>
+    );
+
+  return (
+    <div className="space-y-2.5" dir="rtl">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-gray-900">{reply ? `תשובה ל${reply.fromName || reply.fromEmail}` : 'מייל חדש'}</h3>
+        <button type="button" onClick={onClose} aria-label="סגירה" className="w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center"><X size={18} /></button>
+      </div>
+      {reply ? (
+        <p className="text-xs text-gray-600">נשלח אל <b dir="ltr">{reply.fromEmail}</b> · נושא: RE: {reply.subject}</p>
+      ) : (
+        <>
+          <label className="block"><span className="block text-sm font-semibold mb-1">אל</span><input value={to} onChange={(e) => setTo(e.target.value)} className={field} dir="ltr" inputMode="email" placeholder="name@example.com" /></label>
+          <label className="block"><span className="block text-sm font-semibold mb-1">נושא</span><input value={subject} onChange={(e) => setSubject(e.target.value)} className={field} /></label>
+        </>
+      )}
+      <label className="block"><span className="block text-sm font-semibold mb-1">עותק <span className="font-normal text-gray-500">(לא חובה)</span></span><input value={cc} onChange={(e) => setCc(e.target.value)} className={field} dir="ltr" inputMode="email" /></label>
+      <label className="block">
+        <span className="block text-sm font-semibold mb-1">תוכן</span>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={reply ? 5 : 8} className="w-full rounded-xl border border-gray-300 bg-white p-3 text-sm" />
+      </label>
+      {suggest.length > 0 && (
+        <label className="block">
+          <span className="block text-sm font-semibold mb-1">לשמור עותק בתיק <span className="font-normal text-gray-500">(לא חובה)</span></span>
+          <select value={saveTo} onChange={(e) => setSaveTo(e.target.value)} className={field}>
+            <option value="">— לא לשמור —</option>
+            {suggest.map((t) => (
+              <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>{t.label}{t.plate ? ` · ${t.plate}` : ''}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {err && <p className="text-sm text-red-700">⚠️ {err}</p>}
+      <div className="flex gap-2">
+        <button type="button" disabled={busy} onClick={() => void send()} className="h-12 px-6 rounded-xl bg-[#0078D4] hover:bg-[#106EBE] text-white font-bold inline-flex items-center gap-2 disabled:opacity-50">
+          <Send size={17} aria-hidden="true" />
+          {busy ? 'שולח…' : 'שליחה'}
+        </button>
+        <button type="button" onClick={onClose} className="h-12 px-4 rounded-xl border border-gray-300 bg-white">ביטול</button>
+      </div>
     </div>
   );
 }

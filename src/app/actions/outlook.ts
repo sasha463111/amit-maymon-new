@@ -3,8 +3,8 @@
 import { createHash } from 'crypto';
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { db, forgetAccess, graphGet, outlookConfigured } from '@/lib/outlook.server';
-import { canUseOutlook, platesIn, type AttachTarget, type CaseEmail, type MailFolder, type MailFull, type MailListItem } from '@/lib/outlook';
+import { db, forgetAccess, graphGet, graphPost, outlookConfigured } from '@/lib/outlook.server';
+import { canUseOutlook, parseRecipients, platesIn, textToHtml, type AttachTarget, type CaseEmail, type MailFolder, type MailFull, type MailListItem } from '@/lib/outlook';
 
 // 📧 Outlook in the app (16/10) — what the browser may call. Each user reads
 // ONLY their own mailbox (their own token); attaching checks that the user may
@@ -225,4 +225,61 @@ export async function listCaseEmails(type: AttachTarget['type'], targetId: strin
     attachedBy: r.attached_by ? nameOf.get(r.attached_by) ?? null : null,
     attachedAt: r.attached_at,
   }));
+}
+
+export type SendInput = { to: string; cc?: string; subject: string; text: string; replyToId?: string; saveTo?: { type: AttachTarget['type']; id: string } };
+
+/** "✉️ מייל חדש" / "↩️ השב": send FROM the user's own mailbox (lands in their
+ *  Sent Items). Optionally saves a copy with a case / claim (like שייך לתיק). */
+export async function sendOutlookMail(input: SendInput): Promise<{ ok?: true; error?: string }> {
+  const c = await me();
+  if (!c || !canUseOutlook(c.role)) return { error: 'אין הרשאה' };
+  const subject = (input.subject ?? '').trim().slice(0, 300);
+  const text = (input.text ?? '').trim().slice(0, 20000);
+  if (!text) return { error: 'נא לכתוב את תוכן המייל' };
+  const to = parseRecipients(input.to ?? '');
+  const cc = parseRecipients(input.cc ?? '');
+  if (to.bad.length || cc.bad.length) return { error: `כתובת לא תקינה: ${[...to.bad, ...cc.bad].slice(0, 3).join(', ')}` };
+  if (!input.replyToId && !to.ok.length) return { error: 'נא להזין למי לשלוח' };
+  if (!input.replyToId && !subject) return { error: 'נא להזין נושא' };
+  if (input.saveTo && !(await canSeeTarget(c, input.saveTo.type, input.saveTo.id))) return { error: 'אין גישה לתיק שנבחר' };
+  const html = textToHtml(text);
+  const rcpt = (list: string[]) => list.map((address) => ({ emailAddress: { address } }));
+
+  let r: Awaited<ReturnType<typeof graphPost>>;
+  if (input.replyToId) {
+    if (!/^[A-Za-z0-9_=+/-]{10,400}$/.test(input.replyToId)) return { error: 'מזהה לא תקין' };
+    // Reply: Outlook threads it and quotes the original; extra To/CC are added.
+    const message: Record<string, unknown> = { body: { contentType: 'HTML', content: html } };
+    if (to.ok.length) message.toRecipients = rcpt(to.ok);
+    if (cc.ok.length) message.ccRecipients = rcpt(cc.ok);
+    r = await graphPost(c.user.id, `/me/messages/${encodeURIComponent(input.replyToId)}/reply`, { message });
+  } else {
+    r = await graphPost(c.user.id, '/me/sendMail', {
+      message: { subject, body: { contentType: 'HTML', content: html }, toRecipients: rcpt(to.ok), ccRecipients: rcpt(cc.ok) },
+      saveToSentItems: true,
+    });
+  }
+  if (!r.ok) return { error: r.error };
+
+  if (input.saveTo) {
+    const d = db();
+    const { data: meRow } = d ? await d.from('ms_connections').select('ms_email, ms_name').eq('user_id', c.user.id).maybeSingle() : { data: null };
+    const m = meRow as { ms_email: string; ms_name: string | null } | null;
+    await d?.from('case_emails').insert({
+      target_type: input.saveTo.type,
+      target_id: input.saveTo.id,
+      subject: (subject || '(תשובה)').slice(0, 500),
+      from_name: m?.ms_name ?? c.name,
+      from_email: m?.ms_email ?? null,
+      to_list: [...to.ok, ...cc.ok].join(', ').slice(0, 1000),
+      received_at: new Date().toISOString(),
+      body_html: html,
+      body_preview: text.slice(0, 200),
+      attachments: [],
+      attached_by: c.user.id,
+    } as never);
+    if (input.saveTo.type === 'COLLECTION') await d?.from('collection_case_events').insert({ case_id: input.saveTo.id, kind: 'EMAIL', body: `📤 נשלח מייל: ${(subject || '(תשובה)').slice(0, 150)} (אל ${[...to.ok].join(', ') || 'השולח'})`, created_by: c.user.id } as never);
+  }
+  return { ok: true };
 }

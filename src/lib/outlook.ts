@@ -22,3 +22,22 @@ export function platesIn(text: string): string[] {
   }
   return Array.from(out).slice(0, 5);
 }
+
+/** "a@b.co, c@d.co; e@f.co" → valid, unique addresses (max 20), or the bad ones. */
+export function parseRecipients(raw: string): { ok: string[]; bad: string[] } {
+  const parts = raw.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+  const ok: string[] = [];
+  const bad: string[] = [];
+  for (const p of parts) {
+    const e = p.toLowerCase();
+    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(e)) bad.push(p);
+    else if (!ok.includes(e)) ok.push(e);
+  }
+  return { ok: ok.slice(0, 20), bad };
+}
+
+/** Plain text typed in the app → safe email HTML (escaped, line breaks kept, RTL). */
+export function textToHtml(text: string): string {
+  const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px">${esc.replace(/\r?\n/g, '<br>')}</div>`;
+}
